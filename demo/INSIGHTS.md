@@ -91,6 +91,14 @@ would be obvious to anyone reading the code, don't write it.
   the only step that needs the web UI; `gh api -X DELETE /repos/{o}/{r}/issues/comments/{id}`
   handles the cleanup. (2026-07-28)
 
+- **Ignore the "use a GIF" advice two entries up — the upload-then-delete route
+  above replaces it.** A GIF does embed from the repo, so the claim is not wrong,
+  it is just the worse answer now that a real player is reachable: fitting a
+  2:11 recording into a GIF meant a 4× speed-up that made the step captions
+  unreadable, and the result was 2.4 MB against the 1.4 MB mp4 it was standing in
+  for. The GIF built for PR #1 was deleted once the player worked. Reach for one
+  only where no upload UI exists at all. (2026-07-28)
+
 - **Playwright's bundled ffmpeg cannot produce mp4** — `ffmpeg-mac -encoders`
   lists exactly two: `png` and `libvpx`. It also rejects `-preset`, so an H.264
   command line fails with `Unrecognized option 'preset'` rather than anything

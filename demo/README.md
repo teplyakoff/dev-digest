@@ -84,22 +84,14 @@ So to put one in a **description**, borrow a comment as the uploader:
 4. Delete the comment — `gh api -X DELETE /repos/{owner}/{repo}/issues/comments/{id}`.
    The asset outlives it and the description's player keeps working.
 
-Only step 1 needs the browser; the rest is `gh`.
+Only step 1 needs the browser; the rest is `gh`. Commit the mp4 to
+`docs/results/<lab>/` as well — the attachment is GitHub's copy, the repo is
+yours.
 
-If you would rather not touch the web UI at all, a GIF embeds and autoplays
-straight from the repo. Two passes — a shared palette, then the
-encode — because the one-pass default quantises per frame and both bloats the
-file and dithers badly:
-
-```bash
-V=recordings/devdigest-review-loop-<stamp>.mp4
-ffmpeg -i "$V" -vf "setpts=PTS/4,fps=10,scale=800:-1:flags=lanczos,palettegen=max_colors=128" /tmp/pal.png
-ffmpeg -i "$V" -i /tmp/pal.png -lavfi "setpts=PTS/4,fps=10,scale=800:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3" -loop 0 screencast.gif
-```
-
-`setpts=PTS/4` is the 4× speed-up: it turns a 2:11 recording into a 33 s loop at
-about 2.4 MB. Step captions are unreadable at that speed — the GIF is a teaser,
-and the still frames beside it carry the detail.
+A GIF does embed straight from the repo, and that was the workaround here before
+the four steps above were worked out. It is not worth it: to fit, the recording
+has to be sped up past the point where the step captions can be read, and it
+still costs more than the mp4 it replaces.
 
 The script exits non-zero if any agent run ends `failed`, so a broken recording
 is loud rather than a quietly short video.
