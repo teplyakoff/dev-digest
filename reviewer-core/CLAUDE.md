@@ -38,4 +38,5 @@ passing while doing something else.
 - you need to see how the server calls this → `../server/src/modules/reviews/run-executor.ts`
 - specifying new work → `docs/specs/`
 
-Before working here read `INSIGHTS.md`; append to it at the end of the session.
+Before working here read `INSIGHTS.md`; append to it with `/engineering-insights`
+at the end of the session.

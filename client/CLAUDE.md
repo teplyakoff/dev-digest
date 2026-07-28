@@ -42,4 +42,5 @@ here.
 - you need a contract's shape → `src/vendor/shared/contracts`
 - specifying new work → `docs/specs/`
 
-Before working here read `INSIGHTS.md`; append to it at the end of the session.
+Before working here read `INSIGHTS.md`; append to it with `/engineering-insights`
+at the end of the session.

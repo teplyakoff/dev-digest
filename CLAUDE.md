@@ -63,7 +63,8 @@ vendored into `client/src/vendor/shared`.
 
 ## Session loop
 
-Before working in a package, read its `INSIGHTS.md` and treat it as
-high-confidence guidance unless told otherwise. At the end of the session, append
-what you learned to that same file — add entries, never overwrite existing ones.
+Before working in a package, read its `INSIGHTS.md`, name the top 3 entries
+relevant to the task, and treat them as high-confidence guidance unless told
+otherwise. At the end of the session run `/engineering-insights` to append what
+you learned to that same file — add entries, never overwrite existing ones.
 Do not skip this step.

@@ -24,5 +24,5 @@ the server. Details: `README.md`.
   unindexed repo degrades silently to diff-only. If the repo map looks empty,
   check the index state before debugging prompt assembly.
 
-Before working here read the server's `INSIGHTS.md`; append to it at the end of
-the session.
+Before working here read the server's `INSIGHTS.md`; append to it with
+`/engineering-insights` at the end of the session.

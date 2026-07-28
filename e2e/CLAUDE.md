@@ -37,4 +37,5 @@ LLM, no API key. How a flow is structured: `README.md`.
 - adding or debugging a flow → `README.md`
 - specifying new work → `docs/specs/`
 
-Before working here read `INSIGHTS.md`; append to it at the end of the session.
+Before working here read `INSIGHTS.md`; append to it with `/engineering-insights`
+at the end of the session.
