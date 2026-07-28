@@ -11,7 +11,7 @@ Node ≥22 · TypeScript 5.7 · Zod 3 · Vitest 2
 Fastify 5 · Drizzle 0.38 · Postgres 16 + pgvector — `server/`
 Next.js 15 · React 19 · Tailwind 4 · TanStack Query — `client/`
 
-## Layout — four standalone packages, NOT a workspace
+## Layout — five standalone packages, NOT a workspace
 
 | Path | Package | Manager |
 |---|---|---|
@@ -19,6 +19,7 @@ Next.js 15 · React 19 · Tailwind 4 · TanStack Query — `client/`
 | `client/` | `@devdigest/web` (:3000) | **pnpm** |
 | `reviewer-core/` | `@devdigest/reviewer-core` (engine, no I/O) | **npm** |
 | `e2e/` | `@devdigest/e2e` (browser flows) | **npm** |
+| `demo/` | `@devdigest/demo` (screencast recorder) | **npm** |
 
 Each has its own lockfile. Cross-package code is shared through tsconfig path
 aliases, never published modules — so the server imports reviewer-core's **raw
@@ -33,6 +34,8 @@ vendored into `client/src/vendor/shared`.
 - `./scripts/dev.sh` — full local boot (Postgres → migrate → seed → API + web).
   Flags: `--no-seed` · `--no-client` · `--db-only`.
 - `./scripts/e2e.sh` — hermetic e2e on alternate ports; never touches the dev DB.
+- `cd demo && npm run record` — records a video of the real review loop. Unlike
+  `e2e`, this triggers a real run and **spends money**; see `demo/README.md`.
 
 ## Invariants (never break one silently)
 

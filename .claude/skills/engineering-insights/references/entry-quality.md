@@ -8,6 +8,7 @@
 | `client/**` | `client/INSIGHTS.md` |
 | `reviewer-core/**` | `reviewer-core/INSIGHTS.md` |
 | `e2e/**` | `e2e/INSIGHTS.md` |
+| `demo/**` | `demo/INSIGHTS.md` |
 | `server/src/modules/repo-intel/**` | `server/INSIGHTS.md` |
 
 `repo-intel` is a module, not a package, and has no file of its own — its
