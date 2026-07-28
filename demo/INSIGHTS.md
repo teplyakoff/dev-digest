@@ -80,6 +80,17 @@ would be obvious to anyone reading the code, don't write it.
   recipe in `README.md`. Do not build a "clickable poster that opens the player";
   there is no player to open. (2026-07-28)
 
+- **How to get a real player into a PR description anyway.** Drop the mp4 into a
+  throwaway PR *comment*, take the `https://github.com/user-attachments/assets/<uuid>`
+  URL it produces, put that URL **on its own line** in the description, then
+  delete the comment. GitHub expands a bare attachment URL into a `<video controls>`
+  anywhere it renders markdown, not only in the comment that uploaded it — and the
+  asset outlives its comment. Verified on PR #1: after deleting the comment the
+  description's player still reported `duration 131`, `1280x720`, `readyState 4`,
+  no error, served from `private-user-images.githubusercontent.com`. Uploading is
+  the only step that needs the web UI; `gh api -X DELETE /repos/{o}/{r}/issues/comments/{id}`
+  handles the cleanup. (2026-07-28)
+
 - **Playwright's bundled ffmpeg cannot produce mp4** — `ffmpeg-mac -encoders`
   lists exactly two: `png` and `libvpx`. It also rejects `-preset`, so an H.264
   command line fails with `Unrecognized option 'preset'` rather than anything

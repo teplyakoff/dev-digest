@@ -71,11 +71,23 @@ roughly half the size. Without ffmpeg you simply keep the `.webm`; nothing fails
 
 GitHub will **not** play a video that lives in the repo. `<video>` is stripped by
 its sanitizer, `![](x.mp4)` renders as a broken `<img>`, and the blob page for an
-mp4 offers only "View raw". The one thing that produces a real player is dragging
-the file into the description box, which uploads it to GitHub's own attachment
-host.
+mp4 offers only "View raw". Only a file uploaded through the web UI gets a player.
 
-What does embed and autoplay is a GIF. Two passes — a shared palette, then the
+So to put one in a **description**, borrow a comment as the uploader:
+
+1. Drag the mp4 into a new comment on the PR and post it.
+2. Copy the `https://github.com/user-attachments/assets/<uuid>` URL out of it —
+   `gh pr view <n> --json comments --jq '.comments[].body'`.
+3. Put that URL **on its own line** in the description. A bare attachment URL
+   expands into a `<video controls>` anywhere GitHub renders markdown, not just
+   in the comment that uploaded it.
+4. Delete the comment — `gh api -X DELETE /repos/{owner}/{repo}/issues/comments/{id}`.
+   The asset outlives it and the description's player keeps working.
+
+Only step 1 needs the browser; the rest is `gh`.
+
+If you would rather not touch the web UI at all, a GIF embeds and autoplays
+straight from the repo. Two passes — a shared palette, then the
 encode — because the one-pass default quantises per frame and both bloats the
 file and dithers badly:
 
