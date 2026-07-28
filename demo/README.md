@@ -67,6 +67,28 @@ does not (QuickTime, Keynote, PowerPoint) and for this screen content lands at
 roughly half the size. Without ffmpeg you simply keep the `.webm`; nothing fails.
 `brew install ffmpeg` if you want the mp4.
 
+## Putting the recording in a PR
+
+GitHub will **not** play a video that lives in the repo. `<video>` is stripped by
+its sanitizer, `![](x.mp4)` renders as a broken `<img>`, and the blob page for an
+mp4 offers only "View raw". The one thing that produces a real player is dragging
+the file into the description box, which uploads it to GitHub's own attachment
+host.
+
+What does embed and autoplay is a GIF. Two passes — a shared palette, then the
+encode — because the one-pass default quantises per frame and both bloats the
+file and dithers badly:
+
+```bash
+V=recordings/devdigest-review-loop-<stamp>.mp4
+ffmpeg -i "$V" -vf "setpts=PTS/4,fps=10,scale=800:-1:flags=lanczos,palettegen=max_colors=128" /tmp/pal.png
+ffmpeg -i "$V" -i /tmp/pal.png -lavfi "setpts=PTS/4,fps=10,scale=800:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3" -loop 0 screencast.gif
+```
+
+`setpts=PTS/4` is the 4× speed-up: it turns a 2:11 recording into a 33 s loop at
+about 2.4 MB. Step captions are unreadable at that speed — the GIF is a teaser,
+and the still frames beside it carry the detail.
+
 The script exits non-zero if any agent run ends `failed`, so a broken recording
 is loud rather than a quietly short video.
 

@@ -70,6 +70,16 @@ would be obvious to anyone reading the code, don't write it.
   rename to a human-readable name only happens on success. `record.ts` sweeps
   `page@*.webm` out of the output dir at startup. (2026-07-28)
 
+- **GitHub will not play a repo-hosted video, in any markup.** Verified against
+  the `POST /markdown` rendering API: `<video src=…>` is dropped by the sanitizer
+  (renders as an empty `<p>`), `![](x.mp4)` becomes an `<img>` pointing at an mp4
+  (a broken image), and a bare URL stays a link. The blob page for an mp4 shows
+  only its size and "View raw" — no player. The sole mechanism is dragging the
+  file into the description box, which uploads it to GitHub's attachment host and
+  is special-cased into a player. For something that embeds inline, use a GIF —
+  recipe in `README.md`. Do not build a "clickable poster that opens the player";
+  there is no player to open. (2026-07-28)
+
 - **Playwright's bundled ffmpeg cannot produce mp4** — `ffmpeg-mac -encoders`
   lists exactly two: `png` and `libvpx`. It also rejects `-preset`, so an H.264
   command line fails with `Unrecognized option 'preset'` rather than anything
