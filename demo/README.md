@@ -56,9 +56,16 @@ DEMO_REPO=acme/payments-api DEMO_PR=482 npm run record
 
 Into `recordings/` (git-ignored):
 
-- `devdigest-review-loop-<timestamp>.webm` — the video, captioned per step
+- `devdigest-review-loop-<timestamp>.mp4` — the video, captioned per step
 - `NN-<step>.png` — one frame per step, at 2× for stills
 - `summary.json` — cost before/after, plus per-agent status, cost and findings
+
+Playwright can only record VP8/WebM, and the ffmpeg it bundles is built with
+libvpx alone, so it cannot re-encode. If a real `ffmpeg` is on `PATH` the
+recording is converted to H.264/mp4 and the webm dropped — mp4 plays where WebM
+does not (QuickTime, Keynote, PowerPoint) and for this screen content lands at
+roughly half the size. Without ffmpeg you simply keep the `.webm`; nothing fails.
+`brew install ffmpeg` if you want the mp4.
 
 The script exits non-zero if any agent run ends `failed`, so a broken recording
 is loud rather than a quietly short video.

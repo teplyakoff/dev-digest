@@ -25,6 +25,7 @@
  *   DEMO_REPO=acme/payments-api DEMO_PR=482 npm run record
  */
 import { chromium, type Page, type Browser, type BrowserContext } from "playwright";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,6 +96,35 @@ async function caption(page: Page, step: number, text: string) {
 async function beat(page: Page, step: number, text: string, ms = 2600) {
   await caption(page, step, text);
   await sleep(ms);
+}
+
+/**
+ * Playwright records VP8/WebM and nothing else, and the ffmpeg it bundles is
+ * built with libvpx only — it cannot produce H.264. So if a real ffmpeg is on
+ * PATH, hand it the recording: H.264/mp4 plays where WebM does not (QuickTime,
+ * Keynote, PowerPoint), and for this screen content it comes out roughly half
+ * the size. Purely additive — no ffmpeg, no mp4, the webm is still the output.
+ */
+function toMp4(webm: string): string | null {
+  const mp4 = webm.replace(/\.webm$/, ".mp4");
+  const res = spawnSync(
+    "ffmpeg",
+    // fmt: off
+    [
+      "-hide_banner", "-loglevel", "error", "-y", "-i", webm,
+      "-c:v", "libx264", "-preset", "slow", "-crf", "28",
+      "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an",
+      mp4,
+    ],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  );
+  if (res.error || res.status !== 0) {
+    log(res.error?.message.includes("ENOENT") ? "ffmpeg not on PATH — keeping the webm" : "ffmpeg failed — keeping the webm");
+    rmSync(mp4, { force: true });
+    return null;
+  }
+  rmSync(webm, { force: true });
+  return mp4;
 }
 
 let shotNo = 0;
@@ -328,7 +358,8 @@ async function main() {
     const final = join(OUT, `devdigest-review-loop-${stamp}.webm`);
     if (raw) renameSync(raw, final);
 
-    log(`\x1b[32m✓ video:\x1b[0m ${raw ? final : "(not recorded)"}`);
+    const mp4 = raw ? toMp4(final) : null;
+    log(`\x1b[32m✓ video:\x1b[0m ${mp4 ?? (raw ? final : "(not recorded)")}`);
     log(`\x1b[32m✓ frames + summary.json:\x1b[0m ${OUT}`);
     console.table(summary.runs);
     if (failed.length) process.exitCode = 1;

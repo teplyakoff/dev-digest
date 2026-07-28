@@ -11,7 +11,9 @@ a PR is promoted here, and re-recording **replaces** the file rather than adding
 second one: binaries live in git history forever.
 
 Screenshots are downscaled to 1280 px wide before committing (`sips -Z 1280`); the
-recorder captures at 2× for stills, which is more than a PR body needs.
+recorder captures at 2× for stills, which is more than a PR body needs. Video is
+H.264/mp4 — `demo/record.ts` converts from Playwright's WebM whenever a system
+`ffmpeg` is available, since mp4 also plays in QuickTime and Keynote.
 
 Referencing these from a PR or issue body needs an absolute URL — GitHub only
 resolves relative paths inside rendered `.md` files:

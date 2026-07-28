@@ -70,6 +70,15 @@ would be obvious to anyone reading the code, don't write it.
   rename to a human-readable name only happens on success. `record.ts` sweeps
   `page@*.webm` out of the output dir at startup. (2026-07-28)
 
+- **Playwright's bundled ffmpeg cannot produce mp4** — `ffmpeg-mac -encoders`
+  lists exactly two: `png` and `libvpx`. It also rejects `-preset`, so an H.264
+  command line fails with `Unrecognized option 'preset'` rather than anything
+  that names the real cause. Playwright itself only records VP8/WebM. `record.ts`
+  therefore converts through a **system** `ffmpeg` when one is on `PATH` and
+  keeps the webm when there is none. Worth it: from the same source, H.264 at
+  `-crf 28 -preset slow` produced 1.4 MB against 2.7 MB for a VP8 re-encode, and
+  took 2.6 s against 77 s. (2026-07-28)
+
 ## Recurring Errors & Fixes
 
 _(no entries yet)_
