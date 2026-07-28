@@ -7,7 +7,8 @@
 
 import React from "react";
 import { Icon, Badge } from "@devdigest/ui";
-import type { ReviewRecord, Verdict } from "@devdigest/shared";
+import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
+import { RunCostBadge } from "@/components/run-cost-badge";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
@@ -31,9 +32,13 @@ export function ReviewRunAccordion({
   headSha,
   targetRunId = null,
   targetNonce = 0,
+  run,
 }: {
   review: ReviewRecord;
   prId: string;
+  /** The agent_runs row this review came from — carries cost + token usage.
+   *  Absent for reviews with no surviving run row (e.g. a deleted run). */
+  run?: RunSummary;
   defaultOpen?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
@@ -103,6 +108,7 @@ export function ReviewRunAccordion({
             {review.score}
           </Badge>
         )}
+        <RunCostBadge usd={run?.cost_usd ?? null} />
         <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {formatWhen(review.created_at)}
         </span>
@@ -144,6 +150,9 @@ export function ReviewRunAccordion({
                 findingsCount={findings.length}
                 blockers={blockers}
                 agentName={review.agent_name}
+                costUsd={run?.cost_usd ?? null}
+                tokensIn={run?.tokens_in ?? null}
+                tokensOut={run?.tokens_out ?? null}
               />
             </div>
           )}

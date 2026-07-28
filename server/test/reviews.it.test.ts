@@ -159,7 +159,7 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
 
   it('runs a review: map-reduce + grounding drops the hallucinated finding, keeps the valid one', async () => {
     const app = await appWith(REVIEW_FIXTURE);
-    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const { repo, pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
 
     const agent = (
       await app.inject({
@@ -202,12 +202,54 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(trace.config.model).toBe('gpt-4.1');
     expect(trace.stats.grounding).toBe('1/2 passed');
     expect(trace.log.length).toBeGreaterThan(0);
+    // Run cost badge: the spend the engine reported survives into the trace.
+    expect(trace.stats.cost_usd).toBeCloseTo(0.001, 6);
 
     // agent_runs row populated for A5 to aggregate
     const [run] = await pg.handle.db.select().from(t.agentRuns).where(eq(t.agentRuns.id, runId));
     expect(run!.status).toBe('done');
     expect(run!.findingsCount).toBe(1);
     expect(run!.grounding).toBe('1/2 passed');
+    // Cost is persisted on the run row — this is what the PR list and the run
+    // history read. Null here would mean the badge silently shows "—".
+    expect(run!.costUsd).toBeCloseTo(0.001, 6);
+
+    // …and is exposed on the run-history route the timeline reads.
+    const runs = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/runs` })).json();
+    expect(runs[0].cost_usd).toBeCloseTo(0.001, 6);
+
+    // …and denormalized onto the PR list as the latest run's cost.
+    const pulls = (await app.inject({ method: 'GET', url: `/repos/${repo.id}/pulls` })).json();
+    expect(pulls.find((p: { id: string }) => p.id === pr.id).cost_usd).toBeCloseTo(0.001, 6);
+
+    await app.close();
+  });
+
+  it('a failed run records NO cost — null, never 0 (the badge must read "—", not "$0.00")', async () => {
+    // An invalid fixture makes the mock provider throw inside the run, which is
+    // the deterministic stand-in for "the model call blew up".
+    const app = await appWith({ verdict: 'not-a-verdict' });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Doomed', provider: 'openai', model: 'gpt-4.1', system_prompt: 'rev' },
+      })
+    ).json();
+    await app.inject({ method: 'POST', url: `/pulls/${pr.id}/review`, payload: { agentId: agent.id } });
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+    const [run] = await pg.handle.db
+      .select()
+      .from(t.agentRuns)
+      .where(eq(t.agentRuns.prId, pr.id));
+    expect(run!.status).toBe('failed');
+    // 0 would render as a real "$0.00" spend; unknown must stay unknown.
+    expect(run!.costUsd).toBeNull();
+
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${run!.id}/trace` })).json();
+    expect(trace.stats.cost_usd).toBeNull();
 
     await app.close();
   });

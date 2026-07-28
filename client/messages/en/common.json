@@ -8,6 +8,9 @@
     "export": "Export",
     "run": "Run"
   },
+  "runCost": {
+    "tooltip": "Cost of this review"
+  },
   "states": {
     "loading": "Loading…",
     "empty": "Nothing here yet",

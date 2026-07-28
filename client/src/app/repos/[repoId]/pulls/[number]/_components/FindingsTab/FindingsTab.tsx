@@ -71,6 +71,13 @@ export function FindingsTab({
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
 
+  // Reviews carry no cost/token usage — that lives on the agent_runs row. Index
+  // the runs we already fetched so each accordion can show what its run cost.
+  const runById = React.useMemo(
+    () => new Map((prRuns ?? []).map((r) => [r.run_id, r])),
+    [prRuns],
+  );
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -164,6 +171,7 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            run={review.run_id ? runById.get(review.run_id) : undefined}
           />
         ))
       )}
