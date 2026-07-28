@@ -23,3 +23,10 @@ test-results/
 
 # emdash worktree config (local)
 .emdash.json
+
+# Course materials. Lecture slides and notes stay out of the repo (the L01 deck
+# alone is 14 MB and would double .git). The design bundle is the exception: the
+# client is ported from it — see the "Ported from screen_dashboard.jsx" comments
+# — so it is tracked as the visual source of truth.
+_assets/*
+!_assets/DevDigest Design (standalone).html
