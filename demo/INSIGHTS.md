@@ -33,6 +33,17 @@ would be obvious to anyone reading the code, don't write it.
   against a wedged stack. If a run dies mid-recording, just re-run `npm run
   record`; it succeeded on the retry both times this happened. (2026-07-28)
 
+- **Corrects the entry above: those runs were not wedged, just very slow — and
+  `waitForRuns`' cancel does not actually stop them.** `duration_ms` on the two
+  culprits was 945 s and 674 s (8–99 s is normal), and the cancel only marks the
+  row; when the provider finally answers, the server overwrites it back to `done`.
+  Consequence for this package: a recording abandoned on timeout still spends the
+  money for the runs it started, and `summary.json` from the *successful* retry
+  will not mention them. Reconcile against `GET /pulls/:id/runs` if the OpenRouter
+  bill looks higher than the summaries explain. Bumping `DEMO_RUN_TIMEOUT` past
+  ~15 min is the way to ride one out rather than paying for a discarded run.
+  (2026-07-28)
+
 ## Codebase Patterns
 
 - This package is deliberately **not** part of `../e2e`. `e2e` is deterministic,

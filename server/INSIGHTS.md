@@ -49,6 +49,20 @@ would be obvious to anyone reading the code, don't write it.
   abort the in-flight request — the socket stays ESTABLISHED. The boot reaper
   only helps after a restart, so a live hang needs a manual cancel. (2026-07-28)
 
+- **Supersedes the "can hang forever" entry above (2026-07-28): the run does not
+  hang, it finishes — eventually — and `cancel` does not stop it.** Checking
+  `duration_ms` on the two runs that looked hung: **945 s** and **674 s**, against
+  8–99 s for every other run on the same PR and model. So the failure mode is an
+  un-bounded provider call that can take 10–16 min, not an infinite one, and the
+  sequential loop at `run-executor.ts:110` blocks the queued agents for that whole
+  time. The part that actually bites: `POST /runs/:id/cancel` frees the executor
+  and writes `cancelled`, but does **not** abort the in-flight request — when the
+  call finally returns, `completeAgentRun` overwrites the row back to `done` with
+  a real `cost_usd`. Runs `6a63fe8c` / `23ba28d6` / `33cf84f0` were cancelled at
+  13:29:27Z, screenshotted as `cancelled` at 13:42Z, and read `done` afterwards.
+  Do not trust a `cancelled` row to stay cancelled, and do not bill from one.
+  (2026-07-28)
+
 - **Seeded PR files carry `patch: null`.** `GET /pulls/:id` on the seeded
   `acme/payments-api` #482 returns file rows with real `additions`/`deletions`
   but no patch text, so triggering a review against seeded data gives the agent
