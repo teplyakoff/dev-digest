@@ -11,6 +11,15 @@ would be obvious to anyone reading the code, don't write it.
   on the fixed container name, and re-running installs only what is missing.
   (2026-07-27)
 
+- To find out **where a run is actually stuck**, read its SSE replay buffer:
+  `curl -s -m 6 -N localhost:3001/runs/<runId>/events`. It replays every event
+  from the start of the run, so the last line names the step that never
+  returned — far faster than reading the dev server's stdout. Note the buffer is
+  per-run but the shared pre-work events (`Loading PR diff…`, `Diff ready — N
+  changed file(s); starting M agent run(s)`) appear in *every* run's buffer, so a
+  buffer that stops right after "Diff ready" means that agent has not started
+  yet, not that it hung. (2026-07-28)
+
 ## What Doesn't Work
 
 - `db.select().from(t.repos)` inside an `*.it.test.ts` returns the **seeded** repo,
@@ -25,6 +34,27 @@ would be obvious to anyone reading the code, don't write it.
   freshly seeded data. An integration or e2e test cannot assert a real value for
   any of them without triggering a run first; asserting the empty state is all
   seeded data can support. (2026-07-28)
+
+- **A review run can hang forever, and one hang wedges every other agent.**
+  Nothing on the path sets a deadline: `reviewPullRequest`
+  (`reviewer-core/src/review/run.ts`) has no timeout and no `AbortSignal` on the
+  LLM call, so a provider request that never answers leaves the run `running`
+  indefinitely. Because `run-executor.ts:110` iterates agents **sequentially**,
+  the agents queued behind it never start either — all three rows sit in
+  `running` while only the first is really doing anything. Seen twice on
+  2026-07-28 with `openrouter`/`deepseek-v4-flash`, stuck 20+ min at `Reviewing
+  all files in one pass` while a direct `curl` to the same model answered in
+  3.7s, so "the provider is up" does not rule this out. `POST /runs/:id/cancel`
+  frees the executor and writes `cancelled` + `cost_usd = null`, but does NOT
+  abort the in-flight request — the socket stays ESTABLISHED. The boot reaper
+  only helps after a restart, so a live hang needs a manual cancel. (2026-07-28)
+
+- **Seeded PR files carry `patch: null`.** `GET /pulls/:id` on the seeded
+  `acme/payments-api` #482 returns file rows with real `additions`/`deletions`
+  but no patch text, so triggering a review against seeded data gives the agent
+  nothing to ground findings against. Any work that needs a *real* run — cost,
+  tokens, findings — must target a genuinely imported repo with a clone, not the
+  seed. (2026-07-28)
 
 - On **pnpm 11**, every `pnpm <script>` in this package fails before running
   anything, with `ERR_PNPM_IGNORED_BUILDS`. pnpm 11 flipped `strictDepBuilds` to

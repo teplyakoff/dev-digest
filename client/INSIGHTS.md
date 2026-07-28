@@ -48,6 +48,20 @@ _(no entries yet)_
   but no `agent_runs` row. Expect the "—" state locally until you actually run a
   review; browser e2e flows can only assert that empty state. (2026-07-28)
 
+- **On the PR detail page the tab labels do not match the tab keys, and almost
+  everything lives under one tab.** `?tab=overview` renders `OverviewTab`, which
+  is *only* `pr.body` — it looks broken on a PR opened without a description, and
+  that is not a bug. The tab labelled **"Agent runs"** is `?tab=findings`: it
+  holds `RunHistory` (the timeline) and, below it, one `ReviewRunAccordion` per
+  review — and the accordion is where `VerdictBanner` and `RunCostBadge` render.
+  Only the newest accordion is `defaultOpen`, so the banner is below the fold and
+  needs a scroll. Anything looking for the verdict or the cost badge must go to
+  `?tab=findings` and scroll, not to Overview. (2026-07-28)
+
+- **The run trace drawer is URL-driven**: `page.tsx` reads `search.get("trace")`,
+  so `?tab=findings&trace=<runId>` opens it directly. Prefer that over hunting
+  for the per-row icon in the timeline when scripting or deep-linking. (2026-07-28)
+
 ## Tool & Library Notes
 
 - `_assets/DevDigest Design (standalone).html` is a **self-unpacking bundle, not
