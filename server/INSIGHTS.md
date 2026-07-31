@@ -106,6 +106,15 @@ would be obvious to anyone reading the code, don't write it.
   `null` for the same reason, so the UI can show "—" instead of "$0.00".
   (2026-07-28)
 
+- **A negative decision recorded in a code comment must be reversed in two
+  places.** `modules/pulls/routes.ts` used to say the per-severity findings
+  breakdown is "intentionally not surfaced on the list"; the severity-counters
+  feature reversed that. If only the code changes, the stale comment instructs
+  the next reader to restore the old behaviour — so the reversal edits the
+  comment *and* names the decision in `docs/specs/02-severity-counters.md`.
+  When you reverse a documented "we deliberately don't do X", grep for the
+  comment that documents it. (2026-07-31)
+
 ## Tool & Library Notes
 
 - The API imports `reviewer-core`'s raw TypeScript through a tsconfig path alias,
@@ -118,6 +127,15 @@ would be obvious to anyone reading the code, don't write it.
 
 - `relation ... does not exist` on a fresh boot → migrations were never applied.
   The server does not migrate on boot by design. Run `pnpm db:migrate`. (2026-07-27)
+
+- `expected [ { …(16) }, { …(16) } ] to have a length of 1 but got 2` in
+  `reviews.it.test.ts` after touching `REVIEW_FIXTURE` → the fixture feeds
+  **every** test in the file, not just the main run test. Adding one finding
+  cascades into: `review.score` (grounded findings × `SEVERITY_PENALTY` =
+  35/12/3 in `reviewer-core/src/review/reduce.ts`), the `'N/M passed'`
+  grounding strings on both the trace and the run row, `findingsCount`, and the
+  dual-provider test's own findings-length assert. Grep the file for every
+  count/score assertion before extending the fixture. (2026-07-31)
 
 ## Session Notes
 
@@ -134,6 +152,13 @@ would be obvious to anyone reading the code, don't write it.
   carrying the value through `completeAgentRun`. Verified live against
   openrouter: a 14 289 → 1 499-token run reported $0.001573117, which matches the
   deepseek-v4-flash list price to within rounding.
+
+- **2026-07-31** — L01 rework: severity counters. The list handler in
+  `modules/pulls/routes.ts` gained a third read-time aggregation block (latest
+  review's findings → `PrMeta.findings_by_severity` + `latest_findings`),
+  mirroring the score/cost blocks; no migration — severity was already
+  persisted per finding. The null-vs-zero rule extended to counters, with the
+  it-test asserting the grounding-dropped WARNING lands as a real `0`.
 
 ## Open Questions
 

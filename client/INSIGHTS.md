@@ -18,6 +18,16 @@ _(no entries yet)_
   namespace to something rendered from several feature folders — or take the
   string as a prop instead. (2026-07-28)
 
+- An absolutely-positioned popup inside the PR-list card is **clipped by
+  `tableCard`'s `overflow: hidden`** (`app/repos/[repoId]/pulls/styles.ts`). The
+  FINDINGS hover popover forced it to `visible`, which in turn means the header
+  row must round its own top corners (`borderRadius: "10px 10px 0 0"`) or they
+  poke past the card radius. Two more rules that came with it: a hover popover
+  rendered as a child of its `mouseenter`/`mouseleave` wrapper needs no
+  click-outside handling (moving into the popup keeps it open), and a popup
+  inside a clickable row needs `stopPropagation` on its cell or hovering users
+  navigate away when they click inside it (`PRRow.tsx`). (2026-07-31)
+
 - On **pnpm 11**, every `pnpm <script>` in this package fails before running
   anything, with `ERR_PNPM_IGNORED_BUILDS`. pnpm 11 flipped `strictDepBuilds` to
   true, so the automatic pre-run dependency check refuses to pass while any
@@ -62,6 +72,14 @@ _(no entries yet)_
   so `?tab=findings&trace=<runId>` opens it directly. Prefer that over hunting
   for the per-row icon in the timeline when scripting or deep-linking. (2026-07-28)
 
+- The Agent Runs timeline's per-run severity chips are a **client-side join,
+  not server data**: `RunSummary` carries only `findings_count`/`blockers`, so
+  `FindingsTab` builds `Map<review.run_id, findings>` from the reviews the page
+  already fetched and hands it to `RunHistory`. A run row showing the plain
+  "N finding(s)" text instead of chips means its review has no joinable entry —
+  deleted review or `kind: summary` — which is the designed fallback, not a bug.
+  (2026-07-31)
+
 ## Tool & Library Notes
 
 - `_assets/DevDigest Design (standalone).html` is a **self-unpacking bundle, not
@@ -90,6 +108,13 @@ _(no entries yet)_
   trace drawer (COST stat tile). Format rule that matters: a typical OpenRouter
   run costs ~$0.0016, so the formatter drops to four decimals below a cent —
   `toFixed(2)` would have rendered every real run as "$0.00".
+
+- **2026-07-31** — L01 rework: severity counters. `SeverityCounters` +
+  `FindingsPopover` in `src/components/severity-counters/`, on the PR list
+  (FINDINGS column + hover popup), the timeline rows (chips + blockers suffix)
+  and `FindingsPanel` (toggle filter chips composing with hide-low-confidence).
+  The predicted `common`-namespace fan-out from the 2026-07-28 entry landed
+  exactly as warned — `RunHistory.test.tsx` had to add `common` to its messages.
 
 ## Open Questions
 

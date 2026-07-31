@@ -44,6 +44,27 @@ would be obvious to anyone reading the code, don't write it.
   ~15 min is the way to ride one out rather than paying for a discarded run.
   (2026-07-28)
 
+- Recording against a **clean PR renders every findings-related badge empty** —
+  the first take of the cost feature reviewed `dev-digest#1` and got three
+  0-finding, score-100 runs, so severity chips would have shown nothing but
+  "—". The retake seeded a deliberately reviewable PR (`dev-digest#2`, a
+  39-line `scripts/notify-review-done.ts` with a hardcoded token, unchecked
+  `fetch` and a dead import) and pointed `DEMO_REPO`/`DEMO_PR` at it; the run
+  came back 2 CRITICAL · 1 WARNING · 2 SUGGESTION. When a new UI element
+  depends on findings, budget a fixture PR whose review will actually produce
+  them — and keep the "this is a demo" disclaimer in the PR description, where
+  the reviewing model never sees it. (2026-07-31)
+
+- `page.mouse.wheel()` scrolls **whatever sits under the cursor**, and the
+  cursor starts at (0,0) over the app sidebar — so wheeling after
+  `scrollIntoViewIfNeeded` on the PR page moved nothing and two stills shipped
+  mis-framed before the cause was found. Inner panes (the PR content pane, the
+  trace drawer body) only move via `locator.scrollIntoViewIfNeeded()` on an
+  element **inside** them; and because that method only guarantees visibility
+  at the viewport edge, framing a region means targeting an element *below* it
+  — the committed verdict-banner still targets the `Critical` filter chip, not
+  the "PR SCORE" label the recorder's step 6 uses. (2026-07-31)
+
 ## Codebase Patterns
 
 - This package is deliberately **not** part of `../e2e`. `e2e` is deterministic,
@@ -120,6 +141,15 @@ _(no entries yet)_
   COST column, run accordion header + verdict banner, run trace COST stat tile).
   Two of four attempts were lost to a wedged provider call — see the entry in
   "What Doesn't Work" and `server/INSIGHTS.md`.
+
+- **2026-07-31** — L01 rework retake against the seeded bad PR (`dev-digest#2`):
+  3 runs, $0.004121 total, severity chips visible on the list, the timeline and
+  the verdict banner; captions now narrate the severity split (computed from
+  `GET /pulls/:id/reviews` at record time). Steps 6 and 8 gained live
+  interactions — chip-toggle filtering and the FINDINGS hover popup — so the
+  video shows the feature working, not just existing. Three stills the recorder
+  cannot frame (banner+chips, drawer findings, drawer log) were reshot with a
+  one-off Playwright script at the same 1280×720@2x settings.
 
 ## Open Questions
 
