@@ -78,6 +78,19 @@ export function FindingsTab({
     [prRuns],
   );
 
+  // The reverse join: runs carry no findings — those live on the review. Index
+  // findings by review.run_id so each timeline row can show its severity chips
+  // without a new fetch. Runs whose review is gone fall back to the count text.
+  const findingsByRunId = React.useMemo(
+    () =>
+      new Map(
+        runs
+          .filter((review) => review.run_id != null)
+          .map((review) => [review.run_id as string, review.findings]),
+      ),
+    [runs],
+  );
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -138,6 +151,7 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            findingsByRunId={findingsByRunId}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

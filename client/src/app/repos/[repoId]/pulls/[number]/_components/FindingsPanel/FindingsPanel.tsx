@@ -1,14 +1,20 @@
-/* FindingsPanel — hide-low-confidence + j/k navigation + FindingCard list,
-   wiring the accept/dismiss action hook (A2). */
+/* FindingsPanel — severity filter chips + hide-low-confidence + j/k navigation
+   + FindingCard list, wiring the accept/dismiss action hook (A2). */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Toggle, EmptyState } from "@devdigest/ui";
+import { Chip, Toggle, EmptyState, SEV } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
+import { countBySeverity } from "@/components/severity-counters";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
-import { KEY_TO_ACTION } from "./constants";
+import {
+  ALL_SEVERITIES_ON,
+  FILTERABLE_SEVERITIES,
+  KEY_TO_ACTION,
+  type SevFilter,
+} from "./constants";
 import { visibleFindings } from "./helpers";
 import { s } from "./styles";
 
@@ -26,9 +32,16 @@ export function FindingsPanel({
   const t = useTranslations("prReview");
   const action = useFindingAction();
   const [hideLow, setHideLow] = React.useState(false);
+  const [sevFilter, setSevFilter] = React.useState<SevFilter>(ALL_SEVERITIES_ON);
   const [focusIdx, setFocusIdx] = React.useState(0);
 
-  const shown = React.useMemo(() => visibleFindings(findings, hideLow), [findings, hideLow]);
+  // Chip counts reflect the review, not the current filter — a chip that hid
+  // its severity still shows how many findings it is hiding.
+  const counts = React.useMemo(() => countBySeverity(findings), [findings]);
+  const shown = React.useMemo(
+    () => visibleFindings(findings, { hideLow, severities: sevFilter }),
+    [findings, hideLow, sevFilter],
+  );
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -48,6 +61,21 @@ export function FindingsPanel({
   return (
     <div>
       <div style={s.toolbar}>
+        {/* Severity toggles (design: FindingsPanel chips row) — each chip flips
+            its own severity; all start on. */}
+        {FILTERABLE_SEVERITIES.map((sv) => (
+          <Chip
+            key={sv}
+            active={sevFilter[sv]}
+            onClick={() => setSevFilter((f) => ({ ...f, [sv]: !f[sv] }))}
+            icon={SEV[sv].icon}
+            count={counts[sv]}
+            color={SEV[sv].c}
+          >
+            {SEV[sv].label}
+          </Chip>
+        ))}
+        <div style={s.divider} />
         <div style={s.toggleGroup}>
           {t("panel.hideLowConfidence")}
           <Toggle on={hideLow} onChange={setHideLow} size={16} />

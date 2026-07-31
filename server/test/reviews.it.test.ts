@@ -26,7 +26,12 @@ const DIFF = `diff --git a/src/config.ts b/src/config.ts
 +  stripeKey: "sk_live_xxx",
    redisUrl: x,`;
 
-/** A Review fixture: one valid finding (line 11), one hallucinated (line 999). */
+/**
+ * A Review fixture: two valid findings (line 11, CRITICAL + SUGGESTION), one
+ * hallucinated (line 999, WARNING). Grounding keeps the pair and drops the
+ * phantom — which makes WARNING a real zero in the severity counters, the
+ * distinction the PR list's null-vs-zero rule hinges on.
+ */
 const REVIEW_FIXTURE: Review = {
   verdict: 'request_changes',
   summary: 'Hardcoded Stripe secret introduced.',
@@ -55,6 +60,18 @@ const REVIEW_FIXTURE: Review = {
       end_line: 999,
       rationale: 'This line does not exist in the diff.',
       confidence: 0.5,
+      kind: 'finding',
+    },
+    {
+      id: 'f-style',
+      severity: 'SUGGESTION',
+      category: 'style',
+      title: 'Name the key via a typed config accessor',
+      file: 'src/config.ts',
+      start_line: 11,
+      end_line: 11,
+      rationale: 'Inline literals in the config object hide provenance.',
+      confidence: 0.7,
       kind: 'finding',
     },
   ],
@@ -189,10 +206,10 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     const review = reviews[0];
     expect(review.verdict).toBe('request_changes');
     // Score is derived from the GROUNDED findings, not the model's self-reported
-    // 42: grounding keeps one CRITICAL (line 11) ⇒ 100 − 35 = 65.
-    expect(review.score).toBe(65);
-    // grounding kept only the valid finding (line 11), dropped the line-999 one
-    expect(review.findings).toHaveLength(1);
+    // 42: grounding keeps the CRITICAL + SUGGESTION (line 11) ⇒ 100 − 35 − 3 = 62.
+    expect(review.score).toBe(62);
+    // grounding kept the two line-11 findings, dropped the line-999 one
+    expect(review.findings).toHaveLength(2);
     expect(review.findings[0].file).toBe('src/config.ts');
     expect(review.findings[0].start_line).toBe(11);
 
@@ -200,7 +217,7 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     const runId = body.runs[0].run_id;
     const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
     expect(trace.config.model).toBe('gpt-4.1');
-    expect(trace.stats.grounding).toBe('1/2 passed');
+    expect(trace.stats.grounding).toBe('2/3 passed');
     expect(trace.log.length).toBeGreaterThan(0);
     // Run cost badge: the spend the engine reported survives into the trace.
     expect(trace.stats.cost_usd).toBeCloseTo(0.001, 6);
@@ -208,8 +225,8 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     // agent_runs row populated for A5 to aggregate
     const [run] = await pg.handle.db.select().from(t.agentRuns).where(eq(t.agentRuns.id, runId));
     expect(run!.status).toBe('done');
-    expect(run!.findingsCount).toBe(1);
-    expect(run!.grounding).toBe('1/2 passed');
+    expect(run!.findingsCount).toBe(2);
+    expect(run!.grounding).toBe('2/3 passed');
     // Cost is persisted on the run row — this is what the PR list and the run
     // history read. Null here would mean the badge silently shows "—".
     expect(run!.costUsd).toBeCloseTo(0.001, 6);
@@ -220,7 +237,25 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
 
     // …and denormalized onto the PR list as the latest run's cost.
     const pulls = (await app.inject({ method: 'GET', url: `/repos/${repo.id}/pulls` })).json();
-    expect(pulls.find((p: { id: string }) => p.id === pr.id).cost_usd).toBeCloseTo(0.001, 6);
+    const listed = pulls.find((p: { id: string }) => p.id === pr.id);
+    expect(listed.cost_usd).toBeCloseTo(0.001, 6);
+
+    // Severity counters on the list: the WARNING dropped by grounding must be a
+    // real 0 (reviewed-clean severity), never null — the FINDINGS column's
+    // null-vs-zero rule (docs/specs/02-severity-counters.md).
+    expect(listed.findings_by_severity).toEqual({ CRITICAL: 1, WARNING: 0, SUGGESTION: 1 });
+    expect(listed.latest_findings).toHaveLength(2);
+    const slimCritical = listed.latest_findings.find(
+      (f: { severity: string }) => f.severity === 'CRITICAL',
+    );
+    expect(slimCritical).toMatchObject({
+      file: 'src/config.ts',
+      start_line: 11,
+      end_line: 11,
+      title: 'Hardcoded Stripe secret key',
+    });
+    expect(slimCritical.confidence).toBeCloseTo(0.95, 6);
+    expect(typeof slimCritical.rationale).toBe('string');
 
     await app.close();
   });
@@ -229,7 +264,7 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     // An invalid fixture makes the mock provider throw inside the run, which is
     // the deterministic stand-in for "the model call blew up".
     const app = await appWith({ verdict: 'not-a-verdict' });
-    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const { repo, pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
     const agent = (
       await app.inject({
         method: 'POST',
@@ -251,6 +286,13 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     const trace = (await app.inject({ method: 'GET', url: `/runs/${run!.id}/trace` })).json();
     expect(trace.stats.cost_usd).toBeNull();
 
+    // No review was ever persisted, so the list's severity counters must stay
+    // null (unreviewed), not zero-seeded — zeros would claim a clean review.
+    const pulls = (await app.inject({ method: 'GET', url: `/repos/${repo.id}/pulls` })).json();
+    const listed = pulls.find((p: { id: string }) => p.id === pr.id);
+    expect(listed.findings_by_severity).toBeNull();
+    expect(listed.latest_findings).toBeNull();
+
     await app.close();
   });
 
@@ -269,7 +311,8 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     const reviews = (
       await app.inject({ method: 'GET', url: `/pulls/${pr.id}/reviews` })
     ).json();
-    expect(reviews[0].findings).toHaveLength(1);
+    // Same fixture as the openai path: grounding keeps the two line-11 findings.
+    expect(reviews[0].findings).toHaveLength(2);
     expect(reviews[0].model).toBe('claude-x');
     await app.close();
   });

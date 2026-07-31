@@ -6,18 +6,31 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/run-cost-badge";
+import { SeverityCounters } from "@/components/severity-counters";
 import type { PrMeta } from "@/lib/types";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
 
-export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
+export function PRRow({
+  pr,
+  repoId,
+  idx = 0,
+  total = 0,
+}: {
+  pr: PrMeta;
+  repoId: string;
+  /** Row position — rows in the bottom half open the findings popup upward. */
+  idx?: number;
+  total?: number;
+}) {
   const t = useTranslations("prReview");
   const router = useRouter();
   const [h, setH] = React.useState(false);
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
   const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+  const popPlacement = total > 0 && idx >= Math.ceil(total / 2) ? "up" : "down";
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -53,6 +66,16 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
         ) : (
           <span style={s.muted}>—</span>
         )}
+      </div>
+      {/* Latest review's severity split — "—" until reviewed; hover for details.
+          The cell swallows clicks: the row navigates, the popup must not. */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <SeverityCounters
+          findings={pr.latest_findings ?? null}
+          counts={pr.findings_by_severity ?? null}
+          placement={popPlacement}
+          width={360}
+        />
       </div>
       <div>
         <Badge dot color={st.c} bg="transparent">

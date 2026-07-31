@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
+import type { PrMeta, PrDetail, PrListFinding, GitHubClient, PrReviewComment } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { countBySeverity } from './severity.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -111,21 +112,24 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest-review SCORE per PR for the list's score ring. Computed on read
-    // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // Latest-review SCORE and FINDINGS per PR, computed on read from reviews
+    // (no FK denorm); the list is small, so one IN-query + JS grouping is
+    // cheap. The review id is kept so the findings block below can aggregate
+    // the same review's per-severity counts — a decision reversal recorded in
+    // docs/specs/02-severity-counters.md (the breakdown used to be detail-only).
     const prIds = rows.map((r) => r.id);
-    const latestReviewByPr = new Map<string, { score: number | null }>();
+    const latestReviewByPr = new Map<string, { id: string; score: number | null }>();
     if (prIds.length > 0) {
       const reviewRows = await container.db
-        .select({ prId: t.reviews.prId, score: t.reviews.score })
+        .select({ id: t.reviews.id, prId: t.reviews.prId, score: t.reviews.score })
         .from(t.reviews)
         .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
         .orderBy(desc(t.reviews.createdAt));
       // Rows are newest-first → first seen per PR is the latest review.
       for (const rv of reviewRows) {
-        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
+        if (!latestReviewByPr.has(rv.prId)) {
+          latestReviewByPr.set(rv.prId, { id: rv.id, score: rv.score });
+        }
       }
     }
 
@@ -148,6 +152,45 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         .orderBy(desc(t.agentRuns.ranAt));
       for (const run of runRows) {
         if (run.prId && !latestCostByPr.has(run.prId)) latestCostByPr.set(run.prId, run.costUsd);
+      }
+    }
+
+    // Findings of each PR's LATEST review — the list's severity counters and
+    // their hover popup. Same read-time shape as score/cost above: one IN-query
+    // + JS grouping. Slim fields only; the detail page keeps using the full
+    // findings from GET /pulls/:id/reviews.
+    const latestFindingsByReview = new Map<string, PrListFinding[]>();
+    const latestReviewIds = [...latestReviewByPr.values()].map((rv) => rv.id);
+    if (latestReviewIds.length > 0) {
+      const findingRows = await container.db
+        .select({
+          reviewId: t.findings.reviewId,
+          severity: t.findings.severity,
+          category: t.findings.category,
+          title: t.findings.title,
+          file: t.findings.file,
+          startLine: t.findings.startLine,
+          endLine: t.findings.endLine,
+          confidence: t.findings.confidence,
+          rationale: t.findings.rationale,
+        })
+        .from(t.findings)
+        .where(inArray(t.findings.reviewId, latestReviewIds));
+      for (const f of findingRows) {
+        const list = latestFindingsByReview.get(f.reviewId) ?? [];
+        // Severity/category were validated by the Finding contract on insert,
+        // so the cast back to the enum types is safe.
+        list.push({
+          severity: f.severity as PrListFinding['severity'],
+          category: f.category as PrListFinding['category'],
+          title: f.title,
+          file: f.file,
+          start_line: f.startLine,
+          end_line: f.endLine,
+          confidence: f.confidence,
+          rationale: f.rationale,
+        });
+        latestFindingsByReview.set(f.reviewId, list);
       }
     }
 
@@ -176,6 +219,11 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
         cost_usd: latestCostByPr.get(r.id) ?? null,
+        // null = never reviewed; a reviewed-clean PR gets real zeros + [].
+        findings_by_severity: review
+          ? countBySeverity(latestFindingsByReview.get(review.id) ?? [])
+          : null,
+        latest_findings: review ? (latestFindingsByReview.get(review.id) ?? []) : null,
       };
     });
   });

@@ -5,10 +5,11 @@
  * and shows the review score ring.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { RunSummary } from "@devdigest/shared";
+import type { RunSummary, FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
+import common from "../../../../../../../../messages/en/common.json";
 import { RunHistory } from "./RunHistory";
 
 afterEach(cleanup);
@@ -35,10 +36,32 @@ function run(o: Partial<RunSummary>): RunSummary {
   };
 }
 
-function renderRuns(runs: RunSummary[]) {
+function finding(o: Partial<FindingRecord> = {}): FindingRecord {
+  return {
+    id: "f1",
+    review_id: "rev-1",
+    severity: "CRITICAL",
+    category: "security",
+    title: "Hardcoded Stripe secret key",
+    file: "src/config.ts",
+    start_line: 11,
+    end_line: 11,
+    rationale: "A live key is committed in source.",
+    suggestion: null,
+    confidence: 0.95,
+    kind: "finding",
+    accepted_at: null,
+    dismissed_at: null,
+    ...o,
+  };
+}
+
+function renderRuns(runs: RunSummary[], findingsByRunId?: Map<string, FindingRecord[]>) {
+  // `common` rides along for SeverityCounters' popup header — the documented
+  // shared-component namespace fan-out.
   return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      <RunHistory runs={runs} onOpenTrace={() => {}} />
+    <NextIntlClientProvider locale="en" messages={{ prReview: messages, common }}>
+      <RunHistory runs={runs} findingsByRunId={findingsByRunId} onOpenTrace={() => {}} />
     </NextIntlClientProvider>,
   );
 }
@@ -72,6 +95,42 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+});
+
+describe("RunHistory — severity chips", () => {
+  it("a settled run with a joined review shows chips instead of the count text", () => {
+    renderRuns(
+      [run({ status: "done", findings_count: 2, blockers: 1, score: 62 })],
+      new Map([
+        ["run-1", [finding(), finding({ id: "f2", severity: "SUGGESTION", category: "style" })]],
+      ]),
+    );
+    expect(screen.getByLabelText("1 Critical")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 Suggestion")).toBeInTheDocument();
+    expect(screen.queryByText("2 finding(s)")).not.toBeInTheDocument();
+    // blockers ride along as the chips' suffix
+    expect(screen.getByText(/1 blockers/)).toBeInTheDocument();
+  });
+
+  it("hovering the chips opens the findings popup", () => {
+    renderRuns(
+      [run({ status: "done", findings_count: 1, blockers: 0 })],
+      new Map([["run-1", [finding()]]]),
+    );
+    fireEvent.mouseEnter(screen.getByLabelText("1 Critical").parentElement!);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(screen.getByText("Hardcoded Stripe secret key")).toBeInTheDocument();
+    expect(screen.getByText("src/config.ts:11")).toBeInTheDocument();
+  });
+
+  it("a settled run WITHOUT a joinable review keeps the legacy count text", () => {
+    renderRuns(
+      [run({ status: "done", findings_count: 3, blockers: 0 })],
+      new Map(), // review deleted / summary kind — nothing to join
+    );
+    expect(screen.getByText("3 finding(s)")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Critical|Warning|Suggestion/)).not.toBeInTheDocument();
   });
 });
 

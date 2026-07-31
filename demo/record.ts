@@ -242,7 +242,7 @@ async function main() {
     await page.goto(listUrl, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "All", exact: true }).click();
     await page.getByText(pull.title, { exact: false }).first().waitFor({ timeout: 15_000 });
-    await beat(page, 1, "Pull Requests — every row carries SCORE and COST", 3000);
+    await beat(page, 1, "Pull Requests — every row carries SCORE, FINDINGS and COST", 3000);
     await shot(page, "pr-list-before");
 
     // 2 — the PR -----------------------------------------------------------
@@ -291,7 +291,21 @@ async function main() {
       0,
     );
     const costLabel = totalCost == null ? "cost unknown" : `$${totalCost.toFixed(6)} total`;
-    await beat(page, 5, `Timeline — ${runs.length} runs, ${costLabel}`, 3600);
+    // Severity split across every run's review — the timeline rows now carry
+    // per-severity chips, so the caption names what the badges show.
+    const reviews = await api<{ findings: { severity: string }[] }[]>(`/pulls/${pull.id}/reviews`);
+    const sev = { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 } as Record<string, number>;
+    for (const rv of reviews) for (const f of rv.findings ?? []) if (f.severity in sev) sev[f.severity] += 1;
+    const sevLabel = Object.entries(sev)
+      .filter(([, n]) => n > 0)
+      .map(([k, n]) => `${n} ${k}`)
+      .join(" · ");
+    await beat(
+      page,
+      5,
+      `Timeline — ${runs.length} runs, ${sevLabel || "no findings"} · ${costLabel}`,
+      3600,
+    );
     await shot(page, "agent-runs-done");
 
     // 6 — verdict + cost badge --------------------------------------------
@@ -302,8 +316,18 @@ async function main() {
     if (await banner.isVisible().catch(() => false)) {
       await banner.scrollIntoViewIfNeeded();
       await sleep(1200);
-      await beat(page, 6, "Verdict banner — PR score and what this run cost", 3600);
+      await beat(page, 6, "Verdict banner — score, cost, and severity filter chips", 3600);
       await shot(page, "verdict-cost-badge");
+      // Show the chips filtering live: solo out CRITICAL, then restore.
+      const criticalChip = page.getByRole("button", { name: /^Critical/ }).first();
+      if (await criticalChip.isVisible().catch(() => false)) {
+        await criticalChip.scrollIntoViewIfNeeded();
+        await caption(page, 6, "Click a severity chip — the findings list filters live");
+        await criticalChip.click();
+        await sleep(1600);
+        await criticalChip.click();
+        await sleep(1200);
+      }
     } else {
       log("! verdict banner not found — skipping");
     }
@@ -324,7 +348,13 @@ async function main() {
     await page.goto(listUrl, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "All", exact: true }).click();
     await sleep(1500);
-    await beat(page, 8, "Back on the list — the COST column now shows this run", 3600);
+    await beat(page, 8, "Back on the list — COST and per-severity FINDINGS badges", 3600);
+    // Hover the FINDINGS chips so the details popup is in the frame.
+    const chip = page.getByLabel(/Critical|Warning|Suggestion/).first();
+    if (await chip.isVisible().catch(() => false)) {
+      await chip.hover();
+      await sleep(1800);
+    }
     await shot(page, "pr-list-after");
 
     // Summary written next to the video so the numbers are checkable later.
