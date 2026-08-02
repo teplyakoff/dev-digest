@@ -26,6 +26,14 @@ version of the same guidance.
 | **Promote on the second consumer** | The single rule that prevents both premature abstraction and copy-paste drift. |
 | **Hard no on barrel files** | Chosen deliberately over the softer "public API index is fine" position. Scoped to new and touched code so it can't trigger a repo-wide refactor as a side effect. |
 | **Describe container/presentational and atomic design, don't prescribe them** | Both are widely cited and both are commonly misapplied; the sources themselves qualify them. |
+| **Next.js architecture split into `nextjs.md`** | Keeps `SKILL.md` scannable, and draws a clean line against the existing `next-best-practices` skill: that one owns Next.js *mechanics and performance* (what is valid, what is fast), this one owns *structure and ownership* (where the boundary sits, who owns data access). |
+
+## Files
+
+- `SKILL.md` — the placement rules. Start here.
+- `examples.md` — good/bad folder trees and code for each rule.
+- `nextjs.md` — Next.js App Router architecture: the `'use client'` boundary, the three data
+  architectures, route file conventions, Server Action entry points, the environment boundary.
 
 ## Sources
 
@@ -52,6 +60,11 @@ Everything below was fetched and verified while writing the skill.
 - [Presentational and Container Components — Dan Abramov](https://medium.com/@dan_abramov/smart-and-dumb-components-7ca2f9a7c7d0) — the original split **and** the 2019 retraction that §5 leans on: "I don't _suggest_ splitting your components like this anymore… Hooks let me do the same thing without an arbitrary division."
 - [Atomic Web Design — Brad Frost](https://bradfrost.com/blog/post/atomic-web-design/) — atoms → molecules → organisms → templates → pages, and the framing that scopes it to design systems rather than app folder structure.
 - [Server Components — React](https://react.dev/reference/rsc/server-components) — the `'use client'` boundary rule and the children-as-props pattern: a client component "will see output of the Server Components passed as props", which keeps server code out of the bundle.
+
+### Next.js App Router architecture (`nextjs.md`)
+
+- [Server and Client Components — Next.js](https://nextjs.org/docs/app/getting-started/server-and-client-components) — the module-graph framing that `nextjs.md` §2 is built on: "Once a file is marked with `\"use client\"`, **all of its imports and the components it directly renders are included in the client bundle**", and the exception that makes composition work — the rule "does not apply to Server Components passed as children or other props." Also the `server-only` / `client-only` packages under "Preventing environment poisoning", and the advice to render providers "as deep as possible in the tree".
+- [How to think about data security in Next.js](https://nextjs.org/docs/app/guides/data-security) — the source for §1's three-way choice: External HTTP APIs (Zero Trust, for apps with an existing backend), a `server-only` Data Access Layer returning DTOs (for new projects), or component-level access (prototypes only) — with the instruction to "choose one data fetching approach and avoid mixing them." Also §5: a Server Action "is reachable via a direct POST request, not just through your application's UI", a page-level check does not cover it because "the Server Action is a separate entry point and must verify the caller on its own", and the auditing checklist this file's §7 is modelled on.
 
 ### Business logic placement
 

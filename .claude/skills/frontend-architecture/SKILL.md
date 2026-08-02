@@ -1,14 +1,20 @@
 ---
 name: frontend-architecture
-description: "Frontend code organization and architecture for React/Next.js projects. Use when deciding where a file belongs, creating or moving a component, splitting a component that grew too large, or reviewing a diff for structural drift. Covers folder structure, component splitting, constants, utils vs helpers vs lib, types, styles, business-logic placement, and import boundaries."
+description: "Frontend code organization and architecture for React/Next.js projects. Use when deciding where a file belongs, creating or moving a component, splitting a component that grew too large, placing the server/client boundary, or reviewing a diff for structural drift. Covers folder structure, component splitting, constants, utils vs helpers vs lib, types, styles, business-logic placement, import boundaries, and Next.js App Router architecture — 'use client' placement, data-access ownership, route file conventions, Server Actions."
 ---
 
 # Frontend Architecture — where code goes
 
 Answers one question: **given this piece of code, which folder does it belong in?**
-For code examples and folder trees, see [examples.md](examples.md).
-For React semantics — hooks rules, memoization, keys, a11y — see
-[react-best-practices](../react-best-practices/SKILL.md). This skill owns placement only.
+
+- Code examples and folder trees → [examples.md](examples.md)
+- Next.js App Router architecture — the server/client boundary, who owns data access, what
+  each route file is for → [nextjs.md](nextjs.md)
+- React semantics — hooks rules, memoization, keys, a11y → [react-best-practices](../react-best-practices/SKILL.md)
+- Next.js mechanics and performance — valid RSC patterns, prop serialization, images, fonts,
+  caching → [next-best-practices](../next-best-practices/SKILL.md)
+
+This skill owns placement and structure only.
 
 ## Severity Levels
 
@@ -25,7 +31,7 @@ you predict.
 
 | Artifact | 1 component | 1 route / feature | 2+ routes / features | App-wide |
 |---|---|---|---|---|
-| Component | inline in the parent file | `_components/<Name>/` | `components/<name>/` | design-system package |
+| Component | inline in the parent file — never in a route `page.tsx` | `_components/<Name>/` | `components/<name>/` | design-system package |
 | Pure function | `helpers.ts` beside it | feature `helpers.ts` | `lib/<what-it-provides>.ts` | package |
 | Constant | `constants.ts` beside it | feature `constants.ts` | `lib/<domain>.ts` | `config/` |
 | Custom hook | the component's own file | feature `hooks.ts` | `lib/hooks/` | `lib/hooks/` |
@@ -96,7 +102,8 @@ argument about which one owns a given component. Route-local code lives in the r
 shared code lives in `src/components/` and `src/lib/`. The `features/` trees above are the
 generic pattern, for projects whose router does not already provide one.
 
-Routing then imposes the hierarchy for you. Use it:
+Routing then imposes the hierarchy for you — see [nextjs.md](nextjs.md) §3 for what each route
+file owns and where to place layout, loading and error boundaries. The essentials:
 
 - A route is not public until the folder has `page` or `route` — so **any other file can sit
   safely inside a route folder** without becoming a URL.
@@ -150,6 +157,10 @@ line count produces components whose only purpose is to be small. The real trigg
 Maintaining a component until it needs breaking up is cheaper than maintaining a premature
 abstraction.
 
+**A route `page.tsx` is the exception, and it is a responsibility argument, not a length one.**
+A page's single job is to bind a URL to a view, so any hook, state or handler in it is a second
+responsibility — extract regardless of size. See [nextjs.md](nextjs.md) §4.
+
 **Composition beats prop drilling.** When props are threaded through components that don't use
 them, restructure before reaching for Context: pass rendered elements as `children` or props so
 intermediate layers never see the data. Keep state as close to where it's relevant as possible.
@@ -165,11 +176,10 @@ impose it.
 vocabulary, not an app folder structure. Use it for a component library shared across products;
 do not classify product features by it.
 
-**Server/client boundary (Next.js / RSC).** `'use client'` marks an entry point: everything that
-module imports joins the client bundle and hydrates. So push the directive **to the leaves** —
-the button, the form, the toggle — and keep layouts and containers on the server. When a client
-component needs server-rendered content, pass it as `children` or a prop; the client sees the
-rendered output, and the server code stays out of the bundle.
+**Server/client boundary (Next.js / RSC).** `'use client'` cuts the module graph: everything that
+module **imports** joins the client side, but components **passed** to it as `children` or props
+do not. So push the directive to the leaves that own interactivity, and hand server-rendered
+content down as a slot rather than importing it. Full treatment in [nextjs.md](nextjs.md) §2.
 
 ## 6. Constants (MEDIUM)
 
@@ -273,6 +283,12 @@ other feature's cache shape, which is the coupling the structure exists to preve
 custom hook; keep the query function and the key module-private, so callers cannot depend on
 the key's shape.
 
+**The one sanctioned escape hatch: cross-domain invalidation.** When a mutation in one domain
+must invalidate another's cache, do not export the key and do not retype the literal at the
+call site — both reintroduce the coupling. Export a named invalidator from the domain that owns
+the key (`export function invalidateReviews(qc: QueryClient)`), and call that. The owning module
+still controls the shape; the caller states intent.
+
 ## 11. Import Boundaries (HIGH)
 
 - **Flow is unidirectional: `shared → features → app`.** Shared code is importable anywhere;
@@ -317,7 +333,8 @@ side effect of unrelated work.
 - A new barrel `index.ts`
 - `useState` + `useEffect` maintaining a value derivable from props
 - A component split purely to reduce line count, with one consumer and no state of its own
-- `'use client'` on a layout, container, or page rather than on a leaf
+- `'use client'` on a layout or container rather than on a leaf — a page that only renders a
+  view is fine ([nextjs.md](nextjs.md) §4)
 
 ---
 
@@ -336,7 +353,7 @@ Write `C` for the component's own folder — `src/app/<route>/_components/<Name>
 
 | Artifact | 1 component | 2+ components, 1 route | 2+ routes | Cross-cutting |
 |---|---|---|---|---|
-| Component | in the parent `.tsx` | `R/<Name>/` | `src/components/<kebab-name>/` | — |
+| Component | in the parent `.tsx` — but never in a `page.tsx` | `R/<Name>/` | `src/components/<kebab-name>/` | — |
 | Pure function | `C/helpers.ts` | `R/helpers.ts` | `src/lib/<what-it-provides>.ts` | `src/lib/…` |
 | Constant | module level in the `.tsx` | `R/constants.ts` | `src/lib/<what-it-provides>.ts` | `src/lib/…` |
 | Class strings | `C/styles.ts` | `R/styles.ts` | shared component's `styles.ts` | `src/app/globals.css` |
@@ -347,6 +364,11 @@ Write `C` for the component's own folder — `src/app/<route>/_components/<Name>
 
 "1 component" means one component *uses* it: start inline in the `.tsx`, and split it out into
 `C/types.ts` or `C/hooks.ts` only once a second **file inside that folder** needs it (§4).
+
+**A route `page.tsx` is never "the parent `.tsx`."** It binds a URL to a view and holds nothing
+else, so its view always goes in `R/<Name>/` no matter how few consumers it has
+([nextjs.md](nextjs.md) §4). Where this section and `nextjs.md` §8 both speak, §8 wins: it owns
+route files, the server/client boundary and the data architecture; this section owns placement.
 
 `<domain>` applies to **data hooks only** and means the API area, matching the existing files —
 `agents.ts`, `reviews.ts`, `repo-intel.ts`, `trace.ts`. A hook for a review run's trace joins
