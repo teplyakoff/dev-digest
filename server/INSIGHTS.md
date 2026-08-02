@@ -115,6 +115,18 @@ would be obvious to anyone reading the code, don't write it.
   When you reverse a documented "we deliberately don't do X", grep for the
   comment that documents it. (2026-07-31)
 
+- **Nothing in `server/src` opens a database transaction, and there is no `DbTx`
+  type.** `grep -rn "\.transaction("` over `server/src` returns zero hits, and
+  `db/client.ts` exports only `Db`, `DbHandle` and `createDb`. Every write today
+  is a single statement, so the question has never come up. The first multi-write
+  operation needs the alias added next to `Db`:
+  `export type DbTx = Parameters<Parameters<Db['transaction']>[0]>[0];` — then
+  repository methods take `tx?: DbTx` and resolve `const invoker = tx ?? this.db`,
+  so the *service* owns the boundary and the repository stays usable both inside
+  and outside a transaction. Do not open a transaction inside a repository method:
+  two repositories each opening their own gives two transactions and no
+  atomicity. (2026-08-03)
+
 ## Tool & Library Notes
 
 - The API imports `reviewer-core`'s raw TypeScript through a tsconfig path alias,
@@ -136,6 +148,13 @@ would be obvious to anyone reading the code, don't write it.
   grounding strings on both the trace and the run row, `findingsCount`, and the
   dual-provider test's own findings-length assert. Grep the file for every
   count/score assertion before extending the fixture. (2026-07-31)
+
+- `Error: MockLLMProvider fixture failed schema: ...` → the canned fixture no
+  longer satisfies the Zod schema the *caller* passed to `completeStructured`.
+  `MockLLMProvider` (`src/adapters/mocks.ts`) runs `req.schema.safeParse(fixture)`
+  and throws on failure by design, so a contract change breaks the fixture loudly
+  instead of letting a stale shape flow into the test. Fix the fixture (or the
+  `structuredBySchema` entry for that `schemaName`), not the mock. (2026-08-03)
 
 ## Session Notes
 
