@@ -12,7 +12,7 @@
 | `server/src/modules/repo-intel/**` | `server/INSIGHTS.md` |
 
 `repo-intel` is a module, not a package, and has no file of its own — its
-`CLAUDE.md` sends insights up to the server's. Do not create one for it.
+`AGENTS.md` sends insights up to the server's. Do not create one for it.
 
 **Cross-cutting lessons** (a pnpm quirk, a script both packages run) go into
 every package they affect, **reworded for that package** — a reader of
@@ -21,7 +21,7 @@ The pnpm 11 `ERR_PNPM_IGNORED_BUILDS` entry, present in both `server/` and
 `client/` with different `allowBuilds:` lists, is the precedent.
 
 **Meta-work has no target.** Changes confined to `.claude/`, `docs/agent-prompts/`
-or the root `CLAUDE.md` touch no package. Write nothing and say why — do not
+or the root `AGENTS.md` touch no package. Write nothing and say why — do not
 force the lesson into whichever file happens to be closest.
 
 ## The seven sections

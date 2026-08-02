@@ -1,0 +1,89 @@
+# AGENTS.md guard — asserts every CLAUDE.md is still a symlink to the AGENTS.md
+# beside it. AGENTS.md is the single source of truth; Claude Code only reads
+# CLAUDE.md, so the symlink is what makes the instructions load at all.
+#
+# The failure this catches: a checkout on Windows without Developer Mode
+# materialises symlinks as regular files. Committing from there replaces the
+# link with a 10-byte text file containing the word "AGENTS.md" — and every
+# agent instruction in the repo silently vanishes. It looks fine locally.
+#
+# No paths: filter on purpose. The job takes seconds, and a filter is one more
+# way to accidentally skip it.
+name: agents-md
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agents-md-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    name: symlinks intact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every CLAUDE.md is a symlink to AGENTS.md
+        shell: bash
+        run: |
+          fail=0
+          pairs=0
+
+          # git ls-files -s prints "<mode> <object> <stage>\t<path>". The mode is
+          # what actually got committed — checking the working tree would miss a
+          # symlink that was committed as a regular file.
+          while IFS= read -r line; do
+            mode=${line%% *}
+            path=${line#*$'\t'}
+            dir=$(dirname "$path")
+            pairs=$((pairs + 1))
+
+            if [ "$mode" != "120000" ]; then
+              echo "::error file=$path::committed as mode $mode, expected 120000 (symlink). Fix: git rm --cached '$path' && ln -sf AGENTS.md '$path' && git add '$path'"
+              fail=1
+              continue
+            fi
+
+            target=$(readlink "$path")
+            if [ "$target" != "AGENTS.md" ]; then
+              echo "::error file=$path::points at '$target', expected the bare relative name 'AGENTS.md'"
+              fail=1
+              continue
+            fi
+
+            if [ ! -f "$dir/AGENTS.md" ]; then
+              echo "::error file=$path::dangling — $dir/AGENTS.md does not exist"
+              fail=1
+              continue
+            fi
+
+            echo "ok  $path -> $target"
+          done < <(git ls-files -s '*CLAUDE.md')
+
+          # A glob that silently matches nothing would turn this job into a
+          # no-op that always passes.
+          if [ "$pairs" -eq 0 ]; then
+            echo "::error::no CLAUDE.md tracked at all — the guard matched nothing"
+            fail=1
+          fi
+
+          # The reverse direction: an AGENTS.md with no symlink beside it is
+          # invisible to Claude Code. .claude/skills/ is exempt — the AGENTS.md
+          # there is a vendored skill artifact, not agent guidance.
+          while IFS= read -r f; do
+            case "$f" in .claude/skills/*) continue ;; esac
+            dir=$(dirname "$f")
+            if [ ! -L "$dir/CLAUDE.md" ]; then
+              echo "::error file=$f::no CLAUDE.md symlink beside it, so Claude Code will never load it. Fix: ln -s AGENTS.md '$dir/CLAUDE.md'"
+              fail=1
+            fi
+          done < <(git ls-files '*AGENTS.md')
+
+          exit $fail

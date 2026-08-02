@@ -1,7 +1,7 @@
 # client docs
 
 Long-form documentation for `@devdigest/web` — the material that is too detailed
-for `CLAUDE.md` (which is a map, not a reference).
+for `AGENTS.md` (which is a map, not a reference).
 
 - `specs/` — specifications for work on this package (see `specs/README.md`).
 

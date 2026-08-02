@@ -84,7 +84,7 @@ would be obvious to anyone reading the code, don't write it.
 
 - The Zod contracts are **vendored twice — `server/src/vendor/shared/**` and
   `client/src/vendor/shared/**` — and there is no re-vendor script.** Both
-  `CLAUDE.md` files say "edit the source, then re-vendor", but the only mechanism
+  `AGENTS.md` files say "edit the source, then re-vendor", but the only mechanism
   is copying by hand. Add a field to one copy only and nothing fails loudly: the
   client type-checks against its own stale copy and simply reads `undefined` at
   runtime. Today the two differ only in comments — keep it that way. (2026-07-28)
