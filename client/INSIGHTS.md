@@ -53,6 +53,17 @@ _(no entries yet)_
   `Component.test.tsx`. `run-cost-badge/` is the current example: the PR list and
   three places on the PR detail page all render it. (2026-07-28)
 
+- **Supersedes the `index.ts` part of the 2026-07-28 "full set" note above.** The
+  new `.claude/skills/frontend-architecture` skill forbids adding barrel files, so
+  a promoted component ships `Component.tsx` + `Component.test.tsx` and then only
+  the `helpers.ts` / `styles.ts` / `constants.ts` it actually has content for —
+  no new `index.ts`, and import the component file directly
+  (`@/components/run-cost-badge/RunCostBadge`). Existing `index.ts` files stay;
+  removing them is a separate migration, not a side effect. Note also that the
+  "ships a test" rule is aspirational, not descriptive: only `run-cost-badge/` and
+  `severity-counters/` of the eight folders in `src/components/` have a
+  `*.test.tsx`, so the other six are debt, not a precedent to copy. (2026-08-02)
+
 - Anything derived from an agent run — cost, tokens, duration, the timeline —
   is **empty on freshly seeded data**, because `pnpm db:seed` inserts a review
   but no `agent_runs` row. Expect the "—" state locally until you actually run a
