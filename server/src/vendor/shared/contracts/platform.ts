@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
+import { Severity, FindingCategory } from './findings.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -154,6 +155,23 @@ export type Repo = z.infer<typeof Repo>;
 export const PrStatus = z.enum(['needs_review', 'reviewed', 'stale', 'open', 'closed', 'merged']);
 export type PrStatus = z.infer<typeof PrStatus>;
 
+/**
+ * Slim finding for the PR-list FINDINGS popup. A superset of the idea behind
+ * `AgentColumnFinding` (observability.ts) — the popup additionally needs
+ * `end_line`, `confidence` and `rationale`. See docs/specs/02-severity-counters.md.
+ */
+export const PrListFinding = z.object({
+  severity: Severity,
+  category: FindingCategory,
+  title: z.string(),
+  file: z.string(),
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(), // markdown; the client strips **/` and clamps to 2 lines
+});
+export type PrListFinding = z.infer<typeof PrListFinding>;
+
 export const PrMeta = z.object({
   id: z.string().nullish(),
   number: z.number().int(),
@@ -170,6 +188,23 @@ export const PrMeta = z.object({
   updated_at: z.string().nullish(),
   // Latest-review score (list endpoint only; null/absent until reviewed).
   score: z.number().int().nullish(),
+  // Latest COMPLETED run's cost in USD (list endpoint only; null/absent until a
+  // run settles). Deliberately the last run, not a per-PR total, so it reads the
+  // same way as `score` next to it.
+  cost_usd: z.number().nullish(),
+  // Latest review's per-severity finding counts (list endpoint only).
+  // null/absent = never reviewed; zeros = a real clean review — the same
+  // null-vs-zero rule as `cost_usd`. Same review as `score` next to it.
+  findings_by_severity: z
+    .object({
+      CRITICAL: z.number().int(),
+      WARNING: z.number().int(),
+      SUGGESTION: z.number().int(),
+    })
+    .nullish(),
+  // That review's findings, slim, feeding the FINDINGS column's hover popup
+  // (list endpoint only; null = unreviewed).
+  latest_findings: z.array(PrListFinding).nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

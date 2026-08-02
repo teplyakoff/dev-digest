@@ -71,6 +71,26 @@ export function FindingsTab({
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
 
+  // Reviews carry no cost/token usage — that lives on the agent_runs row. Index
+  // the runs we already fetched so each accordion can show what its run cost.
+  const runById = React.useMemo(
+    () => new Map((prRuns ?? []).map((r) => [r.run_id, r])),
+    [prRuns],
+  );
+
+  // The reverse join: runs carry no findings — those live on the review. Index
+  // findings by review.run_id so each timeline row can show its severity chips
+  // without a new fetch. Runs whose review is gone fall back to the count text.
+  const findingsByRunId = React.useMemo(
+    () =>
+      new Map(
+        runs
+          .filter((review) => review.run_id != null)
+          .map((review) => [review.run_id as string, review.findings]),
+      ),
+    [runs],
+  );
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -131,6 +151,7 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            findingsByRunId={findingsByRunId}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}
@@ -164,6 +185,7 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            run={review.run_id ? runById.get(review.run_id) : undefined}
           />
         ))
       )}

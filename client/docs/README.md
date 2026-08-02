@@ -1,0 +1,10 @@
+# client docs
+
+Long-form documentation for `@devdigest/web` — the material that is too detailed
+for `CLAUDE.md` (which is a map, not a reference).
+
+- `specs/` — specifications for work on this package (see `specs/README.md`).
+
+Package-level orientation stays in `../README.md`; cross-package material stays
+in the repo root (`../../README.md`, `../../TESTING.md`, `../../docs/`). Link to
+those rather than copying them here.

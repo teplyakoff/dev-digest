@@ -8,6 +8,12 @@
     "export": "Export",
     "run": "Run"
   },
+  "runCost": {
+    "tooltip": "Cost of this review"
+  },
+  "severityCounters": {
+    "count": "{count, plural, one {# finding} other {# findings}}"
+  },
   "states": {
     "loading": "Loading…",
     "empty": "Nothing here yet",

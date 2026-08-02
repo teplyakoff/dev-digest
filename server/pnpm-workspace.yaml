@@ -1,0 +1,15 @@
+# pnpm settings for this standalone package. Not a workspace — pnpm 11 reads
+# these settings only from this file, no longer from the `pnpm` field of
+# package.json.
+#
+# pnpm 11 flipped `strictDepBuilds` to true, so an install now FAILS on any
+# dependency whose build script has not been explicitly decided on. All four
+# below are dev-only tooling (esbuild via vitest/tsx/drizzle-kit; ssh2 +
+# cpu-features via testcontainers; protobufjs via its CLI) and each ships a
+# prebuilt platform binary through optionalDependencies, so their build scripts
+# were never run under pnpm 10 either. `false` keeps that exact behaviour.
+allowBuilds:
+  cpu-features: false
+  esbuild: false
+  protobufjs: false
+  ssh2: false

@@ -87,7 +87,9 @@ export const s = {
     margin: "14px 32px 44px",
     border: "1px solid var(--border)",
     borderRadius: 10,
-    overflow: "hidden",
+    // visible, not hidden: the FINDINGS column's hover popup is absolutely
+    // positioned and must escape the card (design's list container does the same)
+    overflow: "visible",
     background: "var(--bg-elevated)",
   } satisfies CSSProperties,
   headRow: {
@@ -96,6 +98,8 @@ export const s = {
     gap: 14,
     padding: "10px 20px",
     borderBottom: "1px solid var(--border)",
+    // the card no longer clips, so the header rounds its own top corners
+    borderRadius: "10px 10px 0 0",
     background: "var(--bg-surface)",
     fontSize: 12,
     fontWeight: 700,
