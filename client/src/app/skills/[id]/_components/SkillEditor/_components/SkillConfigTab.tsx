@@ -5,12 +5,13 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, FormField, SelectInput, TextInput, Textarea, Toggle } from "@devdigest/ui";
+import { Button, FormField, SelectInput, TextInput, Toggle } from "@devdigest/ui";
 import type { Skill, SkillType } from "@devdigest/shared";
+import { SkillBodyEditor } from "../../../../_components/SkillBodyEditor/SkillBodyEditor";
 import { useDeleteSkill, useSkillUsage, useUpdateSkill } from "../../../../../../lib/hooks/skills";
+import { estimateTokens } from "../../../../../../lib/tokens";
 import { useToast } from "../../../../../../lib/toast";
 import { TYPE_OPTIONS } from "../../../../_components/SkillsListView/_components/CreateSkillModal/constants";
-import { estimateTokens } from "../constants";
 import { s } from "../styles";
 
 export function SkillConfigTab({ skill }: { skill: Skill }) {
@@ -40,6 +41,23 @@ export function SkillConfigTab({ skill }: { skill: Skill }) {
   // produce, so the number in the hint matches the one that appears in Versions.
   const bodyChanged = body !== skill.body;
   const nextVersion = bodyChanged ? skill.version + 1 : skill.version;
+
+  const dirty =
+    name !== skill.name ||
+    description !== skill.description ||
+    type !== skill.type ||
+    enabled !== skill.enabled ||
+    bodyChanged;
+
+  /** Back to what is persisted. Same assignments as the skill-switch effect,
+   *  which is the definition of "discard my edits". */
+  const reset = () => {
+    setName(skill.name);
+    setDescription(skill.description);
+    setType(skill.type);
+    setBody(skill.body);
+    setEnabled(skill.enabled);
+  };
 
   const save = () =>
     update.mutate(
@@ -88,12 +106,15 @@ export function SkillConfigTab({ skill }: { skill: Skill }) {
           </span>
         }
       >
-        <Textarea value={body} onChange={setBody} rows={18} mono />
+        <SkillBodyEditor value={body} onChange={setBody} rows={18} ariaLabel={t("config.body")} />
       </FormField>
 
       <div style={s.actions}>
         <Button kind="primary" icon="Check" onClick={save} disabled={update.isPending}>
           {update.isPending ? t("config.saving") : t("config.save")}
+        </Button>
+        <Button kind="ghost" onClick={reset} disabled={!dirty || update.isPending}>
+          {t("config.cancel")}
         </Button>
         {bodyChanged && (
           <span style={s.snapshotHint}>{t("config.snapshotHint", { version: nextVersion })}</span>

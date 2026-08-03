@@ -62,6 +62,7 @@
     "bodyHint": "The only text sent to the model. Editing the body is the entire skill — everything else is metadata.",
     "tokens": "{count} tokens",
     "save": "Save skill",
+    "cancel": "Cancel",
     "saving": "Saving…",
     "saved": "Saved (v{version})",
     "snapshotHint": "Saving a changed body snapshots it as v{version}.",
@@ -82,7 +83,8 @@
     "openEditor": "Open editor",
     "vettingNotice": "This skill was imported. Its body is someone else's instructions, and enabling it puts them in your agents' prompts. Read it before you turn it on.",
     "bodyLabel": "Skill body (Markdown)",
-    "version": "v{version}"
+    "version": "v{version}",
+    "tokens": "{count} tokens"
   },
   "versions": {
     "title": "Version history",

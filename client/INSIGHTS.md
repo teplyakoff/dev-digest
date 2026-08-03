@@ -71,6 +71,44 @@ _(no entries yet)_
   into the component before the test was suspected. Build the element in a
   function and pass a fresh one each time: `view.rerender(ui())`. (2026-08-03)
 
+- **Synthetic `DragEvent`s fired in one tick cannot exercise `SkillsTab`'s
+  drag-reorder, and the failure is indistinguishable from a broken feature.**
+  `onDrop` closes over `dragIndex` from the render it was attached in, so a
+  `dragstart` → `dragover` → `drop` sequence dispatched synchronously still sees
+  `dragIndex === null` and returns early: the order never changes, and the
+  obvious conclusion — "reorder is broken" — is wrong. Put a real gap between
+  `dragstart` and `drop` (a `setTimeout` of a few hundred ms) so React
+  re-renders in between, then **re-query the row elements**, since the list
+  re-orders under you. Measured on
+  `app/agents/[id]/_components/AgentEditor/_components/SkillsTab`: identical
+  events one tick apart changed nothing; 400 ms apart wrote the new
+  `agent_skills.order`. Note this is a hazard for hand-driven browser
+  verification only — Playwright's `dragTo()` and a real mouse both leave frames
+  in between. (2026-08-03)
+
+- **`pnpm build` while `pnpm dev` is running kills the dev server**, because both
+  write `client/.next`. The production build overwrites the dev chunks, the
+  running server keeps serving from the manifests it has, and every route goes
+  blank with a bare "1 Issue" badge and an empty console — no error naming the
+  cause. Recovering needs `rm -rf client/.next` **and** a restart, and because
+  `scripts/dev.sh` runs the client in the foreground with a `trap cleanup EXIT`
+  that kills the API, killing the Next process takes the whole stack down with
+  it. This collides head-on with the 2026-08-03 note above that `pnpm build` is
+  the only thing that catches the webpack `.js`→`.ts` trap: run the build when
+  the dev server is stopped, or expect to restart the stack afterwards.
+  (2026-08-03)
+
+- A **flex row whose children are `align-items: stretch` takes its height from
+  the tallest child**, which silently defeated `rows` on the skill body editor:
+  the line gutter renders one `div` per line, so a 30-line body made the frame
+  620 px, the textarea stretched to match, `scrollHeight === clientHeight`, and
+  the gutter's scroll-sync handler became dead code that never fired. It looks
+  fine on a short body and degrades with length, so the screenshot that "proves"
+  it works proves nothing. `SkillBodyEditor` pins the frame height from `rows`
+  (`rows * lineHeight + 2 * padding`) and gives the textarea `height: 100%`;
+  `SkillBodyEditor.test.tsx` asserts a 200-line body renders the same height as
+  a 1-line one. (2026-08-03)
+
 ## Codebase Patterns
 
 - The Zod contracts under `src/vendor/shared/**` are **hand-copied from

@@ -6,8 +6,9 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, FormField, Icon, Modal, SelectInput, TextInput, Textarea } from "@devdigest/ui";
+import { Button, FormField, Icon, Modal, SelectInput, TextInput } from "@devdigest/ui";
 import type { SkillImportPreview, SkillType } from "@devdigest/shared";
+import { SkillBodyEditor } from "../../../SkillBodyEditor/SkillBodyEditor";
 import { ApiError } from "../../../../../../lib/api";
 import { useImportConfirm, useImportPreview } from "../../../../../../lib/hooks/skills";
 import { useToast } from "../../../../../../lib/toast";
@@ -201,7 +202,10 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
                 />
               </FormField>
               <FormField label={t("config.body")} required>
-                <Textarea value={body} onChange={setBody} rows={16} mono />
+                {/* The same editor the Config tab uses — this is the last screen
+                    before someone else's instructions enter your prompts, so it
+                    should not read as a lesser view of the same text. */}
+                <SkillBodyEditor value={body} onChange={setBody} rows={16} ariaLabel={t("config.body")} />
               </FormField>
             </section>
           </>

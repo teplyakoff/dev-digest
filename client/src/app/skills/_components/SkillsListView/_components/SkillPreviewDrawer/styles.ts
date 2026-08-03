@@ -8,6 +8,11 @@ export const s = {
     gap: 8,
     marginBottom: 14,
   } satisfies CSSProperties,
+  tokens: {
+    marginLeft: "auto",
+    fontSize: 11,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
   vetting: {
     fontSize: 12.5,
     lineHeight: 1.5,

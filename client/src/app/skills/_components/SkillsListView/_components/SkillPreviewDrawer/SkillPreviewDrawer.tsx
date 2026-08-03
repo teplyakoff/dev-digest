@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Markdown } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { Drawer } from "@devdigest/ui";
+import { estimateTokens } from "../../../../../../lib/tokens";
 import { needsVetting } from "../../../SkillCard/helpers";
 import { PREVIEW_WIDTH } from "../../constants";
 import { s } from "./styles";
@@ -44,6 +45,11 @@ export function SkillPreviewDrawer({ skill, onClose }: { skill: Skill; onClose: 
         >
           {skill.enabled ? t("preview.enabled") : t("preview.disabled")}
         </Badge>
+        {/* What this skill costs every run that loads it — the drawer answers
+            "what does it say", and this is half of "what does it cost". */}
+        <span className="mono" style={s.tokens}>
+          {t("preview.tokens", { count: estimateTokens(skill.body).toLocaleString("en-US") })}
+        </span>
       </div>
 
       {needsVetting(skill) && <div style={s.vetting}>{t("preview.vettingNotice")}</div>}

@@ -19,10 +19,3 @@ export const TABS: readonly SkillEditorTab[] = [
 ];
 
 export const VALID_TABS = TABS.map((t) => t.key);
-
-/** Rough token estimate for the editor header — chars/4, the same heuristic the
- *  server's tokenizer falls back to. The authoritative per-skill count comes
- *  from the run trace, which counts the rendered block with a real encoder. */
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
