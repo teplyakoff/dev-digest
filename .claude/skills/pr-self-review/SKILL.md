@@ -139,6 +139,14 @@ dependency. The bypass is a `PSR_SKIP=1` prefix in the command itself — an
 environment variable set on the command line never reaches the hook, which runs
 as its own process beforehand.
 
+**One command cannot both refresh the verdict and push.** The hook is evaluated
+before any of the payload runs, so it reads the verdict as it was *before* the
+`verdict.sh write` sitting earlier in the same line — a compound command that
+unblocks itself is blocked by construction, every time. Write the verdict in one
+call, push in the next. This bites hardest right after a commit: committing
+changes HEAD, HEAD is part of the fingerprint, so a freshly committed tree
+always needs a new verdict before it can be pushed.
+
 Be honest about its reach: it gates **this machine**. A PR opened in the GitHub
 web UI never sees it. Real merge protection is a required status check plus a
 branch protection rule — this skill is the fast local half of that, not a

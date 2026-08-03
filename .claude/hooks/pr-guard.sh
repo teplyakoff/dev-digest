@@ -30,6 +30,13 @@
 # Parsing the JSON properly would need jq, and a guard with a dependency is a
 # guard that silently stops guarding. Over-blocking costs one PSR_SKIP=1;
 # under-blocking costs an unreviewed pull request.
+#
+# Also by construction: ONE COMMAND CANNOT BOTH REFRESH THE VERDICT AND PUSH.
+# This runs before any of the payload does, so it reads the verdict as it was
+# BEFORE a `verdict.sh write` sitting earlier in the same line — a compound
+# command that unblocks itself is blocked every time. Write the verdict in one
+# call, push in the next. It bites hardest right after a commit: HEAD is part of
+# the fingerprint, so a freshly committed tree always needs a new verdict.
 
 set -uo pipefail
 
