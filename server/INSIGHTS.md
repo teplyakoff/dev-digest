@@ -168,6 +168,15 @@ would be obvious to anyone reading the code, don't write it.
   that package. `scripts/dev.sh` installs it separately, with **npm**, for exactly
   this reason. (2026-07-27)
 
+- **`pnpm db:generate` rewrites `migrations/meta/_journal.json`** and adds a
+  `migrations/meta/NNNN_snapshot.json` beside it, so "already-applied files in
+  `src/db/migrations/` are do-not-touch" (`AGENTS.md`) holds for the `.sql`
+  files only. Any automated check that treats the whole folder as immutable
+  fires on every legitimate new migration instead: generating `0011` shows
+  `meta/_journal.json` as MODIFIED and `meta/0011_snapshot.json` as ADDED in the
+  same diff. Scope such a check to `*.sql`, and expect the snapshot to be large
+  (3 560 lines for `0011`) — it is generated, not worth reviewing. (2026-08-03)
+
 ## Recurring Errors & Fixes
 
 - `relation ... does not exist` on a fresh boot → migrations were never applied.

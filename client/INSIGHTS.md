@@ -61,6 +61,16 @@ _(no entries yet)_
   `strict-dep-builds` in `.npmrc`, and the `npm_config_*` env vars are all
   ignored in pnpm 11 — only `pnpm-workspace.yaml` is read. (2026-07-27)
 
+- **`rerender()` with the SAME element reference does nothing.** React bails out
+  before the component body runs, so a test that mutates a mocked hook's value
+  and re-renders observes no change — and the failure reads exactly like a
+  component bug. `RootErrorView.test.tsx` mocks `usePathname` off a `vi.hoisted`
+  ref; the "resets once the user navigates away" case set `pathname.current` and
+  called `view.rerender(ui)` with the element it had already rendered, and failed
+  with `expected "spy" to be called once, but got 0 times`. Half an hour went
+  into the component before the test was suspected. Build the element in a
+  function and pass a fresh one each time: `view.rerender(ui())`. (2026-08-03)
+
 ## Codebase Patterns
 
 - The Zod contracts under `src/vendor/shared/**` are **hand-copied from
