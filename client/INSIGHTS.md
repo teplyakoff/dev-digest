@@ -28,6 +28,30 @@ _(no entries yet)_
   inside a clickable row needs `stopPropagation` on its cell or hovering users
   navigate away when they click inside it (`PRRow.tsx`). (2026-07-31)
 
+- **Importing anything from `@devdigest/shared` for a VALUE (not a type) used to
+  break the build outright.** Every existing import was type-only —
+  `src/lib/types.ts` re-exports with `export type { … }`, which is erased at
+  build time — so webpack had never once resolved
+  `src/vendor/shared/index.ts`. The moment it had to, ~12 errors appeared at
+  once: `Module not found: Can't resolve './contracts/findings.js'`, one per
+  `export *` line. Cause: the vendored files are copied verbatim from the
+  server's ESM-with-extensions source, so they import `./contracts/findings.js`
+  while the file on disk is `.ts`. `tsc` (moduleResolution `Bundler`) and Vitest
+  both resolve that; webpack does not, by default. **So type-check and `pnpm
+  test` stay green while `pnpm build` fails** — always run `pnpm build` after
+  touching an import from that path. Fixed by `config.resolve.extensionAlias` in
+  `next.config.mjs`; do not remove it. (2026-08-03)
+
+- **Importing one Zod schema from `@devdigest/shared` costs ~15 kB First Load JS
+  on EVERY route.** Measured: `/repos/[repoId]/pulls` went 200 → 217 kB. The
+  barrel is `export *` over every contract, so one schema drags all of them plus
+  `zod` — which nothing else in this package bundles — into the shared chunk.
+  Importing the contract module directly
+  (`@devdigest/shared/contracts/platform`) recovered only 2 kB, because the bulk
+  is `zod` itself. Budget for that before adding runtime validation; a dev-only
+  check is not worth it (see the note on `validateInDev` in `src/lib/api.ts`).
+  (2026-08-03)
+
 - On **pnpm 11**, every `pnpm <script>` in this package fails before running
   anything, with `ERR_PNPM_IGNORED_BUILDS`. pnpm 11 flipped `strictDepBuilds` to
   true, so the automatic pre-run dependency check refuses to pass while any
@@ -93,6 +117,21 @@ _(no entries yet)_
 
 ## Tool & Library Notes
 
+- **`next build` runs ESLint through its own runner, which does NOT read
+  `eslint-suppressions.json`.** So the moment an `eslint.config.mjs` exists here,
+  every build fails on the pre-existing inline-style and barrel violations that
+  the lint lane deliberately accepts. Fix already applied:
+  `eslint: { ignoreDuringBuilds: true }` in `next.config.mjs`. Linting lives in
+  `pnpm lint` and the `lint` CI workflow — do not turn it back on in the build
+  unless the suppressions are gone. (2026-08-03)
+
+- **The lint baseline is a ceiling, not a quota.** `eslint-suppressions.json`
+  records 148 pre-existing violations (inline `style={{}}`, barrel `index.ts`).
+  ESLint's default is to FAIL when a suppressed violation no longer occurs, which
+  would break the build every time someone improves something — so `pnpm lint`
+  passes `--pass-on-unpruned-suppressions`. Lower the counts deliberately with
+  `pnpm lint:baseline`, never to make a build pass. (2026-08-03)
+
 - `_assets/DevDigest Design (standalone).html` is a **self-unpacking bundle, not
   markup** — grepping it for `cost`, `token` or any class name finds nothing. The
   React sources are gzip+base64 inside `<script type="__bundler/manifest">` on
@@ -119,6 +158,18 @@ _(no entries yet)_
   trace drawer (COST stat tile). Format rule that matters: a typical OpenRouter
   run costs ~$0.0016, so the formatter drops to four decimals below a cent —
   `toFixed(2)` would have rendered every real run as "$0.00".
+
+- **2026-08-03** — Architecture pass driven by the `frontend-architecture` and
+  `react-best-practices` skills. Added `eslint.config.mjs` (data-hook ownership,
+  env boundary, no new barrels, no new inline styles) with the 148 pre-existing
+  violations baselined into `eslint-suppressions.json`. Added the app's first
+  React error boundary — `src/app/error.tsx` → `_components/RootErrorView/` —
+  which `nextjs.md` §8 had flagged as a real gap rather than a deliberate
+  absence. Thinned two drifted pages to a single import each (root 49→8,
+  PR detail 185→9) into `HomeRedirectView` / `PrDetailView`. Query keys are now
+  module-private in `lib/hooks/reviews.ts` behind `useInvalidatePrRuns`. The
+  unplanned discovery was the webpack `.js`→`.ts` resolution trap above, found
+  only because `pnpm build` was run — `typecheck` and `test` never see it.
 
 - **2026-07-31** — L01 rework: severity counters. `SeverityCounters` +
   `FindingsPopover` in `src/components/severity-counters/`, on the PR list
