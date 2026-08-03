@@ -208,8 +208,14 @@ export class ReviewRunExecutor {
       // L02 — the agent's knowledge layer. Two filters, meaning different
       // things: `agent_skills` decides whether this skill is attached to THIS
       // agent (and in what order), `skills.enabled` is the workspace-wide master
-      // switch. A disabled skill loads for nobody, which is what makes "disabled
-      // → absent from the log and the trace" one observable fact.
+      // switch. A disabled skill loads for nobody.
+      //
+      // This used to read "disabled → absent from the log AND the trace". Half of
+      // that is reversed: it is still absent from the trace and the prompt, but
+      // the LOG now says so out loud, because a silent log is what makes "why is
+      // my skill not in the prompt?" unanswerable from the place people look.
+      // Absent-from-the-trace is a contract (the UI hides the row); silence in
+      // the log was never a feature.
       const { skills, traceSkills } = await this.resolveSkills(agent.id, runLog);
 
       // T1.3 — callers-in-prompt. Best-effort: when repo-intel is off the facade
@@ -435,8 +441,22 @@ export class ReviewRunExecutor {
     runLog: RunLogger,
   ): Promise<{ skills: string[]; traceSkills: TraceSkill[] }> {
     const links = await this.agents.linkedSkills(agentId);
+    // No links at all — the agent was never given a knowledge layer, so there is
+    // nothing to report. Silence is the correct log here, and the ONLY case
+    // where it is.
+    if (links.length === 0) return { skills: [], traceSkills: [] };
+
     const active = links.filter((l) => l.skill.enabled);
-    if (active.length === 0) return { skills: [], traceSkills: [] };
+    const skipped = links.length - active.length;
+
+    // Every linked skill is switched off at the workspace level. This is exactly
+    // the state that prompts "why is my skill not in the prompt?", so the run log
+    // has to answer it — returning early without a line left the question
+    // unanswerable from the one place a person looks for the answer.
+    if (active.length === 0) {
+      runLog.info(`Loaded 0 skill(s) — ${skipped} linked but disabled`);
+      return { skills: [], traceSkills: [] };
+    }
 
     const skills: string[] = [];
     const traceSkills: TraceSkill[] = [];
@@ -451,7 +471,6 @@ export class ReviewRunExecutor {
     }
 
     const total = traceSkills.reduce((n, s) => n + s.tokens, 0);
-    const skipped = links.length - active.length;
     runLog.info(
       `Loaded ${active.length} skill(s) (${total.toLocaleString('en-US')} tokens)` +
         (skipped > 0 ? ` — ${skipped} linked but disabled` : ''),

@@ -260,7 +260,7 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     await app.close();
   });
 
-  it('an enabled linked skill reaches the prompt, the trace and the log — a disabled one reaches none of them', async () => {
+  it('an enabled linked skill reaches the prompt, the trace and the log — a disabled one reaches only the log, to say it was skipped', async () => {
     // The L02 exit checklist, as one assertion pair. Everything else about the
     // run is held constant: same agent, same fixture, same diff — only the
     // skill's `enabled` flag moves.
@@ -339,7 +339,15 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     // Omitted, not an empty array — absent means "nothing loaded", and the UI
     // hides the row rather than rendering an empty one.
     expect(off.config.skills ?? null).toBeNull();
-    expect(off.log.some((l: { msg: string }) => l.msg.includes('Loaded'))).toBe(false);
+    // The LOG is the exception, and this assertion is the reverse of what it
+    // used to be. The prompt and the trace stay silent, but a run whose only
+    // linked skill is switched off has to say so — that is the one place someone
+    // debugging "why is my skill not in the prompt?" will look.
+    expect(
+      off.log.some((l: { msg: string }) => /Loaded 0 skill\(s\) — 1 linked but disabled/.test(l.msg)),
+    ).toBe(true);
+    // Still no "loaded N tokens" claim, because nothing was loaded.
+    expect(off.log.some((l: { msg: string }) => /tokens\)/.test(l.msg))).toBe(false);
 
     await app.close();
   });

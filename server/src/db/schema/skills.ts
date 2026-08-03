@@ -32,8 +32,11 @@ export const skills = pgTable(
     }).notNull(),
     body: text('body').notNull(),
     // The master switch. A disabled skill loads for NO agent, which is what
-    // makes "disabled → absent from the run log and the trace" one observable
-    // fact instead of a per-agent audit.
+    // makes "disabled → absent from the prompt and the trace" one observable
+    // fact instead of a per-agent audit. The run LOG is deliberately the
+    // exception: it says the skill was linked and skipped, because a silent log
+    // is where "why is my skill not in the prompt?" goes unanswered
+    // (`run-executor.ts` → `resolveSkills`).
     enabled: boolean('enabled').notNull().default(true),
     version: integer('version').notNull().default(1),
     evidenceFiles: jsonb('evidence_files').$type<string[]>(),

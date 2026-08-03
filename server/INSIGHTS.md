@@ -115,6 +115,19 @@ would be obvious to anyone reading the code, don't write it.
   When you reverse a documented "we deliberately don't do X", grep for the
   comment that documents it. (2026-07-31)
 
+- **Extends the 2026-07-31 "reverse it in two places" entry: the third place is a
+  TEST, and it is the one that fights back.** Reversing "a disabled skill is
+  absent from the log and the trace" meant editing four things, not two — the
+  code, the comment above the call site, `docs/plans/L02-skills.md`'s exit
+  checklist, and `reviews.it.test.ts`, which pinned the old behaviour as
+  `expect(off.log.some(l => l.msg.includes('Loaded'))).toBe(false)`. A green
+  suite after a reversal means you have not found the assertion yet. Before
+  reversing a documented negative decision, grep the tests for the behaviour you
+  are about to add, not just the comments describing what you are removing — and
+  keep the halves apart in the new wording, because only the log changed here
+  while the trace contract (`config.skills` omitted, never `[]`) deliberately did
+  not. (2026-08-03)
+
 - **Nothing in `server/src` opens a database transaction, and there is no `DbTx`
   type.** `grep -rn "\.transaction("` over `server/src` returns zero hits, and
   `db/client.ts` exports only `Db`, `DbHandle` and `createDb`. Every write today

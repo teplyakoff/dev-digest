@@ -192,7 +192,11 @@ than assuming a hang.
 - [ ] A skill can be created and edited in the UI.
 - [ ] Both new agents have skills linked.
 - [ ] An enabled skill appears in the run log and the trace as its own block; a
-      disabled one appears in neither.
+      disabled one appears in the trace not at all, and in the log only as the
+      line saying it was linked but skipped. (Amended 2026-08-03: this read "in
+      neither". A silent log made "why is my skill not in the prompt?"
+      unanswerable from the one place a person looks for the answer — absent
+      from the *trace* is the contract, silence in the log never was.)
 - [ ] Import went through the preview, and nothing executable was run — the
       ignored-entries list in the preview is the proof.
 - [ ] The control experiment reproduces on both agents.
