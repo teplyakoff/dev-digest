@@ -80,7 +80,7 @@ export interface ActiveRun {
 
 /** In-flight runs for a PR, from the server (agent_runs where status='running').
    Survives reloads/devices; polls while anything is running so it self-clears. */
-export function usePrActiveRuns(prId: string | null | undefined) {
+export function usePrActiveRuns(prId: PrId) {
   return useQuery({
     queryKey: keys.activeRuns(prId),
     queryFn: () => api.get<ActiveRun[]>(`/pulls/${prId}/runs/active`),
@@ -92,7 +92,7 @@ export function usePrActiveRuns(prId: string | null | undefined) {
 // ---- Full run history for a PR (every agent_runs row, any status) ----
 /** All runs for a PR — done, failed (with error), cancelled, running. Survives
    reload (DB-backed). Polls while anything is running so it self-updates. */
-export function usePrRuns(prId: string | null | undefined) {
+export function usePrRuns(prId: PrId) {
   return useQuery({
     queryKey: keys.runs(prId),
     queryFn: () => api.get<RunSummary[]>(`/pulls/${prId}/runs`),
@@ -103,7 +103,7 @@ export function usePrRuns(prId: string | null | undefined) {
 }
 
 // ---- Persisted reviews + findings for a PR ----
-export function usePrReviews(prId: string | null | undefined) {
+export function usePrReviews(prId: PrId) {
   return useQuery({
     queryKey: keys.reviews(prId),
     queryFn: () => api.get<ReviewRecord[]>(`/pulls/${prId}/reviews`),
@@ -112,7 +112,7 @@ export function usePrReviews(prId: string | null | undefined) {
 }
 
 /** Delete one run from the PR's run history (+ its trace). */
-export function useDeleteRun(prId: string | null | undefined) {
+export function useDeleteRun(prId: PrId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (runId: string) => api.del<{ ok: boolean }>(`/runs/${runId}`),
@@ -133,7 +133,7 @@ export function useCancelRun() {
 }
 
 /** Delete a whole review run (one agent's pass) + its findings. */
-export function useDeleteReview(prId: string | null | undefined) {
+export function useDeleteReview(prId: PrId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (reviewId: string) => api.del<{ ok: boolean }>(`/reviews/${reviewId}`),
@@ -143,7 +143,7 @@ export function useDeleteReview(prId: string | null | undefined) {
 
 // ---- Inline review comments on the "Files changed" tab (proxied to GitHub) --
 /** Existing GitHub PR review comments, fetched live. */
-export function usePrComments(prId: string | null | undefined) {
+export function usePrComments(prId: PrId) {
   return useQuery({
     queryKey: keys.comments(prId),
     queryFn: () => api.get<PrReviewComment[]>(`/pulls/${prId}/comments`),
@@ -160,7 +160,7 @@ export interface CreateCommentInput {
 }
 
 /** Post one inline comment (or reply) to GitHub; refreshes the thread list. */
-export function useCreatePrComment(prId: string | null | undefined) {
+export function useCreatePrComment(prId: PrId) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateCommentInput) =>
