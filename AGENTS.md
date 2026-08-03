@@ -77,3 +77,7 @@ relevant to the task, and treat them as high-confidence guidance unless told
 otherwise. At the end of the session run `/engineering-insights` to append what
 you learned to that same file — add entries, never overwrite existing ones.
 Do not skip this step.
+
+Before the work becomes a pull request run `/pr-self-review`. It gates
+`gh pr create` and `git push` on the result, so a blocked verdict is not a
+suggestion — see `.claude/skills/pr-self-review/SKILL.md`.
