@@ -19,6 +19,15 @@ would be obvious to anyone reading the code, don't write it.
   r.url().includes("/review") && r.request().method() === "POST")` so a stale run
   from a previous attempt is never mistaken for this one. (2026-07-28)
 
+- A recorder that **writes** must delete what it will create at the START, not
+  clean up at the end. `record-skills.ts` authors `migration-safety` and imports
+  `error-handling-guard`; `skills` has a unique `(workspace_id, name)` index, so
+  the second run 409s on create unless those names are deleted first.
+  End-of-run cleanup does not survive a crash — one failed take then poisons
+  every later one. What *does* belong in `finally` is restoring state the
+  recorder only borrowed: the agent's ordered `skill_ids`, snapshotted before
+  the first scene. (2026-08-03)
+
 ## What Doesn't Work
 
 - Recording against a **seeded** PR produces a meaningless video: seeded file
@@ -78,6 +87,25 @@ would be obvious to anyone reading the code, don't write it.
   change wipes them**. Every step calls `caption()` again rather than assuming
   the banner survived the last navigation. (2026-07-28)
 
+- **`record:skills` is free because it reuses a run someone already paid for.**
+  Every scene except the trace runs against data the recorder creates through the
+  API, but `trace.config.skills` is only ever written by a real review. Rather
+  than triggering one, `findRunWithSkills()` walks `/repos` →
+  `/pulls/:id/runs` → `/runs/:id/trace` for the first non-empty `config.skills`,
+  and exits non-zero when there is none instead of filming an empty drawer.
+  Consequence: after a fresh `pnpm db:seed` the skills recording is incomplete
+  until someone links a skill to an agent and runs `npm run record` once.
+  (2026-08-03)
+
+- A demo recorder is not a test, but it **may assert the one claim its footage
+  exists to make**. `record-skills.ts` reads the import modal's text and throws
+  unless every non-body entry of the fixture archive (`run.sh`, `package.json`,
+  `scripts/install.js`, `README.md`) is named as ignored. Filming is not
+  verifying: a regression that dropped an entry would still have produced a
+  plausible-looking video, and that list *is* the product claim. Keep it narrow —
+  one load-bearing invariant per recorder, not a test suite smuggled in here.
+  (2026-08-03)
+
 ## Tool & Library Notes
 
 - `npm run setup` (`playwright install chromium`) fetches ~95 MB into
@@ -129,6 +157,15 @@ would be obvious to anyone reading the code, don't write it.
   `-crf 28 -preset slow` produced 1.4 MB against 2.7 MB for a VP8 re-encode, and
   took 2.6 s against 77 s. (2026-07-28)
 
+- `locator.setInputFiles()` accepts an **in-memory file** —
+  `{ name, mimeType, buffer }` — so a fixture upload needs neither a file on disk
+  nor a binary committed to git. `lib/zip.ts` builds the skills import archive
+  with `deflateRawSync` at record time and hands the Buffer straight to the
+  `input[type=file]`. That matters beyond convenience in this scene: its whole
+  point is that a reader can compare the archive's real entries against the
+  "ignored" list the preview renders, which an opaque committed `.zip` would
+  defeat. (2026-08-03)
+
 ## Recurring Errors & Fixes
 
 _(no entries yet)_
@@ -150,6 +187,16 @@ _(no entries yet)_
   video shows the feature working, not just existing. Three stills the recorder
   cannot frame (banner+chips, drawer findings, drawer log) were reshot with a
   one-off Playwright script at the same 1280×720@2x settings.
+
+- **2026-08-03** — Added `record-skills.ts`, a second recorder covering the L02
+  Skills feature in 16 captioned scenes: the `/skills` grid and preview drawer,
+  authoring and versioning, the import preview's ignored-entries list, the agent
+  Skills tab, and the run trace's skills block. It calls no model, so unlike
+  `record` it costs nothing. Curated stills and the mp4 promoted to
+  `docs/results/l02/`. The trace scenes reused the only existing run that had
+  loaded a skill — API Contract Reviewer on `dev-digest#2`, `api-contract-guard
+  v1`, 308 tokens — because nothing in this package can produce one; the L02
+  control experiment still has no recorded evidence.
 
 ## Open Questions
 
