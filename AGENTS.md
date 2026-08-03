@@ -57,7 +57,13 @@ vendored into `client/src/vendor/shared`.
 
 ## Do not touch
 
-- `*/src/vendor/**` — vendored copies. Edit the source, then re-vendor.
+- `client/src/vendor/shared/**` — a GENERATED copy. Edit
+  `server/src/vendor/shared` (the source), run `./scripts/vendor-shared.sh`,
+  commit both. Enforced by `--check` in the `lint` workflow.
+- `client/src/vendor/ui/**` — vendored primitives with **no in-repo source and
+  no re-vendor script**, so "edit the source" has nowhere to point. Treat as
+  frozen; if a change is unavoidable (the nav registry is the known case), keep
+  it minimal and pin it with a test in app code.
 - Already-applied `server/src/db/migrations/*.sql` — add a new migration instead.
 - `docker compose down -v` — deletes the `devdigest_pgdata` volume, and every
   imported repo and review with it.

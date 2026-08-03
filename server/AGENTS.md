@@ -49,9 +49,30 @@ do not restate them here.
 
 ## Do not touch
 
-- `src/vendor/shared/**` — vendored contracts.
 - Already-applied files in `src/db/migrations/` — generate a new one with
   `pnpm db:generate`.
+
+## `src/vendor/shared/**` — this IS the source, edit it here
+
+The contracts live in two places and **this is the one you change**;
+`client/src/vendor/shared` is a generated copy. The flow is three steps, and all
+three are required:
+
+```bash
+# 1. edit server/src/vendor/shared/contracts/*.ts
+./scripts/vendor-shared.sh   # 2. regenerate the client copy
+# 3. commit BOTH copies in the same change
+```
+
+Editing the client copy instead loses the edit the next time the script runs.
+Editing only the server copy leaves the client type-checking against a stale
+shape — it compiles, and the field reads `undefined` at runtime with nothing
+logged. Both failure modes are caught: `./scripts/vendor-shared.sh --check`
+runs in the `lint` workflow and in the `vendor-sync` pre-PR gate, which fails
+on drift and names which copy moved.
+
+This section used to read "`src/vendor/shared/**` — vendored contracts" under
+_Do not touch_, which contradicted the script and the gate it is checked by.
 
 ## Read when
 

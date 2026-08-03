@@ -34,7 +34,12 @@ here.
 
 ## Do not touch
 
-- `src/vendor/**` — vendored. Edit the source, then re-vendor.
+- `src/vendor/shared/**` — a GENERATED copy. Edit `server/src/vendor/shared`,
+  run `./scripts/vendor-shared.sh`, commit both; an edit here is lost on the
+  next run.
+- `src/vendor/ui/**` — frozen: no in-repo source and no re-vendor script, so
+  there is nothing to "edit instead". The nav registry (`nav.ts`) is the one
+  known exception, pinned by `src/components/app-shell/nav-registry.test.ts`.
 
 ## Read when
 
