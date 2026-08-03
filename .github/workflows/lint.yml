@@ -1,0 +1,118 @@
+# Architecture lint — the enforcement lane for the two placement skills.
+#
+# `.claude/skills/onion-architecture` (§Enforcement) used to say outright: "There
+# is none, by choice." That is what let the known-violations table in its §15 grow
+# — every entry there is a rule everyone agreed on and nothing checked. Same story
+# on the client: `frontend-architecture` §11 asks for `import/no-restricted-paths`
+# zones and there were none.
+#
+# So the rules these configs encode are NOT new policy. They are the policy the
+# repo already documented, finally wired to a red X:
+#   server/eslint.config.js         ring boundaries, transport/SQL split, env reads
+#   client/eslint.config.mjs        data-hook ownership, env boundary, no new barrels
+#   reviewer-core/eslint.config.js  ring-0 purity (the engine's whole contract)
+#
+# Pre-existing violations of the two retroactive client rules (inline style
+# objects, barrel files) live in client/eslint-suppressions.json. ESLint fails if
+# that count grows and ignores it while it holds — so old code is not a blocker
+# and new code cannot join it. Lower the counts with `pnpm lint:baseline` as part
+# of a deliberate migration, never as a way to make a build pass.
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The vendored Zod contracts exist twice (server = source, client = copy) with
+  # no build step joining them. Drift fails SILENTLY — the client type-checks
+  # against its own stale copy and reads `undefined` at runtime — which is why
+  # both INSIGHTS.md files carry an entry about it. When this job was added the
+  # copies had already drifted on five files, including a `Provider` enum missing
+  # the very provider the seeded default agent runs on.
+  #
+  # No install, no build: just a recursive diff. Seconds, and it can only pass
+  # when the two are byte-identical.
+  vendored-contracts:
+    name: vendored contracts in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/vendor-shared.sh --check
+
+  server:
+    name: server (onion rings)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      # Lint resolves imports only as strings, so reviewer-core's node_modules is
+      # not needed here — unlike typecheck, which follows the path alias into its
+      # raw source. Left un-installed on purpose to keep this lane fast.
+      - run: pnpm lint
+
+  client:
+    name: client (frontend architecture)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+  reviewer-core:
+    name: reviewer-core (ring-0 purity)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: reviewer-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: reviewer-core/package-lock.json
+
+      # npm, not pnpm — this package is npm-managed (see reviewer-core.yml).
+      - run: npm ci
+
+      - run: npm run lint
