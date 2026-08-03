@@ -251,7 +251,7 @@ export class PullsService {
     const prIds = rows.map((r) => r.id);
 
     const [reviewRows, runRows] = await Promise.all([
-      this.repo.reviewsForPulls(prIds),
+      this.repo.reviewsForPulls(workspaceId, prIds),
       this.repo.completedRunCosts(workspaceId, prIds),
     ]);
 

@@ -192,13 +192,26 @@ export class PullsRepository {
   // them separate lets each be indexed for its own predicate. Rows come back
   // newest-first so the caller takes the first per PR (see helpers.ts).
 
-  /** Every 'review'-kind review for these PRs, newest first. */
-  async reviewsForPulls(prIds: string[]): Promise<LatestReviewRow[]> {
+  /**
+   * Every 'review'-kind review for these PRs, newest first.
+   *
+   * Takes the tenant key rather than trusting the ids to carry it. They do
+   * today — the caller derived them from a workspace-scoped repo — but §8 makes
+   * that a parameter on purpose: the next caller with a wider id list would
+   * otherwise read across workspaces and nothing here would notice.
+   */
+  async reviewsForPulls(workspaceId: string, prIds: string[]): Promise<LatestReviewRow[]> {
     if (prIds.length === 0) return [];
     return this.db
       .select({ id: t.reviews.id, prId: t.reviews.prId, score: t.reviews.score })
       .from(t.reviews)
-      .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
+      .where(
+        and(
+          eq(t.reviews.workspaceId, workspaceId),
+          inArray(t.reviews.prId, prIds),
+          eq(t.reviews.kind, 'review'),
+        ),
+      )
       .orderBy(desc(t.reviews.createdAt));
   }
 
@@ -225,7 +238,14 @@ export class PullsRepository {
       .orderBy(desc(t.agentRuns.ranAt));
   }
 
-  /** Slim findings for the list's severity counters and their hover popup. */
+  /**
+   * Slim findings for the list's severity counters and their hover popup.
+   *
+   * Scoped transitively, like `getRepoOfPull` above: `findings` carries no
+   * workspace column of its own, and these ids come straight out of
+   * `reviewsForPulls`, which is tenant-scoped. Pass ids from anywhere else and
+   * that guarantee is gone.
+   */
   async findingsForReviews(reviewIds: string[]): Promise<ListFindingRow[]> {
     if (reviewIds.length === 0) return [];
     return this.db
