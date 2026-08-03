@@ -1,6 +1,6 @@
 ---
 name: pr-self-review
-description: "Reviews every local change before a pull request is opened, and gates the merge on the result. Use before `gh pr create`, before pushing a branch for review, when the user says the work is done / ready for review / ready to merge, or on demand via /pr-self-review. Runs the deterministic CI gates first, then routes the diff to this repo's own skills — frontend skills on client files, onion-architecture on server and engine files, security on what the diff actually touches — and returns one verdict: CLEAN, PASS_WITH_NOTES, BLOCKED or INCONCLUSIVE. Trigger terms: self review, pre-PR check, before opening a PR, ready to merge, merge gate, pr-self-review, review my changes."
+description: "ON DEMAND ONLY — run this when the user invokes /pr-self-review, and at no other time. Do NOT trigger it automatically from `git push`, from `gh pr create`, or from the user saying the work is done / ready for review / ready to merge. Decides whether the current change set may become a pull request: runs the deterministic CI gates first, then routes the diff to this repo's own skills — frontend skills on client files, onion-architecture on server and engine files, security on what the diff actually touches — and returns one verdict: CLEAN, PASS_WITH_NOTES, BLOCKED or INCONCLUSIVE. Nothing is lost by not auto-running: `.claude/hooks/pr-guard.sh` reads the stored verdict independently of this description, so a push or a PR command stays blocked until a verdict exists and passes."
 ---
 
 # pr-self-review
