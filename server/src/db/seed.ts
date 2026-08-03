@@ -7,6 +7,7 @@ import {
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { DEFAULT_WORKSPACE_NAME, SYSTEM_USER_EMAIL } from './constants.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -25,8 +26,10 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
  * …) once their features are built — they start empty here.
  */
 
-export const DEFAULT_WORKSPACE_NAME = 'default';
-export const SYSTEM_USER_EMAIL = 'you@local';
+// Declared in db/constants.ts — a module that imports nothing — so the auth
+// adapter can resolve the same workspace/user without importing this script.
+// Re-exported so existing `from './seed.js'` call sites keep working.
+export { DEFAULT_WORKSPACE_NAME, SYSTEM_USER_EMAIL };
 
 export async function seed(db: Db): Promise<{ workspaceId: string; userId: string }> {
   // ---- workspace + user (no-auth defaults) ----

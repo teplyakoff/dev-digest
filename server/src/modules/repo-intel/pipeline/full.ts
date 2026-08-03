@@ -19,6 +19,13 @@
  * block is skipped when the soft budget trips, leaving status 'partial'.
  */
 import { createHash } from 'node:crypto';
+// KNOWN DEBT. Ring-2 code should reach the filesystem through a port
+// (onion §3, §7), and it does not: the repo-intel indexer reads cloned files
+// directly. Extracting a `SourceReader` port is a real piece of work — one
+// interface, one adapter, one test double, one container key — and doing it
+// half-way is worse than not starting, so it is deliberately NOT bundled into
+// this change. Payoff when it happens: repo-intel tests stop needing a clone.
+// eslint-disable-next-line no-restricted-imports
 import { readFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';

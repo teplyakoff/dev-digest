@@ -9,11 +9,8 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { walkClone } from '../src/modules/repo-intel/pipeline/walk.js';
-import {
-  EXCLUDED_DIRS,
-  MAX_FILE_SIZE,
-  MAX_INDEXED_FILES,
-} from '../src/modules/repo-intel/constants.js';
+import { MAX_FILE_SIZE, MAX_INDEXED_FILES } from '../src/modules/repo-intel/constants.js';
+import { EXCLUDED_DIRS } from '../src/platform/source-scope.js';
 
 async function writeFileAt(root: string, rel: string, contents: string): Promise<void> {
   const full = join(root, rel);

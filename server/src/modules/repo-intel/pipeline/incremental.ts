@@ -14,6 +14,13 @@
  * invalidated and re-rendered. Option B: rank = PageRank, hotness=0.
  */
 import { createHash } from 'node:crypto';
+// KNOWN DEBT. Ring-2 code should reach the filesystem through a port
+// (onion §3, §7), and it does not: the repo-intel indexer reads cloned files
+// directly. Extracting a `SourceReader` port is a real piece of work — one
+// interface, one adapter, one test double, one container key — and doing it
+// half-way is worse than not starting, so it is deliberately NOT bundled into
+// this change. Payoff when it happens: repo-intel tests stop needing a clone.
+// eslint-disable-next-line no-restricted-imports
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import type { RepoRef } from '@devdigest/shared';
@@ -25,8 +32,8 @@ import {
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
   INDEXER_VERSION,
   MAX_PARSE_MS_PER_FILE,
-  SUPPORTED_EXT,
 } from '../constants.js';
+import { SUPPORTED_EXT } from '../../../platform/source-scope.js';
 import type {
   IndexerEdgeRow,
   IndexerFileFactsRow,

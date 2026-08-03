@@ -20,15 +20,20 @@
  * Pure-ish: takes a root path + does fs ops; returns plain data so the caller
  * (full.ts / incremental.ts) can decide what to do with it.
  */
+// KNOWN DEBT. Ring-2 code should reach the filesystem through a port
+// (onion §3, §7), and it does not: the repo-intel indexer reads cloned files
+// directly. Extracting a `SourceReader` port is a real piece of work — one
+// interface, one adapter, one test double, one container key — and doing it
+// half-way is worse than not starting, so it is deliberately NOT bundled into
+// this change. Payoff when it happens: repo-intel tests stop needing a clone.
+// eslint-disable-next-line no-restricted-imports
 import { readdir, stat } from 'node:fs/promises';
+// Same SourceReader debt as above.
+// eslint-disable-next-line no-restricted-imports
 import type { Dirent } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
-import {
-  EXCLUDED_DIRS,
-  MAX_FILE_SIZE,
-  MAX_INDEXED_FILES,
-  SUPPORTED_EXT,
-} from '../constants.js';
+import { MAX_FILE_SIZE, MAX_INDEXED_FILES } from '../constants.js';
+import { EXCLUDED_DIRS, SUPPORTED_EXT } from '../../../platform/source-scope.js';
 
 const EXCLUDED_SET: ReadonlySet<string> = new Set(EXCLUDED_DIRS);
 const SUPPORTED_SET: ReadonlySet<string> = new Set(SUPPORTED_EXT);
