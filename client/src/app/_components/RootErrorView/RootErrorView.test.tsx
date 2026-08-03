@@ -22,12 +22,18 @@ vi.mock("@/components/app-shell", () => ({
 }));
 
 function renderView(reset = vi.fn(), error = new Error("Cannot read properties of undefined")) {
-  render(
+  // A FRESH element each time, deliberately: re-rendering the same element
+  // reference lets React bail out before the component body runs, and the
+  // navigation the test is trying to simulate never happens.
+  const ui = () => (
     <NextIntlClientProvider locale="en" messages={{ common }}>
       <RootErrorView error={error} reset={reset} />
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
-  return reset;
+  const view = render(ui());
+  // `usePathname` reads the hoisted ref above, so mutating it and re-rendering
+  // is exactly what a navigation looks like to this component.
+  return { reset, rerender: () => view.rerender(ui()) };
 }
 
 describe("RootErrorView", () => {
@@ -45,13 +51,23 @@ describe("RootErrorView", () => {
   });
 
   it("retry calls reset, so the user can re-attempt without a full reload", () => {
-    const reset = renderView();
+    const { reset } = renderView();
     fireEvent.click(screen.getByRole("button", { name: /retry/i }));
     expect(reset).toHaveBeenCalledOnce();
   });
 
   it("does not reset while the route is unchanged", () => {
-    const reset = renderView();
+    const { reset } = renderView();
     expect(reset).not.toHaveBeenCalled();
+  });
+
+  // The branch this covers is the reason the component holds a ref at all:
+  // without it React keeps the fallback mounted after a navigation, and every
+  // route the user tries next looks broken too.
+  it("resets once the user navigates away, so the fallback does not stick", () => {
+    const { reset, rerender } = renderView();
+    pathname.current = "/agents";
+    rerender();
+    expect(reset).toHaveBeenCalledOnce();
   });
 });
