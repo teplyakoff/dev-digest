@@ -3,18 +3,20 @@
     "crumbLab": "Skills Lab",
     "crumbSkills": "Skills",
     "heading": "Skills",
+    "subtitle": "Reusable review rules. One skill, many agents — each one costs tokens on every run that loads it.",
     "addSkill": "Add Skill",
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
+      "fromScratch": "Create from scratch",
       "fromFile": "Import from file",
       "fromUrl": "Import from URL",
       "community": "Search community skills…"
     },
     "empty": {
       "title": "No skills yet",
-      "body": "Import a skill from a file, a URL, or the community catalog.",
-      "cta": "Import from file"
+      "body": "A skill is a markdown rule your agents share — your team's standards, written once. Create one, or import a file.",
+      "cta": "Create your first skill"
     },
     "selectPrompt": {
       "title": "Select a skill",
@@ -24,56 +26,108 @@
   "detail": {
     "crumbSkill": "Skill",
     "back": "← All skills",
+    "listTitle": "Skills",
     "loadError": "Could not load this skill.",
+    "loadErrorTitle": "Couldn’t load this skill",
     "notFound": {
       "title": "Skill not found",
       "body": "It may have been deleted."
+    },
+    "tabs": {
+      "config": "Config",
+      "preview": "Preview",
+      "versions": "Versions"
     }
   },
-  "drawer": {
-    "title": "Add a skill",
-    "subtitle": "Import from a file, a URL, or search vetted community skills",
-    "tabs": {
-      "file": "From file",
-      "url": "From URL",
-      "community": "Community"
-    },
-    "importFailed": "Import failed"
+  "create": {
+    "title": "Create skill",
+    "subtitle": "A skill is a markdown rule your agents share. The body is the only text sent to the model.",
+    "cancel": "Cancel",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "defaultBody": "# Rule\n\nDescribe what the reviewer should flag, and what it should not."
   },
-  "file": {
-    "nameLabel": "Skill name",
-    "nameHint": "Optional — derived from the first heading if blank.",
-    "namePlaceholder": "pr-quality-rubric",
+  "config": {
+    "title": "Configuration",
+    "enabled": "Enabled",
+    "enabledHint": "The master switch. A disabled skill loads for no agent.",
+    "name": "Name",
+    "nameHint": "Lowercase, hyphenated. This is the heading the model reads and the label in the run trace.",
+    "namePlaceholder": "test-quality-rubric",
+    "description": "Description",
+    "descriptionHint": "The skill's interface — write it as a directive. “Flag new branches that no test asserts on”, not “Rules for tests”.",
+    "descriptionPlaceholder": "Flag new branches that no test asserts on",
+    "type": "Type",
+    "body": "Skill body",
+    "bodyHint": "The only text sent to the model. Editing the body is the entire skill — everything else is metadata.",
+    "tokens": "{count} tokens",
+    "save": "Save skill",
+    "saving": "Saving…",
+    "saved": "Saved (v{version})",
+    "snapshotHint": "Saving a changed body snapshots it as v{version}.",
+    "danger": {
+      "title": "Delete skill",
+      "body": "Removes it from all agents. This can't be undone.",
+      "delete": "Delete",
+      "confirm": "Delete \"{name}\"? This can't be undone.",
+      "confirmUsed": "Delete \"{name}\"? It is loaded by {agents}. This can't be undone."
+    }
+  },
+  "preview": {
+    "title": "Preview",
+    "subtitle": "Rendered as the reviewing agent receives it.",
+    "untrustedBadge": "imported — not yet vetted",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "openEditor": "Open editor",
+    "vettingNotice": "This skill was imported. Its body is someone else's instructions, and enabling it puts them in your agents' prompts. Read it before you turn it on.",
     "bodyLabel": "Skill body (Markdown)",
-    "bodyHint": "Pasted content is wrapped as untrusted data — never executed as instructions.",
-    "bodyPlaceholder": "# Rule\nDescribe the rule…",
-    "importing": "Importing…",
-    "import": "Import skill",
-    "success": "Imported \"{name}\" (stored as untrusted data)."
+    "version": "v{version}"
   },
-  "url": {
-    "label": "Skill URL",
-    "hint": "Fetched server-side, stored as untrusted, and left disabled until vetted.",
-    "placeholder": "https://example.com/skills/security.md",
-    "fetching": "Fetching…",
-    "import": "Import from URL",
-    "success": "Imported \"{name}\". Disabled until you vet + enable it."
+  "versions": {
+    "title": "Version history",
+    "count": "{count} versions",
+    "subtitle": "Every body change snapshots the text, so a past eval run stays reproducible against exactly what it scored.",
+    "current": "Current",
+    "loadError": "Could not load version history."
   },
-  "community": {
-    "searchPlaceholder": "Search community skills (e.g. security)…",
-    "allLanguages": "All languages",
-    "loadError": "Could not load community skills",
-    "retry": "Retry",
-    "noMatch": {
-      "title": "No matching skills",
-      "body": "Try a different search term."
+  "import": {
+    "menuLabel": "Import from file",
+    "pick": "Choose a .md or .zip file",
+    "title": "Import skill",
+    "subtitle": "Nothing is saved until you confirm.",
+    "parsing": "Reading {filename}…",
+    "failed": "Import failed",
+    "origin": {
+      "title": "Where it came from",
+      "filename": "File",
+      "kind": "Kind",
+      "kindMarkdown": "Markdown",
+      "kindArchive": "Archive",
+      "bytes": "Size",
+      "entry": "Skill body taken from"
     },
-    "importing": "Importing…",
-    "import": "Import"
+    "ignored": {
+      "title": "Ignored — not read, not stored, not run",
+      "body": "The importer opens exactly one markdown file. Everything else in the archive is listed here and was never opened.",
+      "none": "Nothing else was in the upload.",
+      "frontmatterDropped": "Frontmatter keys dropped: {keys}"
+    },
+    "adopt": {
+      "title": "What you are about to adopt",
+      "body": "This text becomes instructions in your agents' prompts. Read it in full."
+    },
+    "savesDisabled": "Imported skills are saved disabled. Enable it once you have read it.",
+    "cancel": "Cancel",
+    "confirm": "Import skill",
+    "confirming": "Importing…",
+    "success": "Imported \"{name}\" — disabled until you enable it."
   },
   "listItem": {
     "needsVetting": "needs vetting",
-    "vettingTitle": "Untrusted source — vet before enabling",
+    "vettingTitle": "Imported and not yet enabled — read the body before you turn it on",
+    "usedBy": "{count, plural, one {# agent} other {# agents}}",
+    "version": "v{version}",
     "type": {
       "rubric": "rubric",
       "convention": "convention",
@@ -84,18 +138,8 @@
       "manual": "Manual",
       "extracted": "Extracted",
       "community": "Community",
-      "imported_url": "Imported"
+      "imported_url": "Imported",
+      "imported_file": "Imported"
     }
-  },
-  "preview": {
-    "untrustedBadge": "untrusted source",
-    "enabled": "Enabled",
-    "disabled": "Disabled",
-    "save": "Save",
-    "edit": "Edit",
-    "untrustedNotice": "This skill came from an untrusted source. Its body is stored as data (delimiter-wrapped) and must be vetted before it is enabled for an agent.",
-    "bodyLabel": "Skill body (Markdown)",
-    "bodyHint": "Saving a changed body creates a new immutable version.",
-    "version": "v{version}"
   }
 }

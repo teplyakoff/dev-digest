@@ -1,6 +1,6 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import type { Provider, Review, RunTrace, TraceSkill, UnifiedDiff } from '@devdigest/shared';
+import { reviewPullRequest, countBlockers, renderSkillBlock } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 // SANCTIONED — onion §15 names this file in its exemptions list: it imports
 // db/schema in TYPE POSITION ONLY, to describe a repo row it passes straight
@@ -205,6 +205,13 @@ export class ReviewRunExecutor {
       const repoIntelOn = agent.repoIntel !== false;
       if (!repoIntelOn) runLog.info('Repo intel disabled for this agent — skipping context enrichment');
 
+      // L02 — the agent's knowledge layer. Two filters, meaning different
+      // things: `agent_skills` decides whether this skill is attached to THIS
+      // agent (and in what order), `skills.enabled` is the workspace-wide master
+      // switch. A disabled skill loads for nobody, which is what makes "disabled
+      // → absent from the log and the trace" one observable fact.
+      const { skills, traceSkills } = await this.resolveSkills(agent.id, runLog);
+
       // T1.3 — callers-in-prompt. Best-effort: when repo-intel is off the facade
       // returns []; we omit the section and behavior is identical to the
       // pre-T1.3 prompt (acceptance #10).
@@ -232,6 +239,9 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // L02 — passed only when the agent has enabled skills linked, so an
+        // agent with none gets a prompt byte-identical to the pre-L02 one.
+        ...(skills.length > 0 ? { skills } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -326,6 +336,10 @@ export class ReviewRunExecutor {
           model: agent.model,
           pr: pull.number,
           source: 'local',
+          // Omitted (not `[]`) when nothing loaded, so the trace UI's "Skills
+          // loaded" row is absent rather than empty — same distinction the
+          // prompt makes by omitting the section.
+          ...(traceSkills.length > 0 ? { skills: traceSkills } : {}),
         },
         stats: {
           duration_ms: durationMs,
@@ -400,6 +414,49 @@ export class ReviewRunExecutor {
       // fast run, and would abort a controller nobody is listening to.
       clearTimeout(deadline);
     }
+  }
+
+  /**
+   * Resolve the agent's knowledge layer: linked skills, in `agent_skills.order`,
+   * filtered to the ones globally enabled, rendered into prompt blocks and
+   * priced.
+   *
+   * `renderSkillBlock` comes from the engine so the studio and the CI runner
+   * render the same skill identically — a CI review that can't be compared to a
+   * local one is worse than no CI review.
+   *
+   * Tokens are counted on the RENDERED block, not the raw body, so the figure in
+   * the trace is what the model was actually sent. Best-effort by construction:
+   * `Tokenizer` falls back to a chars/4 heuristic rather than throwing, because a
+   * token count is reporting — it must never be the reason a review fails.
+   */
+  private async resolveSkills(
+    agentId: string,
+    runLog: RunLogger,
+  ): Promise<{ skills: string[]; traceSkills: TraceSkill[] }> {
+    const links = await this.agents.linkedSkills(agentId);
+    const active = links.filter((l) => l.skill.enabled);
+    if (active.length === 0) return { skills: [], traceSkills: [] };
+
+    const skills: string[] = [];
+    const traceSkills: TraceSkill[] = [];
+    for (const { skill } of active) {
+      const block = renderSkillBlock(skill.name, skill.body);
+      skills.push(block);
+      traceSkills.push({
+        name: skill.name,
+        version: skill.version,
+        tokens: this.container.tokenizer.count(block),
+      });
+    }
+
+    const total = traceSkills.reduce((n, s) => n + s.tokens, 0);
+    const skipped = links.length - active.length;
+    runLog.info(
+      `Loaded ${active.length} skill(s) (${total.toLocaleString('en-US')} tokens)` +
+        (skipped > 0 ? ` — ${skipped} linked but disabled` : ''),
+    );
+    return { skills, traceSkills };
   }
 
   /**

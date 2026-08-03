@@ -1,4 +1,5 @@
 import type { ChatMessage, PromptAssembly } from '@devdigest/shared';
+import { SKILLS_PREAMBLE } from './skills.js';
 
 /**
  * Prompt assembly + prompt-injection hardening.
@@ -39,7 +40,14 @@ const MAX_PR_DESCRIPTION_CHARS = 4000;
 export interface PromptParts {
   /** Agent's system prompt (trusted). */
   system: string;
-  /** Linked skill bodies (trusted-ish; community skills should be sanitized upstream). */
+  /**
+   * Rendered skill blocks, in prompt order — already `renderSkillBlock`ed by the
+   * caller (the studio resolves them from Postgres, the CI runner from the
+   * filesystem). Trusted: a skill is configuration the repository owner wrote or
+   * explicitly adopted, so it is an instruction, not `<untrusted>` data.
+   * `SKILLS_PREAMBLE` is what bounds it. Order is preserved verbatim — never
+   * sorted, deduped or truncated here.
+   */
   skills?: string[];
   /** Relevant memory items (trusted, curated). */
   memory?: string[];
@@ -85,8 +93,15 @@ export interface AssembledPrompt {
 export function assemblePrompt(parts: PromptParts): AssembledPrompt {
   const system = `${parts.system}\n\n${INJECTION_GUARD}`;
 
+  // The preamble is part of the slot the model is sent, but it is NOT part of
+  // any one skill's cost — the caller prices each rendered block separately
+  // (run-executor's `resolveSkills`), so the per-skill numbers in the trace
+  // deliberately exclude this fixed overhead. Attributing ~50 shared tokens to
+  // whichever skill happened to sort first would be worse than leaving them out.
   const skillsBlock =
-    parts.skills && parts.skills.length > 0 ? parts.skills.join('\n\n') : undefined;
+    parts.skills && parts.skills.length > 0
+      ? `${SKILLS_PREAMBLE}\n\n${parts.skills.join('\n\n')}`
+      : undefined;
   const memoryBlock =
     parts.memory && parts.memory.length > 0
       ? parts.memory.map((m) => `- ${m}`).join('\n')

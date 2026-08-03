@@ -1,15 +1,21 @@
 /**
- * tokenizer adapter — token counter for the repo-map budget search (T3).
+ * tokenizer adapter — token counter for prompt budgeting and attribution.
  *
- * The repo-map renderer (pipeline/repo-map.ts) binary-searches the largest set
- * of symbols that fits a token budget; that loop calls `count()` ≤ ~13 times.
+ * Two callers today:
+ *  - the repo-map renderer (T3, `modules/repo-intel/pipeline/repo-map.ts`)
+ *    binary-searches the largest set of symbols that fits a token budget; that
+ *    loop calls `count()` ≤ ~13 times.
+ *  - the review executor (L02) prices each rendered skill block for the run
+ *    trace, so "what did this skill cost me" has an answer.
  *
  * Default impl: js-tiktoken `cl100k_base` (pure-JS, no natives). The encoder is
  * lazy-initialised (loading the BPE ranks is the heavy part) and any failure
- * falls back to the `ceil(chars / 4)` heuristic — the renderer must never throw.
+ * falls back to the `ceil(chars / 4)` heuristic — **`count()` never throws**,
+ * which is what lets both callers treat it as reporting rather than as a step
+ * that can fail a render or a review.
  *
- * Scope: in-process, ONLY under modules/repo-intel. Swappable in tests via a
- * mock counter (ContainerOverrides.tokenizer).
+ * Scope: in-process. Swappable in tests via a mock counter
+ * (ContainerOverrides.tokenizer).
  */
 import { getEncoding, type Tiktoken } from 'js-tiktoken';
 

@@ -6,7 +6,10 @@ import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
+  TEST_QUALITY_REVIEWER_PROMPT,
+  API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { API_CONTRACT_GUARD, TEST_QUALITY_RUBRIC } from './seed-skills.js';
 import { DEFAULT_WORKSPACE_NAME, SYSTEM_USER_EMAIL } from './constants.js';
 
 /** Default provider/model for the built-in reviewer agents. */
@@ -19,11 +22,12 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
  *
  * Seeds: default workspace + system user + membership, default settings,
  * demo repo (acme/payments-api), PR #482 with files/commits, a sample review
- * with a few findings, and the three built-in agents (General + Security +
- * Performance), all on the default openrouter/deepseek-v4-flash provider+model.
+ * with a few findings, the five built-in agents (General + Security +
+ * Performance + Test Quality + API Contract), and the two L02 skills with their
+ * agent links — all on the default openrouter/deepseek-v4-flash provider+model.
  *
- * Course lessons populate the other tables (skills, conventions, memory, eval,
- * …) once their features are built — they start empty here.
+ * Course lessons populate the other tables (conventions, memory, eval, …) once
+ * their features are built — they start empty here.
  */
 
 // Declared in db/constants.ts — a module that imports nothing — so the auth
@@ -214,6 +218,31 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       version: 1,
       createdBy: userId,
     },
+    // ---- L02 agents. Each ships with a skill attached below, because an agent
+    // whose knowledge layer is empty is exactly the "before" side of the
+    // control experiment, not a useful default.
+    {
+      workspaceId,
+      name: 'Test Quality Reviewer',
+      description: 'Checks the tests: uncovered branches, missed corner cases, over-mocking, flakes.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: TEST_QUALITY_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
+    {
+      workspaceId,
+      name: 'API Contract Reviewer',
+      description: 'Catches breaking changes to routes, exported signatures and shared types.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: API_CONTRACT_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
   ];
   for (const a of seedAgents) {
     const [existing] = await db
@@ -223,7 +252,76 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     if (!existing) await db.insert(t.agents).values(a);
   }
 
+  // ---- L02 skills + the agent links ----
+  // `uncovered-branch-gate` is deliberately absent: it arrives through the
+  // import preview, which is the whole point of that path.
+  await seedSkills(db, workspaceId);
+
   return { workspaceId, userId };
+}
+
+/** Skill bodies live in ./seed-skills.ts; the link order is the prompt order. */
+const SEED_SKILLS: Array<{
+  skill: Omit<typeof t.skills.$inferInsert, 'workspaceId'>;
+  agents: string[];
+}> = [
+  {
+    skill: {
+      name: 'test-quality-rubric',
+      description: 'Flag new branches that no test asserts on, and untested boundary values.',
+      type: 'rubric',
+      source: 'manual',
+      body: TEST_QUALITY_RUBRIC,
+      enabled: true,
+      version: 1,
+    },
+    agents: ['Test Quality Reviewer'],
+  },
+  {
+    skill: {
+      name: 'api-contract-guard',
+      description: 'Flag breaking changes to routes, exported signatures and shared types.',
+      type: 'convention',
+      source: 'manual',
+      body: API_CONTRACT_GUARD,
+      enabled: true,
+      version: 1,
+    },
+    agents: ['API Contract Reviewer'],
+  },
+];
+
+async function seedSkills(db: Db, workspaceId: string): Promise<void> {
+  for (const entry of SEED_SKILLS) {
+    let [skill] = await db
+      .select()
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, entry.skill.name!)));
+
+    if (!skill) {
+      [skill] = await db
+        .insert(t.skills)
+        .values({ ...entry.skill, workspaceId } as typeof t.skills.$inferInsert)
+        .returning();
+      // v1 snapshot, so the skill's history starts where its version does.
+      await db
+        .insert(t.skillVersions)
+        .values({ skillId: skill!.id, version: 1, body: skill!.body })
+        .onConflictDoNothing();
+    }
+
+    for (const agentName of entry.agents) {
+      const [agent] = await db
+        .select()
+        .from(t.agents)
+        .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, agentName)));
+      if (!agent) continue;
+      await db
+        .insert(t.agentSkills)
+        .values({ agentId: agent.id, skillId: skill!.id, order: 0 })
+        .onConflictDoNothing();
+    }
+  }
 }
 
 // CLI entrypoint

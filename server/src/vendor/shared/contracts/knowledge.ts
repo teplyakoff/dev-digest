@@ -115,8 +115,29 @@ export type MemoryItem = z.infer<typeof MemoryItem>;
 export const SkillType = z.enum(['rubric', 'convention', 'security', 'custom']);
 export type SkillType = z.infer<typeof SkillType>;
 
-export const SkillSource = z.enum(['manual', 'imported_url', 'extracted', 'community']);
+// Where a skill's text came from. 'imported_file' is an upload (markdown or an
+// archive) that went through the import preview — neither a URL fetch nor the
+// community catalog, and the only source that lands `enabled: false`.
+export const SkillSource = z.enum([
+  'manual',
+  'imported_url',
+  'imported_file',
+  'extracted',
+  'community',
+]);
 export type SkillSource = z.infer<typeof SkillSource>;
+
+/**
+ * A skill name is the block heading the model reads, the label in the run trace,
+ * and what a person types when they talk about it — so it is a slug, unique per
+ * workspace (see the unique index in migration 0012), not free text.
+ */
+export const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+export const SkillName = z
+  .string()
+  .min(2)
+  .max(64)
+  .regex(SKILL_NAME_PATTERN, 'lowercase letters, digits and hyphens; must start alphanumeric');
 
 export const Skill = z.object({
   id: z.string(),
@@ -128,8 +149,66 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  /**
+   * How many agents in this workspace link the skill. **List endpoint only** —
+   * denormalized on read by `GET /skills`, exactly like `PrMeta.cost_usd`. Absent
+   * on single-skill reads and on create/update responses; the card renders the
+   * footer only when it is present, so "not loaded" and "zero agents" stay
+   * distinguishable. `GET /skills/:id/agents` is the detailed answer.
+   */
+  used_by: z.number().int().nullish(),
 });
 export type Skill = z.infer<typeof Skill>;
+
+/** One immutable snapshot of a skill's body, written on every body change. */
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+/** An agent that loads this skill — the card's "N agents" and the delete warning. */
+export const SkillUsage = z.object({
+  agent_id: z.string(),
+  agent_name: z.string(),
+});
+export type SkillUsage = z.infer<typeof SkillUsage>;
+
+/**
+ * The result of parsing an uploaded skill. Returned by `POST /skills/import/preview`
+ * and echoed back to `/confirm`. NOTHING here has been written yet — the preview
+ * is the mandatory human gate before someone else's instructions enter an
+ * agent's prompt.
+ */
+export const SkillImportPreview = z.object({
+  name: SkillName,
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+  source: z.literal('imported_file'),
+  origin: z.object({
+    filename: z.string(),
+    kind: z.enum(['markdown', 'archive']),
+    bytes: z.number().int(),
+  }),
+  /** Which entry inside the archive became the body; null for a bare .md. */
+  entry_path: z.string().nullable(),
+  /**
+   * Every archive entry the importer refused to open, and why. This is the audit
+   * trail for "executable parts are ignored" — the UI renders it verbatim, so it
+   * is evidence rather than reassurance.
+   */
+  ignored: z.array(z.object({ path: z.string(), reason: z.string() })),
+  /** Frontmatter keys honoured (name/description/type) vs dropped. */
+  frontmatter: z.object({
+    used: z.array(z.string()),
+    dropped: z.array(z.string()),
+  }),
+  warnings: z.array(z.string()),
+});
+export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
 
 export const CommunitySkill = z.object({
   name: z.string(),

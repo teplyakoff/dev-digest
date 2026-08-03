@@ -19,6 +19,10 @@ export {
   type AssembledPrompt,
 } from './prompt.js';
 
+// Skill → prompt-block rendering, shared so the studio and the CI runner render
+// the same skill identically.
+export { renderSkillBlock, SKILLS_PREAMBLE } from './skills.js';
+
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 

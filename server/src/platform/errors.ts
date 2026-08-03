@@ -28,6 +28,20 @@ export class ValidationError extends AppError {
   }
 }
 
+/**
+ * The request is well-formed but collides with something that already exists —
+ * a duplicate name under a unique index, most often.
+ *
+ * Distinct from ValidationError (422) on purpose: 422 means "fix your input
+ * shape", 409 means "your input is fine, the world disagrees". The UI branches
+ * on it to show "that name is taken" instead of a field error.
+ */
+export class ConflictError extends AppError {
+  constructor(message = 'Already exists', details?: unknown) {
+    super('conflict', message, 409, details);
+  }
+}
+
 export class ExternalServiceError extends AppError {
   constructor(message: string, details?: unknown) {
     super('external_service_error', message, 502, details);

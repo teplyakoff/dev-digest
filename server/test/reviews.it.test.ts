@@ -260,6 +260,90 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it('an enabled linked skill reaches the prompt, the trace and the log — a disabled one reaches none of them', async () => {
+    // The L02 exit checklist, as one assertion pair. Everything else about the
+    // run is held constant: same agent, same fixture, same diff — only the
+    // skill's `enabled` flag moves.
+    const app = await appWith(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    // A unique name per run: the seed now ships `test-quality-rubric` in this
+    // same workspace, and the (workspace_id, name) unique index would reject a
+    // second one — silently, three assertions before the confusing failure.
+    const skillName = `branch-gate-${Math.random().toString(36).slice(2, 10)}`;
+    const created = await app.inject({
+      method: 'POST',
+      url: '/skills',
+      payload: {
+        name: skillName,
+        description: 'Flag new branches that no test asserts on.',
+        type: 'rubric',
+        body: '# Tests\nEvery new branch needs an assertion.',
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const skill = created.json();
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: {
+          name: `Skilled ${skillName}`,
+          provider: 'openai',
+          model: 'gpt-4.1',
+          system_prompt: 'sec',
+          // repo-intel off so the prompt contains nothing but the parts we assert.
+          repo_intel: false,
+        },
+      })
+    ).json();
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/skills`,
+      payload: { skill_ids: [skill.id] },
+    });
+
+    const traceFor = async (expected: number) => {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/pulls/${pr.id}/review`,
+        payload: { agentId: agent.id },
+      });
+      await waitForPrRuns(pg.handle.db, pr.id, { expected });
+      const runId = res.json().runs[0].run_id;
+      return (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+    };
+
+    // ---- enabled ----------------------------------------------------------
+    const on = await traceFor(1);
+    expect(on.prompt_assembly.skills).toContain(`### ${skillName}`);
+    expect(on.prompt_assembly.skills).toContain('Every new branch needs an assertion.');
+    // The section is an instruction block, not delimiter-wrapped data — a skill
+    // the guard tells the model to ignore would change nothing.
+    expect(on.prompt_assembly.skills).not.toContain('<untrusted');
+    expect(on.prompt_assembly.user).toContain('## Skills / rules');
+
+    expect(on.config.skills).toEqual([
+      { name: skillName, version: 1, tokens: expect.any(Number) },
+    ]);
+    expect(on.config.skills[0].tokens).toBeGreaterThan(0);
+    expect(on.log.some((l: { msg: string }) => /Loaded 1 skill\(s\) \([\d,]+ tokens\)/.test(l.msg))).toBe(true);
+
+    // ---- disabled ---------------------------------------------------------
+    await app.inject({ method: 'PUT', url: `/skills/${skill.id}`, payload: { enabled: false } });
+
+    const off = await traceFor(2);
+    expect(off.prompt_assembly.skills).toBeNull();
+    expect(off.prompt_assembly.user).not.toContain('## Skills / rules');
+    // Omitted, not an empty array — absent means "nothing loaded", and the UI
+    // hides the row rather than rendering an empty one.
+    expect(off.config.skills ?? null).toBeNull();
+    expect(off.log.some((l: { msg: string }) => l.msg.includes('Loaded'))).toBe(false);
+
+    await app.close();
+  });
+
   it('a failed run records NO cost — null, never 0 (the badge must read "—", not "$0.00")', async () => {
     // An invalid fixture makes the mock provider throw inside the run, which is
     // the deterministic stand-in for "the model call blew up".
