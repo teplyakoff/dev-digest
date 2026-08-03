@@ -1,5 +1,5 @@
-import { and, desc, eq } from 'drizzle-orm';
-import type { Db } from '../../../db/client.js';
+import { and, desc, eq, or } from 'drizzle-orm';
+import type { Db, DbInvoker } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { RunSummary, RunTrace } from '@devdigest/shared';
 
@@ -139,8 +139,29 @@ export async function createAgentRun(
   return row!.id;
 }
 
+/**
+ * Settle a run: write its terminal status and metrics.
+ *
+ * GUARDED, and that guard is a bug fix rather than defensive coding.
+ * `POST /runs/:id/cancel` marks the row `cancelled` but cannot abort the
+ * in-flight provider request. When that request eventually returned, this
+ * function used to overwrite the row straight back to `done`, with a real
+ * `cost_usd` — a run the user cancelled and watched turn grey would silently
+ * un-cancel itself minutes later. `server/INSIGHTS.md` records three run ids this
+ * happened to, cancelled at 13:29Z and reading `done` afterwards.
+ *
+ * The predicate allows exactly two transitions:
+ *   - `running` → anything: the normal settle.
+ *   - a terminal status → THE SAME status: lets the executor fill in duration,
+ *     the error text and the trace for a cancel that the cancel endpoint had
+ *     already recorded (it writes only `status`).
+ *
+ * Everything else — `done` over `cancelled`, `done` over a boot-reaped `failed` —
+ * is refused. Returns whether the write applied, so a caller can log the refusal
+ * instead of assuming it won.
+ */
 export async function completeAgentRun(
-  db: Db,
+  db: DbInvoker,
   runId: string,
   values: {
     status: 'done' | 'failed' | 'cancelled';
@@ -159,8 +180,8 @@ export async function completeAgentRun(
     /** Failure reason (status='failed') / cancellation note. Null clears it. */
     error?: string | null;
   },
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const rows = await db
     .update(t.agentRuns)
     .set({
       status: values.status,
@@ -174,7 +195,14 @@ export async function completeAgentRun(
       blockers: values.blockers ?? null,
       error: values.error ?? null,
     })
-    .where(eq(t.agentRuns.id, runId));
+    .where(
+      and(
+        eq(t.agentRuns.id, runId),
+        or(eq(t.agentRuns.status, 'running'), eq(t.agentRuns.status, values.status)),
+      ),
+    )
+    .returning({ id: t.agentRuns.id });
+  return rows.length > 0;
 }
 
 /** Persist the WHOLE run log as ONE document. PK = runId → agent_runs. */

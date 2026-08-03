@@ -10,3 +10,19 @@
  * model's context.
  */
 export const REVIEW_STRATEGY = 'single-pass' as const;
+
+/**
+ * Hard deadline for ONE agent's review, in milliseconds.
+ *
+ * The provider SDK already has a per-REQUEST timeout (90 s on OpenRouter), but
+ * nothing bounded a whole run: map-reduce multiplies that by the number of
+ * chunks, each of those retries on 429/5xx, and the total was unbounded.
+ * Measured runs of 945 s and 674 s sat in `running` against an 8–99 s norm on the
+ * same PR and model, and because agents execute sequentially every agent queued
+ * behind them waited too.
+ *
+ * 10 minutes is deliberately generous — roughly 6× the slowest healthy run
+ * observed — so it never truncates legitimate work. It exists to convert
+ * "wedged forever" into "failed, with a reason, and the queue moves on".
+ */
+export const RUN_DEADLINE_MS = 10 * 60 * 1000;

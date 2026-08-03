@@ -2,10 +2,15 @@ import type { Container } from '../../platform/container.js';
 import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
+// SANCTIONED — onion §15 names this file in its exemptions list: it imports
+// db/schema in TYPE POSITION ONLY, to describe a repo row it passes straight
+// through. Marked here rather than silenced globally so the next person to
+// change this signature sees the standing instruction: prefer a contract type.
+// eslint-disable-next-line no-restricted-imports
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import { REVIEW_STRATEGY, RUN_DEADLINE_MS } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 
@@ -15,6 +20,25 @@ export class RunCancelledError extends Error {
     super('Run cancelled');
     this.name = 'RunCancelledError';
   }
+}
+
+/**
+ * Did this error come from an aborted request?
+ *
+ * Matched structurally rather than with `instanceof`, because the abort travels
+ * up through whichever SDK made the call — OpenAI's `APIUserAbortError`,
+ * Anthropic's equivalent, or a bare `DOMException` named `AbortError` — and none
+ * of them is a class this module should be importing (onion §5: library error
+ * classes do not travel inward).
+ */
+function isAbortError(err: unknown): boolean {
+  const e = err as { name?: string; message?: string } | null;
+  if (!e) return false;
+  return (
+    e.name === 'AbortError' ||
+    e.name === 'APIUserAbortError' ||
+    /aborted|abort(ed)? by/i.test(e.message ?? '')
+  );
 }
 
 /** Minimal structured logger (pino-compatible: (obj, msg)) for runtime logs. */
@@ -155,6 +179,16 @@ export class ReviewRunExecutor {
 
     runLog.info(`Starting review with agent "${agent.name}" (${agent.provider}/${agent.model})`);
 
+    // Two things can end this run early, and both abort the SAME controller so
+    // the provider request is actually torn down rather than merely un-awaited:
+    //   - the user cancelling (runBus.cancel → registerAborter's controller)
+    //   - the run deadline below
+    // `checkCancelled` stays as the between-chunk checkpoint; it is what turns a
+    // cancel into a clean RunCancelledError rather than a raw abort error.
+    const aborter = new AbortController();
+    this.container.runBus.registerAborter(runId, aborter);
+    const deadline = setTimeout(() => aborter.abort(), RUN_DEADLINE_MS);
+
     try {
       // Resolve the agent's LLM provider. (container.llm throws if the provider
       // key is missing — caught below and persisted as a failed run.)
@@ -212,49 +246,77 @@ export class ReviewRunExecutor {
         checkCancelled: () => {
           if (this.container.runBus.isCancelled(runId)) throw new RunCancelledError();
         },
+        // Reaches the SDK call itself, so cancelling closes the socket instead
+        // of leaving the generation running (and billing) unobserved.
+        signal: aborter.signal,
       });
       const { tokensIn, tokensOut, costUsd, grounding } = outcome;
 
       const keptFindings = outcome.review.findings;
-
-      // ---- Persist review + findings ----------------------------------------
-      const review = await this.repo.insertReview({
-        workspaceId,
-        prId: pull.id,
-        agentId: agent.id,
-        runId,
-        kind: 'review',
-        verdict: outcome.review.verdict,
-        summary: outcome.review.summary,
-        score: outcome.review.score,
-        model: agent.model,
-      });
-      const findingRows = await this.repo.insertFindings(review.id, keptFindings);
-      runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
-
-      // Mark the commit this review ran against so the PR list can tell
-      // reviewed / needs-review (head moved) / stale apart.
-      await this.repo.markReviewed(pull.id, pull.headSha);
-
       const durationMs = Date.now() - start;
 
       // Deterministic blocker count (severity ≥ the agent's gate) — the signal
       // the timeline colors on, NOT the model's self-reported verdict.
       const blockers = countBlockers(keptFindings, agent.ciFailOn);
 
-      // ---- Observability: agent_runs + ONE run_traces document --------------
-      await this.repo.completeAgentRun(runId, {
-        status: 'done',
-        durationMs,
-        tokensIn,
-        tokensOut,
-        costUsd,
-        findingsCount: findingRows.length,
-        grounding,
-        score: outcome.review.score,
-        blockers,
-        error: null,
+      // ---- Persist the whole result atomically ------------------------------
+      // Four writes, ONE business fact: "this agent reviewed this PR". Run
+      // separately they can half-land — a crash after insertReview leaves a
+      // review with no findings and a score computed from nothing, which the UI
+      // renders as a confident clean bill of health. The service owns this
+      // boundary because it is the layer that knows the four belong together
+      // (onion §8); the repository methods just accept the tx.
+      let settled = false;
+      const { review, findingRows } = await this.container.db.transaction(async (tx) => {
+        const review = await this.repo.insertReview(
+          {
+            workspaceId,
+            prId: pull.id,
+            agentId: agent.id,
+            runId,
+            kind: 'review',
+            verdict: outcome.review.verdict,
+            summary: outcome.review.summary,
+            score: outcome.review.score,
+            model: agent.model,
+          },
+          tx,
+        );
+        const findingRows = await this.repo.insertFindings(review.id, keptFindings, tx);
+
+        // Mark the commit this review ran against so the PR list can tell
+        // reviewed / needs-review (head moved) / stale apart.
+        await this.repo.markReviewed(pull.id, pull.headSha, tx);
+
+        settled = await this.repo.completeAgentRun(
+          runId,
+          {
+            status: 'done',
+            durationMs,
+            tokensIn,
+            tokensOut,
+            costUsd,
+            findingsCount: findingRows.length,
+            grounding,
+            score: outcome.review.score,
+            blockers,
+            error: null,
+          },
+          tx,
+        );
+        return { review, findingRows };
       });
+      runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
+
+      // The run reached a terminal status while this call was still in flight —
+      // almost always a user cancel, which cannot abort the provider request.
+      // The findings above are still persisted and still real; what must NOT
+      // happen is the row flipping back to `done` and being billed.
+      if (!settled) {
+        runLog.info(
+          'Run had already been cancelled or reaped — keeping that status instead of marking it done',
+        );
+      }
 
       const trace: RunTrace = {
         config: {
@@ -295,9 +357,24 @@ export class ReviewRunExecutor {
     } catch (err) {
       // Failure/cancel: persist status + the error text + the log-so-far so the
       // run (and WHY it failed) is visible on the UI after a reload.
-      const cancelled = err instanceof RunCancelledError;
+      //
+      // Three ways to get here, and they must not be conflated:
+      //   - RunCancelledError — the between-chunk checkpoint saw the cancel flag
+      //   - an abort while the flag is set — the socket was torn down by cancel
+      //   - an abort with no flag — the deadline fired, which is a FAILURE and
+      //     needs to say so, not masquerade as something the user asked for
+      const abortedInFlight = isAbortError(err);
+      const cancelled =
+        err instanceof RunCancelledError ||
+        (abortedInFlight && this.container.runBus.isCancelled(runId));
+      const timedOut = abortedInFlight && !cancelled;
+
       const status = cancelled ? 'cancelled' : 'failed';
-      const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
+      const msg = cancelled
+        ? 'Cancelled by user'
+        : timedOut
+          ? `Run exceeded the ${Math.round(RUN_DEADLINE_MS / 60000)}-minute deadline and was aborted`
+          : (err as Error).message;
       runLog.error(cancelled ? 'Run cancelled by user' : `Run failed: ${msg}`);
       await this.repo
         .completeAgentRun(runId, {
@@ -318,6 +395,10 @@ export class ReviewRunExecutor {
         .catch(() => undefined);
       this.container.runBus.complete(runId);
       throw err;
+    } finally {
+      // Always: an un-cleared 10-minute timer keeps the process alive after a
+      // fast run, and would abort a controller nobody is listening to.
+      clearTimeout(deadline);
     }
   }
 

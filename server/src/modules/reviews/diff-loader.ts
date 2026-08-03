@@ -1,6 +1,11 @@
 import type { Container } from '../../platform/container.js';
 import type { UnifiedDiff } from '@devdigest/shared';
 import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
+// SANCTIONED — onion §15 names this file in its exemptions list: it imports
+// db/schema in TYPE POSITION ONLY, to describe a repo row it passes straight
+// through. Marked here rather than silenced globally so the next person to
+// change this signature sees the standing instruction: prefer a contract type.
+// eslint-disable-next-line no-restricted-imports
 import * as schema from '../../db/schema.js';
 import type { ReviewRepository, PullRow } from './repository.js';
 

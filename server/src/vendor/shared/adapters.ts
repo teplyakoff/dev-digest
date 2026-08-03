@@ -38,6 +38,16 @@ export interface CompletionRequest {
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
+  /**
+   * Cancellation. Aborting it must abort the in-flight HTTP request, not merely
+   * stop the caller from awaiting it.
+   *
+   * This exists because `POST /runs/:id/cancel` used to be advisory: it marked
+   * the row `cancelled` while the socket stayed ESTABLISHED and the tokens kept
+   * being generated and billed. A provider that ignores this field turns cancel
+   * back into a lie, so wire it into the SDK call.
+   */
+  signal?: AbortSignal;
 }
 
 export interface CompletionResult {
@@ -67,6 +77,16 @@ export interface StructuredRequest<T> {
    * the `session_id` body field; ignored by providers that don't support it.
    */
   sessionId?: string;
+  /**
+   * Cancellation. Aborting it must abort the in-flight HTTP request, not merely
+   * stop the caller from awaiting it.
+   *
+   * This exists because `POST /runs/:id/cancel` used to be advisory: it marked
+   * the row `cancelled` while the socket stayed ESTABLISHED and the tokens kept
+   * being generated and billed. A provider that ignores this field turns cancel
+   * back into a lie, so wire it into the SDK call.
+   */
+  signal?: AbortSignal;
 }
 
 export interface StructuredResult<T> {
