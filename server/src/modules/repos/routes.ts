@@ -10,7 +10,7 @@ import { RepoService } from './service.js';
  * codes, and delegates all business logic to RepoService.
  *   POST   /repos              → add repo (parse URL, persist, enqueue real clone)
  *   GET    /repos              → list repos (workspace-scoped)
- *   POST   /repos/:id/refresh  → re-fetch clone + bump last_polled_at
+ *   POST   /repos/:id/sync     → re-fetch clone + bump synced_at
  *   DELETE /repos/:id          → remove repo
  *
  * The clone runs as a JobRunner job (kind 'clone') — real `git clone` via the
@@ -35,7 +35,7 @@ export default async function reposRoutes(appBase: FastifyInstance) {
     return service.list(workspaceId);
   });
 
-  app.post('/repos/:id/refresh', { schema: { params: IdParams } }, async (req) => {
+  app.post('/repos/:id/sync', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(app.container, req);
     return service.refresh(workspaceId, req.params.id);
   });

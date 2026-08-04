@@ -9,7 +9,7 @@ export function toShellRepo(r: Repo): RepoSummary {
     id: r.id,
     full_name: r.full_name,
     default_branch: r.default_branch,
-    syncedLabel: r.last_polled_at ? "synced" : "not synced",
+    syncedLabel: r.synced_at ? "synced" : "not synced",
   };
 }
 
