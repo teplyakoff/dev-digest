@@ -271,7 +271,7 @@ async function main() {
     await shot(page, "skills-grid");
 
     // 2 — the preview drawer ------------------------------------------------
-    await page.getByText("api-contract-guard", { exact: true }).first().click();
+    await page.getByText("breaking-change", { exact: true }).first().click();
     await page.getByRole("button", { name: "Open editor" }).waitFor({ timeout: 10_000 });
     await beat(page, 2, "Click a card — the body, exactly as the agent receives it", 3600);
     await shot(page, "preview-drawer");

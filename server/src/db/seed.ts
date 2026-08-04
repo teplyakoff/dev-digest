@@ -9,7 +9,12 @@ import {
   TEST_QUALITY_REVIEWER_PROMPT,
   API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
-import { API_CONTRACT_GUARD, TEST_QUALITY_RUBRIC } from './seed-skills.js';
+import {
+  BREAKING_CHANGE,
+  RESPONSE_SCHEMA,
+  SEMVER_DISCIPLINE,
+  TEST_QUALITY_RUBRIC,
+} from './seed-skills.js';
 import { DEFAULT_WORKSPACE_NAME, SYSTEM_USER_EMAIL } from './constants.js';
 
 /** Default provider/model for the built-in reviewer agents. */
@@ -277,13 +282,44 @@ const SEED_SKILLS: Array<{
     },
     agents: ['Test Quality Reviewer'],
   },
+  // The API Contract Reviewer's knowledge layer. Three of its four skills are
+  // seeded; `deprecation-policy` arrives through the import preview
+  // (docs/skills/deprecation-policy.md), because walking a foreign file through
+  // the trust gate is the point of that path.
+  //
+  // Link order IS prompt order: what a breaking change IS comes before what a
+  // response-shape change costs, which comes before what release it forces.
   {
     skill: {
-      name: 'api-contract-guard',
-      description: 'Flag breaking changes to routes, exported signatures and shared types.',
+      name: 'breaking-change',
+      description: 'Flag a change that stops an existing caller from working: routes, signatures, shared types.',
       type: 'convention',
       source: 'manual',
-      body: API_CONTRACT_GUARD,
+      body: BREAKING_CHANGE,
+      enabled: true,
+      version: 1,
+    },
+    agents: ['API Contract Reviewer'],
+  },
+  {
+    skill: {
+      name: 'response-schema',
+      description: 'Flag a response field removed, renamed, retyped, or changed in meaning while keeping its name.',
+      type: 'convention',
+      source: 'manual',
+      body: RESPONSE_SCHEMA,
+      enabled: true,
+      version: 1,
+    },
+    agents: ['API Contract Reviewer'],
+  },
+  {
+    skill: {
+      name: 'semver-discipline',
+      description: 'Decide what release a change forces, and check the diff bumped the version to match.',
+      type: 'rubric',
+      source: 'manual',
+      body: SEMVER_DISCIPLINE,
       enabled: true,
       version: 1,
     },
@@ -292,6 +328,14 @@ const SEED_SKILLS: Array<{
 ];
 
 async function seedSkills(db: Db, workspaceId: string): Promise<void> {
+  // Next free `order` per agent. Every link used to be written at 0, which was
+  // invisible while each agent had exactly one skill: `linkedSkills` sorts by
+  // `order`, so three rows at 0 leave the tiebreak to whatever the planner
+  // returns, and the prompt's skill order changes for no reason. Order is
+  // meaningful — for the API Contract Reviewer, what a breaking change IS has to
+  // come before what release it forces.
+  const nextOrder = new Map<string, number>();
+
   for (const entry of SEED_SKILLS) {
     let [skill] = await db
       .select()
@@ -316,9 +360,11 @@ async function seedSkills(db: Db, workspaceId: string): Promise<void> {
         .from(t.agents)
         .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, agentName)));
       if (!agent) continue;
+      const order = nextOrder.get(agent.id) ?? 0;
+      nextOrder.set(agent.id, order + 1);
       await db
         .insert(t.agentSkills)
-        .values({ agentId: agent.id, skillId: skill!.id, order: 0 })
+        .values({ agentId: agent.id, skillId: skill!.id, order })
         .onConflictDoNothing();
     }
   }

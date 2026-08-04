@@ -9,6 +9,9 @@ in the DB). The canonical, reviewable copies live next to this file:
 - [`general-reviewer.md`](./general-reviewer.md)
 - [`security-reviewer.md`](./security-reviewer.md)
 - [`performance-reviewer.md`](./performance-reviewer.md)
+- [`api-contract-reviewer.md`](./api-contract-reviewer.md) — also the worked
+  example of the prompt/skill split: what belongs in a system prompt versus in a
+  skill, and what it cost to get that boundary wrong the first time.
 
 > The DB is the source of truth at run time. These files are the human-readable
 > originals — when you change a prompt, edit the file here **and** push it to the

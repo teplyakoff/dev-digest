@@ -45,33 +45,142 @@ values, or the order of another test. These pass locally and fail in CI.
   not evidence — say what is missing, not what might exist elsewhere.
 - Do not ask for a test that already exists in the diff.`;
 
-export const API_CONTRACT_GUARD = `# API contract
+
+/**
+ * The API Contract Reviewer's knowledge layer, split four ways.
+ *
+ * It used to be ONE skill (`api-contract-guard`) that restated the agent's own
+ * system prompt, which is why the L02 control experiment could not show a
+ * difference. Splitting it is not cosmetic: each of these answers a different
+ * question, and three of them apply to agents that are not this one.
+ *
+ * `deprecation-policy` is the fourth and is deliberately NOT here — it arrives
+ * through the import preview (`docs/skills/deprecation-policy.md`), the same way
+ * `uncovered-branch-gate` did in L02.
+ */
+
+export const BREAKING_CHANGE = `# Breaking changes
 
 Treat every exported HTTP route, exported function signature, and shared type as
-a contract with callers you cannot see in this diff.
+a contract with callers you cannot see in this diff. A change is breaking when a
+caller that worked before this diff stops working after it.
 
-## Breaking changes
-Flag any of these as a breaking change, at CRITICAL when the route is public:
-- A route's path, method, or required parameters change.
-- A request field becomes required, or an accepted type narrows.
-- A response field is removed, renamed, or changes type.
-- An exported function gains a required parameter, or its return type narrows.
-- A status code changes for an existing condition.
+## Flag these
+- A route's path or method changes.
+- A request parameter becomes required, or an existing one is removed.
+- An accepted type NARROWS: \`string | number\` → \`string\`, an enum loses a
+  member, a nullable field stops accepting null.
+- An exported function gains a required parameter, or loses one a caller passes.
+- An export is removed or renamed.
+- A status code changes for a condition that already existed.
 
-## Additive changes are fine
-Adding an OPTIONAL request field, a NEW response field, or a new route is not
-breaking. Do not flag it.
+## Additive changes are NOT breaking — never flag them
+A new OPTIONAL request field, a new response field, a new route alongside the old
+one, a new enum member the server only ever RETURNS, a widened accepted type.
 
-## What to say
-For each breaking change:
-1. Name the old shape and the new one.
-2. Name who breaks — the caller, the stored data, or the client.
-3. Give the compatible alternative: accept both shapes, add a new route
-   alongside the old one, or version it.
+## Good / bad
+
+BAD — the path moves and nothing keeps the old one alive:
+\`\`\`ts
+- app.get('/skills/:id/agents', handler)
++ app.get('/skills/:id/usage', handler)
+\`\`\`
+Every deployed client calling \`/agents\` gets a 404 the moment this ships.
+
+GOOD — the new shape lands beside the old one:
+\`\`\`ts
+  app.get('/skills/:id/agents', handler)   // kept, marked deprecated
++ app.get('/skills/:id/usage', handler)
+\`\`\`
 
 ## Reporting
-- CRITICAL for a change to a route or type that something outside this diff
-  depends on; WARNING when the change is internal but still crosses a module.
-- Cite the exact \`file:line\` of the changed signature.
-- If the diff also updates every caller of the changed symbol, say so and lower
-  the severity — a contract change with its callers is a refactor, not a break.`;
+- CRITICAL when the caller is outside this diff — an HTTP client, a stored row,
+  another service. WARNING when the break stays inside one module.
+- If the diff updates EVERY caller of the changed symbol, say so and use WARNING:
+  a contract change that ships with its callers is a refactor, not a break.
+- Cite the \`file:line\` of the changed signature, not of a caller.`;
+
+export const RESPONSE_SCHEMA = `# Response shape
+
+A response is a contract even when no type declares it. Someone has already
+written \`data.usedBy\` against it, and a compiler in this repo cannot see them.
+
+## Flag these
+- A field is REMOVED or RENAMED. A rename is a removal plus an addition, and the
+  removal is the half that breaks.
+- A field's type changes: \`number\` → \`string\`, scalar → object, \`T\` → \`T[]\`.
+- An optional field becomes REQUIRED in a request, or a required field becomes
+  optional in a response — both break a caller that trusted the old shape.
+- A field that could be null stops being nullable, or starts being nullable.
+- The envelope changes: a bare array becomes \`{ items: [...] }\`, or an error
+  body changes its key.
+- A field's UNITS or semantics change while its name stays — cents to dollars,
+  seconds to milliseconds, absolute to relative. This is the worst kind: nothing
+  fails, the numbers are just wrong.
+
+## Good / bad
+
+BAD — a rename that type-checks everywhere in this repo and breaks every client:
+\`\`\`ts
+- used_by: z.number().int().nullish(),
++ usedByAgents: z.number().int().nullish(),
+\`\`\`
+
+GOOD — add the new name, keep the old one populated, remove it in a later
+release:
+\`\`\`ts
+  used_by: z.number().int().nullish(),        // deprecated, still written
++ usedByAgents: z.number().int().nullish(),
+\`\`\`
+
+## Reporting
+- CRITICAL for a removal, rename or type change on a response a client reads.
+- WARNING when the field is provably internal to this repo and every reader is
+  updated in this diff.
+- Name the OLD shape and the NEW shape explicitly. "The response changed" is not
+  a finding a person can act on.`;
+
+export const SEMVER_DISCIPLINE = `# Semver discipline
+
+Decide what release this change forces, and check whether the diff agrees.
+
+## The rule
+- **MAJOR** — anything a consumer must change code for: a removal, a rename, a
+  narrowed input, a widened requirement, changed semantics of an existing field.
+- **MINOR** — new capability that old callers can ignore: a new optional field, a
+  new route, a new export.
+- **PATCH** — behaviour that was already promised, now actually delivered.
+
+An enum is the case people get wrong. Widening what you ACCEPT is minor; widening
+what you RETURN is major, because callers exhaustively switch on it.
+
+## What to check in the diff
+1. Classify the change.
+2. Look for a version in the diff — \`package.json\`, an OpenAPI \`info.version\`,
+   a \`/v1/\` path segment, a migration.
+3. If the change is major and no version moved, that is the finding.
+4. If nothing in the diff carries a version at all, say so once as a SUGGESTION
+   and do not repeat it per change.
+
+## Good / bad
+
+BAD — a major change under a patch bump:
+\`\`\`json
+- "version": "2.4.1",
++ "version": "2.4.2",
+\`\`\`
+…in a diff that removes an exported function.
+
+GOOD — the bump matches the break, or the break is avoided so the bump need not:
+\`\`\`json
+- "version": "2.4.1",
++ "version": "3.0.0",
+\`\`\`
+
+## Reporting
+- WARNING for a major change shipped without a major bump — it is a release
+  problem, not a runtime one, so it rarely deserves CRITICAL on its own.
+- Say which rule applies and why: "removing an export is major; the version went
+  2.4.1 → 2.4.2".
+- Do not flag version numbers in lockfiles or dependency ranges. This is about
+  the contract THIS repo publishes.`;

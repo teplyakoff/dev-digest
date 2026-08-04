@@ -259,6 +259,13 @@ as writing `cost_usd = 0` for a run that never settled.
   (`type: convention`), both `source: 'manual'`, `enabled: true`, `v1`
   snapshotted. Bodies live in a new `db/seed-skills.ts` next to
   `seed-prompts.ts`.
+
+  > **Superseded by the L02 homework** (`docs/plans/L02-conventions.md`).
+  > `api-contract-guard` restated the API Contract Reviewer's own system prompt,
+  > which is exactly why the control experiment below could not show a
+  > difference. It is now three skills — `breaking-change`, `response-schema`,
+  > `semver-discipline` — plus `deprecation-policy`, which arrives through the
+  > import preview. The agent's prompt lost the taxonomy those carry.
 - **Agents** — `Test Quality Reviewer` and `API Contract Reviewer`, same
   `openrouter` / `deepseek-v4-flash` default as the existing three, prompts in
   `seed-prompts.ts`, each linked to its skill via `agent_skills`.
