@@ -93,11 +93,26 @@ GOOD — the new shape lands beside the old one:
 + app.get('/skills/:id/usage', handler)
 \`\`\`
 
+## Who counts as a caller
+
+An HTTP route and a published response shape have consumers you CANNOT see from
+a diff: deployed web clients, mobile builds, other services, cron scripts, saved
+curl commands. "Every call site in this repository is updated" says nothing
+about them.
+
+Two different situations, and telling them apart is the whole job:
+
+- **In-repo symbol** (a non-exported function, a type used only here): if the
+  diff updates every caller, it is a refactor. WARNING at most.
+- **Route path, HTTP method, or response field**: there is no such thing as
+  updating every caller. It is CRITICAL even when this repository compiles,
+  type-checks and ships all its own call sites in the same commit. A green build
+  is exactly what makes this one dangerous — nothing local fails.
+
 ## Reporting
-- CRITICAL when the caller is outside this diff — an HTTP client, a stored row,
-  another service. WARNING when the break stays inside one module.
-- If the diff updates EVERY caller of the changed symbol, say so and use WARNING:
-  a contract change that ships with its callers is a refactor, not a break.
+- CRITICAL for a route or response change, unless the old shape is kept working
+  alongside the new one.
+- WARNING for an in-repo break whose callers this diff does update — say so.
 - Cite the \`file:line\` of the changed signature, not of a caller.`;
 
 export const RESPONSE_SCHEMA = `# Response shape
