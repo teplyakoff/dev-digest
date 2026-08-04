@@ -27,6 +27,7 @@ describe("nav registry — every shipped route is registered", () => {
   it.each([
     ["pulls", "/repos/:repoId/pulls", "p"],
     ["skills", "/skills", "s"],
+    ["conventions", "/repos/:repoId/conventions", "c"],
     ["agents", "/agents", "a"],
   ])("%s → %s (g %s)", (key, href, gKey) => {
     const item = byKey(key);
@@ -54,6 +55,7 @@ describe("nav registry — every shipped route is registered", () => {
   it("resolves :repoId only where the route actually has one", () => {
     expect(resolveHref(byKey("skills")!.href, "repo-1")).toBe("/skills");
     expect(resolveHref(byKey("pulls")!.href, "repo-1")).toBe("/repos/repo-1/pulls");
+    expect(resolveHref(byKey("conventions")!.href, "repo-1")).toBe("/repos/repo-1/conventions");
     // No active repo → the placeholder, not a broken "/repos/null/pulls".
     expect(resolveHref(byKey("pulls")!.href, null)).toBe("/repos/_/pulls");
   });
