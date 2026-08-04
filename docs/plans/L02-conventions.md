@@ -174,9 +174,10 @@ wait on the UI.
 `server/src/vendor/shared/contracts/knowledge.ts`, then
 `./scripts/vendor-shared.sh`, then commit both copies.
 
-**W2 — sampling + verification, no model.** `modules/conventions/samples.ts` and
-`verify.ts`, both unit-tested against a fixture directory with no LLM in sight.
-`verify.ts` is pure (contents in, verdict out) so its tests need no clone.
+**W2 — sampling + verification, no model.** `modules/conventions/pipeline/`
+(`samples.ts`, `verify.ts`) plus the `SourceReader` port the ring-2 lint rule
+demands, so both units stay pure — contents in, verdict out — and their tests are
+literals rather than a temp directory.
 
 **W3 — extraction + routes.** `service.ts`, `prompt.ts`, the five routes,
 `INJECTION_GUARD` exported from `reviewer-core`. After W3 the whole extractor is

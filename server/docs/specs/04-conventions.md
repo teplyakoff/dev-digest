@@ -93,11 +93,13 @@ export const ConventionCategory = z.enum([
 
 export const ConventionStatus = z.enum(['pending', 'accepted', 'rejected']);
 
+// No `file_missing`: verification runs against the exact files the prompt
+// carried, so "cannot find that file" has one shape. A file that failed to read
+// never entered the prompt, so no candidate can cite it.
 export const ConventionDropReason = z.enum([
   'file_not_sampled',   // cited a file the model was never shown
-  'file_missing',       // path not readable in the clone
   'line_out_of_range',  // start/end outside the lines we actually sent
-  'empty_snippet',      // the cited span is blank or comment-only
+  'empty_snippet',      // the cited span is blank
   'duplicate_rule',     // same normalized rule as an earlier candidate
 ]);
 
@@ -227,9 +229,28 @@ stated in-band:
 The line numbers are what make a citation checkable at all; the truncation notice
 is what stops the model citing line 300 of a file it only saw 180 lines of.
 
-Reading the clone goes through `node:fs` directly, with the same
-`// KNOWN DEBT` note `repo-intel/service.ts` carries — a `SourceReader` port is
-real work and half-doing it here would be worse than not starting.
+**Reading the clone goes through a port, not `node:fs`.** This spec originally
+said the opposite — copy `repo-intel`'s `// KNOWN DEBT` disable and move on — and
+that was wrong. `service.ts` is ring 2, where the onion lint rule forbids `fs`
+and names the fix in its own error message: put it behind a port. That port is
+the `SourceReader` `repo-intel/service.ts` has been documenting as debt, so it
+was built rather than excused a second time:
+
+- `SourceReader` in `vendor/shared/adapters.ts` — one method, `read(clonePath,
+  relPath) → string | null`, refusing absolute paths and any `..` that escapes;
+- `FsSourceReader` in `adapters/source/fs-reader.ts`;
+- `MockSourceReader` in `adapters/mocks.ts` — an in-memory `Record<path,
+  contents>`, which is what lets the sampling tests run with no temp directory;
+- `container.sourceReader`, overridable via `ContainerOverrides`.
+
+`repo-intel` is deliberately NOT migrated onto it here — five call sites across
+four files is its own change. The count of `no-restricted-imports` disables in
+`server/src` is unchanged at 7 by this work.
+
+Splitting the reads out this way also buys the property the verifier depends on:
+the clone is read ONCE, and both the prompt and the verification work off the
+same `SampledFile` map. A second read could race with a checkout and validate a
+citation against bytes the model never saw.
 
 ### 2. Extract — `prompt.ts` + one structured call
 
@@ -276,11 +297,17 @@ Signature is `(candidates, sampled: Map<path, {lines: string[], shownUpTo: numbe
 
 Per candidate, in order, first failure wins:
 
-1. `evidence_path` ∈ `sampled` → else `file_not_sampled`
-2. readable → else `file_missing`
-3. `1 ≤ start ≤ end ≤ min(lineCount, shownUpTo)` → else `line_out_of_range`
-4. slice `[start, end]`, clamp span to 12 lines, trim; must contain at least one
-   non-blank, non-comment-only line → else `empty_snippet`
+1. `evidence_path` ∈ `sampled`, after forgiving a `./` prefix and a trailing
+   `:23` / `:23-31` the model copied from the citation format → else
+   `file_not_sampled`
+2. `1 ≤ start ≤ end ≤ shownUpTo` → else `line_out_of_range`. Against
+   `shownUpTo`, **not** the file's length: a citation into the truncated tail is
+   a guess about text the model never received, however real that line is.
+3. slice `[start, end]`, clamping the span to `MAX_EVIDENCE_SPAN` rather than
+   dropping — an over-long span is a badly framed citation, not a false one
+4. trim blank edges; a span that trims to nothing → `empty_snippet`.
+   Comment-only spans are **kept**: "every exported function carries a JSDoc
+   block" is a real convention whose only possible evidence is a comment.
 5. normalized rule (lowercased, punctuation and backticks stripped, collapsed
    whitespace) unseen → else `duplicate_rule`
 
@@ -329,14 +356,30 @@ the modal; only membership is not.
 
 Unit (no Docker, no model):
 
-- `samples.test.ts` — a fixture directory: the config allowlist picks one file
-  per family; `package.json` is reduced to three keys; a 400-line file is
-  truncated at 180 with the notice; the total byte cap stops adding files rather
-  than truncating the last one to nothing.
-- `verify.test.ts` — one case per `ConventionDropReason`, plus: a valid candidate
-  keeps the snippet **read from the fixture**, not the one supplied; a candidate
-  citing line 300 of a file shown to line 180 is `line_out_of_range` even though
-  the file has 412 lines.
+No fixture directory: both units are pure over plain data, so the tests are
+literals. (This spec first called for a fixture directory; extracting
+`SourceReader` made it unnecessary, and a test that needs no temp dir is one
+fewer thing that can fail for a reason unrelated to the code.)
+
+- `conventions-samples.test.ts` (17) — the config allowlist picks one file per
+  family and one per *mid-migration* family; `package.json` reduces to three
+  keys and `null` when unparseable; a 412-line file truncates at 180 **and says
+  so in the header**; the gutter is right-aligned; line counting matches an
+  editor on LF, CRLF and a missing trailing newline; at least one line always
+  renders however long it is; the total budget stops adding files rather than
+  shrinking one, and refuses everything after the first refusal so membership
+  depends on rank rather than on file size.
+- `conventions-verify.test.ts` (16) — one case per `ConventionDropReason`, plus
+  the load-bearing one: a survivor's snippet is **sliced from the sampled map**,
+  never supplied by the model. Also: a citation into the truncated tail is
+  `line_out_of_range` even though the line really exists in the file; an
+  over-long span is clamped and its stored `evidence_end_line` moves with the
+  snippet, so the GitHub link cannot highlight more than the snippet shows; a
+  comment-only span is KEPT; and dedupe is seeded only by survivors, so one bad
+  citation cannot suppress a good citation of the same rule.
+- `source-reader.test.ts` (8) — every failure reads `null`; `..`, absolute paths
+  and a sibling directory sharing the clone's name prefix are all refused, while
+  `./` and an inward `..` still resolve.
 - `skill-draft.test.ts` — a rejected candidate's rule text does not occur in the
   body; a pending one does not either; two categories render as two sections.
 

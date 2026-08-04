@@ -273,6 +273,37 @@ export interface CodeIndex {
   references(repo: RepoRef, symbol: string): Promise<CodeReference[]>;
 }
 
+// ---------- SourceReader (repo-relative file reads out of a clone) ----------
+/**
+ * Reading one file out of a cloned repo, behind a port.
+ *
+ * This is the port `repo-intel/service.ts` has been documenting as KNOWN DEBT:
+ * ring-2 code needs the text of a file in the clone, and until now the only way
+ * to get it was `node:fs` directly, with an eslint-disable and a written excuse.
+ * The Conventions Extractor needs the same thing, so it was built rather than
+ * excused a second time.
+ *
+ * `read` answers `null` for every "you cannot have this" — absent, a directory,
+ * unreadable, or a path that tries to leave the clone. Callers treat a missing
+ * file as data (a config that isn't there, a sample that moved), never as an
+ * error, so a throw here would only ever be caught and discarded.
+ *
+ * repo-intel is NOT migrated onto this yet; its four raw imports stay until
+ * someone does that as its own change.
+ */
+export interface SourceReader {
+  /**
+   * UTF-8 contents of `relPath` inside `clonePath`, or `null`.
+   *
+   * `relPath` MUST stay inside the clone: an absolute path, or one that escapes
+   * via `..`, answers `null` rather than reading it. No caller passes an
+   * untrusted path today — the model only ever names files it was shown — but a
+   * port that can be talked out of its own root is a directory traversal
+   * waiting for its first careless caller.
+   */
+  read(clonePath: string, relPath: string): Promise<string | null>;
+}
+
 // ---------- Auth (pluggable; MVP = LocalNoAuthProvider) ----------
 export interface AuthUser {
   id: string;

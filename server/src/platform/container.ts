@@ -4,6 +4,7 @@ import type {
   GitHubClient,
   GitClient,
   CodeIndex,
+  SourceReader,
   Embedder,
   LLMProvider,
 } from '@devdigest/shared';
@@ -16,6 +17,7 @@ import { LocalNoAuthProvider } from '../adapters/auth/local.js';
 import { OctokitGitHubClient } from '../adapters/github/octokit.js';
 import { SimpleGitClient } from '../adapters/git/simple-git.js';
 import { RipgrepCodeIndex } from '../adapters/codeindex/ripgrep.js';
+import { FsSourceReader } from '../adapters/source/fs-reader.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
 import { AnthropicProvider } from '../adapters/llm/anthropic.js';
 import { OpenAIEmbedder } from '../adapters/embedder/openai.js';
@@ -43,6 +45,8 @@ export interface ContainerOverrides {
   github?: GitHubClient;
   git?: GitClient;
   codeIndex?: CodeIndex;
+  /** Repo-relative file reads out of a clone; tests inject `MockSourceReader`. */
+  sourceReader?: SourceReader;
   embedder?: Embedder;
   /** Pre-built providers by id (skip key lookup). */
   llm?: Partial<Record<'openai' | 'anthropic' | 'openrouter', LLMProvider>>;
@@ -64,6 +68,7 @@ export class Container {
   private _git?: GitClient;
   private _github?: GitHubClient;
   private _codeIndex?: CodeIndex;
+  private _sourceReader?: SourceReader;
   private _embedder?: Embedder;
   private llmCache = new Map<string, LLMProvider>();
 
@@ -104,6 +109,17 @@ export class Container {
     if (this.overrides.codeIndex) return this.overrides.codeIndex;
     this._codeIndex ??= new RipgrepCodeIndex(this.git);
     return this._codeIndex;
+  }
+
+  /**
+   * Reading a file out of a clone. This is the port the onion lint rule points
+   * ring-2 code at when it reaches for `node:fs`; `repo-intel` predates it and
+   * still imports fs directly, which is its own change to make.
+   */
+  get sourceReader(): SourceReader {
+    if (this.overrides.sourceReader) return this.overrides.sourceReader;
+    this._sourceReader ??= new FsSourceReader();
+    return this._sourceReader;
   }
 
   /**

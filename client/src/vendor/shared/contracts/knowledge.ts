@@ -329,12 +329,18 @@ export type ConventionCategory = z.infer<typeof ConventionCategory>;
 export const ConventionStatus = z.enum(['pending', 'accepted', 'rejected']);
 export type ConventionStatus = z.infer<typeof ConventionStatus>;
 
-/** Why a proposed candidate was thrown away. Recorded per scan, never swallowed. */
+/**
+ * Why a proposed candidate was thrown away. Recorded per scan, never swallowed.
+ *
+ * There is deliberately no `file_missing`: verification runs against the exact
+ * set of files the prompt carried, so "we cannot find that file" has only one
+ * shape — the model named something it was never shown. A file that failed to
+ * read never entered the prompt, so no candidate can cite it.
+ */
 export const ConventionDropReason = z.enum([
   'file_not_sampled', // cited a file the model was never shown
-  'file_missing', // path not readable in the clone
   'line_out_of_range', // start/end outside the lines we actually sent
-  'empty_snippet', // the cited span is blank or comment-only
+  'empty_snippet', // the cited span is blank
   'duplicate_rule', // same normalized rule as an earlier candidate
 ]);
 export type ConventionDropReason = z.infer<typeof ConventionDropReason>;
