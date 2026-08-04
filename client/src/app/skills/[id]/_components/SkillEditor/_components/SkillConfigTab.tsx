@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, FormField, SelectInput, TextInput, Toggle } from "@devdigest/ui";
 import type { Skill, SkillType } from "@devdigest/shared";
-import { SkillBodyEditor } from "../../../../_components/SkillBodyEditor/SkillBodyEditor";
+import { SkillBodyEditor } from "@/components/skill-body-editor/SkillBodyEditor";
 import { useDeleteSkill, useSkillUsage, useUpdateSkill } from "../../../../../../lib/hooks/skills";
 import { estimateTokens } from "../../../../../../lib/tokens";
 import { useToast } from "../../../../../../lib/toast";

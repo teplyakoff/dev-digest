@@ -6,8 +6,10 @@ import { api } from "../api";
 import type {
   ConventionCandidate,
   ConventionCategory,
+  ConventionSkillDraft,
   ConventionStatus,
   ConventionsView,
+  Skill,
 } from "@devdigest/shared";
 
 /**
@@ -17,6 +19,7 @@ import type {
  */
 const keys = {
   view: (repoId: string | null | undefined) => ["conventions", repoId] as const,
+  draft: (repoId: string | null | undefined) => ["convention-skill-draft", repoId] as const,
 };
 
 export function useConventions(repoId: string | null | undefined) {
@@ -85,6 +88,73 @@ export function usePatchConvention(repoId: string | null | undefined) {
         ...current,
         candidates: current.candidates.map((c) => (c.id === data.id ? data : c)),
       });
+    },
+  });
+}
+
+/**
+ * Set the same status on many candidates — the toolbar's "Accept all".
+ *
+ * One optimistic write for the whole list, then the PATCHes in parallel. Firing
+ * the per-candidate mutation N times instead would have N optimistic handlers
+ * each snapshotting a cache the previous one just changed, so a rollback would
+ * restore whichever snapshot happened to be taken last.
+ */
+export function useSetAllConventionStatuses(repoId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: ConventionStatus }) => {
+      await Promise.all(
+        ids.map((id) => api.patch<ConventionCandidate>(`/conventions/${id}`, { status })),
+      );
+    },
+    onMutate: async ({ ids, status }) => {
+      await qc.cancelQueries({ queryKey: keys.view(repoId) });
+      const previous = qc.getQueryData<ConventionsView>(keys.view(repoId));
+      if (previous) {
+        const target = new Set(ids);
+        qc.setQueryData<ConventionsView>(keys.view(repoId), {
+          ...previous,
+          candidates: previous.candidates.map((c) => (target.has(c.id) ? { ...c, status } : c)),
+        });
+      }
+      return { previous };
+    },
+    onError: (_e, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(keys.view(repoId), ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.view(repoId) }),
+  });
+}
+
+/**
+ * The merged draft, built on the SERVER from the accepted candidates.
+ *
+ * `enabled` is the modal being open, and the draft is never cached across
+ * openings (`gcTime: 0`): accepting one more candidate between two openings has
+ * to produce a different body, and a stale draft would silently create a skill
+ * missing a rule the user just accepted.
+ */
+export function useConventionSkillDraft(repoId: string | null | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.draft(repoId),
+    queryFn: () => api.get<ConventionSkillDraft>(`/repos/${repoId}/conventions/skill-draft`),
+    enabled: !!repoId && enabled,
+    gcTime: 0,
+    staleTime: 0,
+  });
+}
+
+/** Persist the edited draft. The server stamps the candidates it came from. */
+export function useCreateConventionSkill(repoId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (draft: ConventionSkillDraft) =>
+      api.post<Skill>(`/repos/${repoId}/conventions/skill`, draft),
+    onSuccess: () => {
+      // The candidates now carry `skill_id`, and the Skills grid has a new card.
+      qc.invalidateQueries({ queryKey: keys.view(repoId) });
+      qc.invalidateQueries({ queryKey: ["skills"] });
     },
   });
 }

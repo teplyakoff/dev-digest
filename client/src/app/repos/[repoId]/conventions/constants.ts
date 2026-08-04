@@ -1,4 +1,4 @@
-import type { ConventionCategory } from "@devdigest/shared";
+import type { ConventionCategory, SkillType } from "@devdigest/shared";
 
 /**
  * The category list, as VALUES.
@@ -40,3 +40,20 @@ export const HIGH_CONFIDENCE = 0.85;
 export const SKELETON_ROWS = 3;
 
 export const EDIT_MODAL_WIDTH = 620;
+export const CREATE_MODAL_WIDTH = 760;
+
+/**
+ * Skill types, as values — same reason as `CATEGORY_KEYS`: importing the
+ * `SkillType` Zod enum would pull `zod` into the shared chunk.
+ */
+export const SKILL_TYPE_OPTIONS = [
+  "rubric",
+  "convention",
+  "security",
+  "custom",
+] as const satisfies readonly SkillType[];
+
+/** Compile-time exhaustiveness, as above. */
+type AllSkillTypesCovered =
+  Exclude<SkillType, (typeof SKILL_TYPE_OPTIONS)[number]> extends never ? true : never;
+export const SKILL_TYPES_ARE_EXHAUSTIVE: AllSkillTypesCovered = true;

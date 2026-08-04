@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, FormField, Icon, Modal, SelectInput, TextInput } from "@devdigest/ui";
 import type { SkillImportPreview, SkillType } from "@devdigest/shared";
-import { SkillBodyEditor } from "../../../SkillBodyEditor/SkillBodyEditor";
+import { SkillBodyEditor } from "@/components/skill-body-editor/SkillBodyEditor";
 import { ApiError } from "../../../../../../lib/api";
 import { useImportConfirm, useImportPreview } from "../../../../../../lib/hooks/skills";
 import { useToast } from "../../../../../../lib/toast";

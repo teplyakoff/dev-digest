@@ -17,6 +17,7 @@ import {
   useConventions,
   useExtractConventions,
   usePatchConvention,
+  useSetAllConventionStatuses,
 } from "@/lib/hooks/conventions";
 import { useResyncRepoIntel } from "@/lib/hooks/repo-intel";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
@@ -25,6 +26,7 @@ import { SKELETON_ROWS } from "./constants";
 import { acceptedCount, dropSummary } from "./helpers";
 import { s } from "./styles";
 import { ConventionCard } from "./_components/ConventionCard/ConventionCard";
+import { CreateSkillModal } from "./_components/CreateSkillModal/CreateSkillModal";
 import { EditConventionModal } from "./_components/EditConventionModal/EditConventionModal";
 
 export default function ConventionsPage() {
@@ -37,9 +39,11 @@ export default function ConventionsPage() {
   const { data, isLoading, isError, refetch } = useConventions(repoId);
   const extract = useExtractConventions(repoId);
   const patch = usePatchConvention(repoId);
+  const setAll = useSetAllConventionStatuses(repoId);
   const resync = useResyncRepoIntel(repoId);
 
   const [editing, setEditing] = React.useState<ConventionCandidate | null>(null);
+  const [creating, setCreating] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
   const [scanError, setScanError] = React.useState<{ message: string; code?: string } | null>(null);
 
@@ -48,6 +52,7 @@ export default function ConventionsPage() {
   const scan = data?.scan ?? null;
   const candidates = data?.candidates ?? [];
   const accepted = acceptedCount(candidates);
+  const allAccepted = candidates.length > 0 && accepted === candidates.length;
 
   const runExtraction = async () => {
     setScanError(null);
@@ -93,6 +98,15 @@ export default function ConventionsPage() {
           onSave={saveEdit}
           saving={patch.isPending}
           error={editError}
+        />
+      )}
+
+      {creating && (
+        <CreateSkillModal
+          repoId={repoId}
+          repoFullName={activeRepo?.full_name}
+          acceptedCount={accepted}
+          onClose={() => setCreating(false)}
         />
       )}
 
@@ -203,9 +217,34 @@ export default function ConventionsPage() {
         {candidates.length > 0 && (
           <>
             <div style={s.toolbar}>
+              <Button
+                kind="ghost"
+                size="sm"
+                icon={allAccepted ? "X" : "Check"}
+                disabled={setAll.isPending}
+                onClick={() =>
+                  setAll.mutate({
+                    ids: candidates.map((c) => c.id),
+                    status: allAccepted ? "pending" : "accepted",
+                  })
+                }
+              >
+                {allAccepted ? t("toolbar.deselectAll") : t("toolbar.acceptAll")}
+              </Button>
               <span style={s.toolbarCount}>
                 {t("toolbar.accepted", { accepted, total: candidates.length })}
               </span>
+              <div style={s.toolbarRight}>
+                <Button
+                  kind="primary"
+                  size="sm"
+                  icon="Sparkles"
+                  disabled={accepted === 0}
+                  onClick={() => setCreating(true)}
+                >
+                  {t("toolbar.createSkill")}
+                </Button>
+              </div>
             </div>
             {candidates.map((c) => (
               <ConventionCard
