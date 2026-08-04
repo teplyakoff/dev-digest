@@ -97,11 +97,22 @@ export const DEFAULT_EXTRACTION_PROVIDER = 'openrouter' as const;
 export const DEFAULT_EXTRACTION_MODEL = 'deepseek/deepseek-v4-flash';
 
 /**
- * A ceiling on the answer, not on the reading. 20 candidates of a rule, a path
- * and two integers is a few thousand tokens; anything beyond that is the model
- * writing prose it was told not to write.
+ * Headroom, not a budget.
+ *
+ * This was 4 000, reasoned from the content alone: 20 candidates of a rule, a
+ * path and two integers is barely 1 500 tokens. That reasoning was wrong,
+ * because it priced only the answer and not the model's way of getting there. A
+ * live scan hit the ceiling mid-array, the JSON came back unparseable, the
+ * provider re-prompted, and the model complied by returning 4 candidates
+ * instead of 20 — at more than double the output tokens.
+ *
+ * The failure mode is what makes the number matter: truncation does NOT surface
+ * as an error, it surfaces as a quieter, worse result. `finish_reason: length`
+ * is indistinguishable from a schema violation by the time the repair path sees
+ * it. So this is set well above any plausible answer. Output tokens are billed
+ * as used, so unused headroom is free.
  */
-export const EXTRACTION_MAX_TOKENS = 4_000;
+export const EXTRACTION_MAX_TOKENS = 16_000;
 
 /**
  * The request is synchronous, so this bound is what stops a hung provider from

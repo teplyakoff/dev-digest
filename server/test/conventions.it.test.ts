@@ -270,10 +270,69 @@ d('conventions module', () => {
     ).json();
     const again = second.candidates.find((c: { rule: string }) => c.rule === 'A rule to reject');
     expect(again.status).toBe('rejected');
-    // The untouched one comes back pending, not silently accepted.
+    // The untouched one comes back pending, not silently accepted — and note
+    // WHY, because it is easy to "fix" this into a bug: both candidates here
+    // cite the same evidence span, so the location is ambiguous and the
+    // location-based carry-forward deliberately refuses to fire. Were it to
+    // fire, this rule would inherit the OTHER rule's rejection.
     expect(
       second.candidates.find((c: { rule: string }) => c.rule === proposed().rule).status,
     ).toBe('pending');
+  });
+
+  it('carries a decision forward when the model REWORDS the same rule', async () => {
+    // The regression this exists for: matching on rule text alone looked fine
+    // in a test where the fixture repeated itself, and carried NOTHING forward
+    // on a real re-scan, because the model reworded every rule. 20 decisions
+    // were lost in one click. Same evidence location = same convention.
+    const app = await makeApp({ candidates: [proposed()] });
+    const first = (
+      await app.inject({ method: 'POST', url: `/repos/${repoId}/conventions/extract` })
+    ).json();
+    await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${first.candidates[0].id}`,
+      payload: { status: 'rejected' },
+    });
+
+    const reworded = await makeApp({
+      candidates: [proposed({ rule: 'Handlers should hand back ok() and never raise' })],
+    });
+    const second = (
+      await reworded.inject({ method: 'POST', url: `/repos/${repoId}/conventions/extract` })
+    ).json();
+    expect(second.candidates[0].rule).toBe('Handlers should hand back ok() and never raise');
+    expect(second.candidates[0].status).toBe('rejected');
+  });
+
+  it('does not resurrect a candidate as unexported after a re-scan', async () => {
+    // `skill_id` rides along with the status. Forgetting it erased the record
+    // of what had already been merged into a skill.
+    const app = await makeApp({ candidates: [proposed()] });
+    const view = (
+      await app.inject({ method: 'POST', url: `/repos/${repoId}/conventions/extract` })
+    ).json();
+    await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${view.candidates[0].id}`,
+      payload: { status: 'accepted' },
+    });
+    const draft = (
+      await app.inject({ method: 'GET', url: `/repos/${repoId}/conventions/skill-draft` })
+    ).json();
+    const skill = (
+      await app.inject({
+        method: 'POST',
+        url: `/repos/${repoId}/conventions/skill`,
+        payload: { ...draft, name: `conv-${Math.random().toString(36).slice(2, 8)}` },
+      })
+    ).json();
+
+    const after = (
+      await app.inject({ method: 'POST', url: `/repos/${repoId}/conventions/extract` })
+    ).json();
+    expect(after.candidates[0].skill_id).toBe(skill.id);
+    expect(after.candidates[0].status).toBe('accepted');
   });
 
   it('refuses a skill draft until something is accepted', async () => {

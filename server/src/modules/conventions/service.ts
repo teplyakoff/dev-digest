@@ -19,6 +19,7 @@ import {
   DEFAULT_EXTRACTION_PROVIDER,
   EXTRACTION_MAX_TOKENS,
   EXTRACTION_TIMEOUT_MS,
+  MAX_CANDIDATES,
   MAX_CONFIG_BYTES,
   MAX_CONFIG_FILES,
   MAX_PACKAGE_DIRS,
@@ -117,18 +118,58 @@ export class ConventionsService {
       timeoutMs: EXTRACTION_TIMEOUT_MS,
     });
 
-    const { kept, dropped } = verifyCandidates(result.data.candidates, block.sampled);
+    // The ceiling is applied HERE, not in the schema. A model that answers with
+    // 22 candidates has given a good answer that is one over our preference;
+    // rejecting it at the schema would re-prompt and get a much worse one back.
+    const proposed = result.data.candidates.slice(0, MAX_CANDIDATES);
+    const { kept, dropped } = verifyCandidates(proposed, block.sampled);
 
     // Carry decisions across the re-scan BEFORE the old rows go. Without this,
     // every scan re-proposes what you already rejected — which is the behaviour
     // that gets a suggestion feature switched off.
+    //
+    // `skill_id` rides along with the status. A re-scan that forgot it erased
+    // the record of what had already been exported, so a candidate merged into
+    // a skill came back looking untouched.
+    //
+    // Matching is by rule text AND, failing that, by evidence location. Rule
+    // text alone proved far weaker than it looks: one live re-scan reworded
+    // every rule and carried NOTHING forward, losing 20 decisions. The same
+    // convention re-detected in the same place is the same convention, however
+    // the model phrased it this time.
     const previous = await this.repo.listCandidates(workspaceId, repoId);
-    const priorStatus = new Map<string, ConventionStatus>();
+
+    // How many prior candidates cited each location, counted over ALL of them.
+    // A location only identifies a convention when exactly one rule was found
+    // there; models routinely derive several distinct rules from one span (four
+    // from a single import block, in one observed scan). Inheriting a decision
+    // through an ambiguous location would apply one rule's rejection to
+    // another's, which is worse than not carrying it at all.
+    const citations = new Map<string, number>();
     for (const row of previous) {
-      if (row.status !== 'pending') {
-        priorStatus.set(normaliseRule(row.rule), row.status as ConventionStatus);
-      }
+      const where = evidenceKey(row.evidencePath, row.evidenceStartLine);
+      if (where) citations.set(where, (citations.get(where) ?? 0) + 1);
     }
+
+    const priorByRule = new Map<string, PriorDecision>();
+    const priorByEvidence = new Map<string, PriorDecision>();
+    for (const row of previous) {
+      if (row.status === 'pending' && row.skillId === null) continue;
+      const decision: PriorDecision = {
+        status: row.status as ConventionStatus,
+        skillId: row.skillId,
+      };
+      priorByRule.set(normaliseRule(row.rule), decision);
+      const where = evidenceKey(row.evidencePath, row.evidenceStartLine);
+      if (where && citations.get(where) === 1) priorByEvidence.set(where, decision);
+    }
+
+    const priorFor = (c: (typeof kept)[number]): PriorDecision | undefined => {
+      const byRule = priorByRule.get(normaliseRule(c.rule));
+      if (byRule) return byRule;
+      const where = evidenceKey(c.evidence_path, c.evidence_start_line);
+      return where ? priorByEvidence.get(where) : undefined;
+    };
 
     const sampledPaths = [...block.sampled.keys()];
     await this.container.db.transaction(async (tx) => {
@@ -139,7 +180,7 @@ export class ConventionsService {
           indexedSha: indexState.lastIndexedSha || 'HEAD',
           sampledFiles: sampledPaths,
           configFiles,
-          proposed: result.data.candidates.length,
+          proposed: proposed.length,
           kept: kept.length,
           dropped,
           provider,
@@ -162,7 +203,8 @@ export class ConventionsService {
         evidenceEndLine: c.evidence_end_line,
         evidenceSnippet: c.evidence_snippet,
         confidence: c.confidence,
-        status: priorStatus.get(normaliseRule(c.rule)) ?? 'pending',
+        status: priorFor(c)?.status ?? 'pending',
+        skillId: priorFor(c)?.skillId ?? null,
       }));
       await this.repo.insertCandidates(values, tx);
     });
@@ -313,6 +355,21 @@ export class ConventionsService {
     if (override) return { provider: override.provider, model: override.model };
     return { provider: DEFAULT_EXTRACTION_PROVIDER, model: DEFAULT_EXTRACTION_MODEL };
   }
+}
+
+/** What a re-scan carries forward from the candidate it replaces. */
+interface PriorDecision {
+  status: ConventionStatus;
+  skillId: string | null;
+}
+
+/**
+ * Identity of a convention by where it was found. Start line only — a re-scan
+ * routinely re-cites the same rule with a span one or two lines wider, and
+ * keying on the whole range would call that a different convention.
+ */
+function evidenceKey(path: string | null, startLine: number | null): string | null {
+  return path ? `${path}:${startLine ?? 0}` : null;
 }
 
 // Re-exported for the tests that build a `SampledFile` fixture.

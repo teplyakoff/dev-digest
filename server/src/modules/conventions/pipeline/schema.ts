@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { ConventionCategory } from '@devdigest/shared';
-import { MAX_CANDIDATES } from '../constants.js';
 
 /**
  * The model-facing extraction schema. Deliberately NOT a shared contract: this
@@ -27,8 +26,22 @@ export const ExtractedConvention = z.object({
 });
 export type ExtractedConvention = z.infer<typeof ExtractedConvention>;
 
+/**
+ * No `.max()` here on purpose, and the omission is load-bearing.
+ *
+ * It used to be `.max(MAX_CANDIDATES)`, which turned "slightly too many" into
+ * "far too few": a model that answered with 22 candidates failed schema
+ * validation outright, the provider re-prompted with the error, and the model
+ * complied by being drastically briefer. One live scan went 20 candidates → 4
+ * that way, at DOUBLE the output tokens — more work, less result, and no error
+ * anywhere to say so.
+ *
+ * A ceiling is a preference of ours, not a fact about a valid answer. It is
+ * applied by slicing after the parse (`service.ts`), where being over it costs
+ * nothing.
+ */
 export const ConventionExtraction = z.object({
-  candidates: z.array(ExtractedConvention).max(MAX_CANDIDATES),
+  candidates: z.array(ExtractedConvention),
 });
 export type ConventionExtraction = z.infer<typeof ConventionExtraction>;
 
