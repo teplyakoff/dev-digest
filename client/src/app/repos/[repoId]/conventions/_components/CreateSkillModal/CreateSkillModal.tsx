@@ -41,24 +41,26 @@ export function CreateSkillModal({
   const { data: draft, isLoading, isError } = useConventionSkillDraft(repoId, true);
   const create = useCreateConventionSkill(repoId);
 
+  // `null` until the user edits something; the server's draft is what shows
+  // until then. Derived, not copied in by an effect — an effect would cost an
+  // extra render and add a state machine ("has it been seeded yet?") where a
+  // fallback does the same job. Once `edited` is set, a late refetch of the
+  // draft cannot overwrite work in progress.
   const [edited, setEdited] = React.useState<ConventionSkillDraft | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-
-  // Seed the form from the server's draft exactly once it arrives. Keying off
-  // the draft object rather than assigning during render keeps a later refetch
-  // from throwing away edits in progress.
-  React.useEffect(() => {
-    if (draft && edited === null) setEdited(draft);
-  }, [draft, edited]);
+  const current = edited ?? draft ?? null;
 
   const patch = (over: Partial<ConventionSkillDraft>) =>
-    setEdited((prev) => (prev ? { ...prev, ...over } : prev));
+    setEdited((prev) => {
+      const base = prev ?? draft;
+      return base ? { ...base, ...over } : prev;
+    });
 
   const submit = async () => {
-    if (!edited) return;
+    if (!current) return;
     setError(null);
     try {
-      const skill = await create.mutateAsync(edited);
+      const skill = await create.mutateAsync(current);
       onClose();
       // Straight to the skill, because the next step — linking it to an agent
       // from the Skills tab — starts there.
@@ -72,13 +74,16 @@ export function CreateSkillModal({
   };
 
   const canSubmit =
-    !!edited && edited.name.trim().length >= 2 && edited.body.trim().length > 0;
+    !!current &&
+    current.name.trim().length >= 2 &&
+    current.body.trim().length > 0 &&
+    current.description.trim().length > 0;
 
   return (
     <Modal
       width={CREATE_MODAL_WIDTH}
       title={t("create.title")}
-      subtitle={edited?.name}
+      subtitle={current?.name}
       onClose={onClose}
       footer={
         <div style={s.footer}>
@@ -111,7 +116,7 @@ export function CreateSkillModal({
       {isLoading && <div style={s.loading}>{t("create.loading")}</div>}
       {isError && <div style={s.loading}>{t("create.failed")}</div>}
 
-      {edited && (
+      {current && (
         <div style={s.body}>
           <div style={s.banner}>
             <Icon.Wrench size={15} style={s.bannerIcon} />
@@ -130,17 +135,17 @@ export function CreateSkillModal({
           </div>
 
           <FormField label={t("create.name")} required hint={t("create.nameHint")}>
-            <TextInput value={edited.name} onChange={(v) => patch({ name: v })} mono />
+            <TextInput value={current.name} onChange={(v) => patch({ name: v })} mono />
           </FormField>
-          <FormField label={t("create.description")}>
-            <TextInput value={edited.description} onChange={(v) => patch({ description: v })} />
+          <FormField label={t("create.description")} required>
+            <TextInput value={current.description} onChange={(v) => patch({ description: v })} />
           </FormField>
 
           <div style={s.splitRow}>
             <div style={s.splitCell}>
               <FormField label={t("create.type")}>
                 <SelectInput
-                  value={edited.type}
+                  value={current.type}
                   onChange={(v) => patch({ type: v as SkillType })}
                   options={[...SKILL_TYPE_OPTIONS]}
                 />
@@ -150,8 +155,8 @@ export function CreateSkillModal({
               <FormField label={t("create.enabled")} hint={t("create.enabledHint")}>
                 <div style={s.toggleCell}>
                   <Toggle
-                    on={edited.enabled}
-                    onChange={() => patch({ enabled: !edited.enabled })}
+                    on={current.enabled}
+                    onChange={() => patch({ enabled: !current.enabled })}
                     size={17}
                   />
                 </div>
@@ -161,7 +166,7 @@ export function CreateSkillModal({
 
           <FormField label={t("create.body")} required hint={t("create.bodyHint")}>
             <SkillBodyEditor
-              value={edited.body}
+              value={current.body}
               onChange={(v) => patch({ body: v })}
               rows={16}
               ariaLabel={t("create.body")}

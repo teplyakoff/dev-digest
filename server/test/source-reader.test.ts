@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FsSourceReader } from '../src/adapters/source/fs-reader.js';
@@ -29,6 +29,10 @@ beforeAll(async () => {
   // check without a trailing separator would wave through.
   await mkdir(`${root}-evil`, { recursive: true });
   await writeFile(join(`${root}-evil`, 'b.ts'), 'stolen', 'utf8');
+  // What a hostile repo actually ships: a file with an expected name whose
+  // contents live outside the clone. Every string-level check passes it.
+  await symlink(join(outside, 'secret.txt'), join(root, 'tsconfig.json'));
+  await symlink(outside, join(root, 'escape-dir'));
 });
 
 afterAll(async () => {
@@ -71,5 +75,23 @@ describe('FsSourceReader', () => {
   it('allows . and .. that stay inside', async () => {
     expect(await reader.read(root, './src/a.ts')).toBe('const a = 1;\n');
     expect(await reader.read(root, 'src/../src/a.ts')).toBe('const a = 1;\n');
+  });
+
+  it('refuses a SYMLINK that points outside the clone', async () => {
+    // The case a lexical check cannot see, and the one that matters: a repo is
+    // untrusted content, `tsconfig.json` is a name the config allowlist asks
+    // for by default, and whatever it resolves to would reach a model prompt
+    // and the Conventions page as verified "evidence".
+    expect(await reader.read(root, 'tsconfig.json')).toBeNull();
+  });
+
+  it('refuses a path that traverses a symlinked directory out of the clone', async () => {
+    expect(await reader.read(root, 'escape-dir/secret.txt')).toBeNull();
+  });
+
+  it('still reads normally when the clone root is itself behind a symlink', async () => {
+    // Not hypothetical: on macOS /tmp is a link to /private/tmp, so resolving
+    // the target without also resolving the root would reject every read here.
+    expect(await reader.read(root, 'src/a.ts')).toBe('const a = 1;\n');
   });
 });

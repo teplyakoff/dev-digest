@@ -95,6 +95,19 @@ describe("CreateSkillModal", () => {
     expect(screen.getByRole("button", { name: /Create skill/ })).toBeDisabled();
   });
 
+  it.each([
+    ["body", () => screen.getByLabelText("Skill body")],
+    ["description", () => screen.getByDisplayValue(DRAFT.description)],
+  ])("blocks submit on an empty %s", (_field, find) => {
+    // The server now answers 422 for both (ConventionSkillDraft carries .min(1)
+    // to match CreateSkillBody). This keeps the client from offering a submit
+    // that can only fail — an empty ENABLED skill used to be creatable here and
+    // rendered as an empty block in every linked agent's prompt.
+    renderModal();
+    fireEvent.change(find(), { target: { value: "  " } });
+    expect(screen.getByRole("button", { name: /Create skill/ })).toBeDisabled();
+  });
+
   it("shows a loading line rather than an empty form while the draft is in flight", () => {
     draftState.data = undefined;
     draftState.isLoading = true;

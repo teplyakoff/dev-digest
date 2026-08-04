@@ -409,10 +409,22 @@ export type ConventionsView = z.infer<typeof ConventionsView>;
  */
 export const ConventionSkillDraft = z.object({
   name: SkillName,
-  description: z.string(),
+  /**
+   * `.min(1)` on both text fields because this schema is not only a response —
+   * it is the REQUEST body of `POST /repos/:id/conventions/skill`, which is a
+   * second way into skill creation. Without them that route accepted an empty
+   * body and an empty description where `POST /skills` (`CreateSkillBody`)
+   * answers 422, and the row landed `enabled: true` — an empty block rendered
+   * into every linked agent's prompt, indistinguishable in the UI from a skill
+   * that is merely broken.
+   *
+   * Keep these in step with `CreateSkillBody` in `modules/skills/routes.ts`.
+   * Two doors to one write must not validate differently.
+   */
+  description: z.string().min(1),
   type: SkillType,
   enabled: z.boolean(),
-  body: z.string(),
+  body: z.string().min(1),
   candidate_ids: z.array(z.string()),
 });
 export type ConventionSkillDraft = z.infer<typeof ConventionSkillDraft>;
