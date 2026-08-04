@@ -1,4 +1,5 @@
 import type { Container } from '../../platform/container.js';
+import type { DbTx } from '../../db/client.js';
 import type {
   Skill,
   SkillImportPreview,
@@ -71,25 +72,34 @@ export class SkillsService {
    * Create a skill and snapshot its body as v1 — one business fact, so one
    * transaction. A skill whose v1 snapshot is missing would make its own
    * version history start at v2 and read as if a revision had been deleted.
+   *
+   * `tx` lets a CALLER's transaction absorb this one. The Conventions Extractor
+   * creates a skill and stamps the candidates it came from, and a skill that
+   * exists while its candidates still read `skill_id: null` would make the
+   * "already exported" state a lie. Opening a second transaction here would give
+   * two transactions and no atomicity — which reads exactly like code that
+   * works (db/client.ts).
    */
-  async create(workspaceId: string, input: CreateSkillInput): Promise<Skill> {
+  async create(workspaceId: string, input: CreateSkillInput, tx?: DbTx): Promise<Skill> {
+    const write = async (invoker: DbTx) => {
+      const created = await this.repo.insert(
+        {
+          workspaceId,
+          name: input.name,
+          description: input.description,
+          type: input.type,
+          source: input.source ?? 'manual',
+          body: input.body,
+          ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+        },
+        invoker,
+      );
+      await this.repo.snapshotVersion(created.id, INITIAL_SKILL_VERSION, created.body, invoker);
+      return created;
+    };
+
     try {
-      const row = await this.db.transaction(async (tx) => {
-        const created = await this.repo.insert(
-          {
-            workspaceId,
-            name: input.name,
-            description: input.description,
-            type: input.type,
-            source: input.source ?? 'manual',
-            body: input.body,
-            ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
-          },
-          tx,
-        );
-        await this.repo.snapshotVersion(created.id, INITIAL_SKILL_VERSION, created.body, tx);
-        return created;
-      });
+      const row = tx ? await write(tx) : await this.db.transaction(write);
       return toSkillDto(row);
     } catch (err) {
       // The unique index is the guard; this turns tripping it into an answer a

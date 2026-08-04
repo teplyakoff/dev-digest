@@ -7,6 +7,8 @@ import type {
   SourceReader,
   Embedder,
   LLMProvider,
+  FeatureModelChoice,
+  FeatureModelId,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -27,6 +29,8 @@ import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
+import { SkillsService } from '../modules/skills/service.js';
+import { getFeatureModelOverride } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
@@ -77,6 +81,7 @@ export class Container {
   // `container.agentsRepo` instead of reaching into another module's folder.
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
+  private _skills?: SkillsService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -131,6 +136,36 @@ export class Container {
     if (this.overrides.repoIntel) return this.overrides.repoIntel;
     this._repoIntel ??= new RepoIntelService(this);
     return this._repoIntel;
+  }
+
+  /**
+   * The skills service, shared across features.
+   *
+   * Here for the same reason `agentsRepo` and `reviewRepo` are: a second module
+   * needs skills, and onion §11 makes a sibling module private — the container
+   * IS the sanctioned route. The Conventions Extractor creates a skill from
+   * accepted candidates and must not re-implement the v1 snapshot or the
+   * duplicate-name translation to do it.
+   */
+  get skills(): SkillsService {
+    return (this._skills ??= new SkillsService(this));
+  }
+
+  /**
+   * A workspace's chosen provider+model for one system feature, or `undefined`
+   * when it has not chosen. Exposed here rather than imported from
+   * `modules/settings` because that is a sibling module to every feature that
+   * asks — the composition root is allowed to know about both.
+   *
+   * Returns the OVERRIDE only. Callers with a static default use the registry;
+   * callers with their own dynamic default (conventions) need to see the
+   * absence, which `resolveFeatureModel` would hide behind the registry value.
+   */
+  async featureModel(
+    workspaceId: string,
+    id: FeatureModelId,
+  ): Promise<FeatureModelChoice | undefined> {
+    return getFeatureModelOverride(this, workspaceId, id);
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

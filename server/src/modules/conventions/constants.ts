@@ -58,3 +58,30 @@ export const CONFIG_FAMILIES: readonly (readonly string[])[] = [
  * and `dependencies` alone can be tens of kB.
  */
 export const PACKAGE_JSON_KEYS = ['scripts', 'dependencies', 'devDependencies'] as const;
+
+/**
+ * This module's OWN default model, used when the workspace has not chosen one.
+ *
+ * Deliberately not the `conventions` entry in `FEATURE_MODELS`, which names a
+ * frontier model: extraction is a bulk read over ~15 files that runs again on
+ * every re-scan, so its unconfigured cost has to be small.
+ * `settings/feature-models.ts` reserves exactly this path for "callers that keep
+ * their own dynamic default (e.g. conventions)".
+ */
+export const DEFAULT_EXTRACTION_PROVIDER = 'openrouter' as const;
+export const DEFAULT_EXTRACTION_MODEL = 'deepseek/deepseek-v4-flash';
+
+/**
+ * A ceiling on the answer, not on the reading. 20 candidates of a rule, a path
+ * and two integers is a few thousand tokens; anything beyond that is the model
+ * writing prose it was told not to write.
+ */
+export const EXTRACTION_MAX_TOKENS = 4_000;
+
+/**
+ * The request is synchronous, so this bound is what stops a hung provider from
+ * hanging the HTTP request. `server/INSIGHTS.md` records real 10-minute review
+ * calls on openrouter — those are full-diff reviews; this call reads a capped
+ * 120 kB and has no business taking minutes.
+ */
+export const EXTRACTION_TIMEOUT_MS = 90_000;

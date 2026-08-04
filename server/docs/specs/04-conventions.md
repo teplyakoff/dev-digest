@@ -184,15 +184,30 @@ Failure modes are answers, not 500s:
   `409 { code: 'not_indexed' }`, which the page renders with a "Re-index" CTA
 - provider key missing → the existing `ValidationError` path, unchanged
 
-`POST …/skill` creates the skill through `SkillsService.create` with
-`source: 'extracted'` — the first use of a value the contract has always had —
-and stamps `skill_id` on the merged candidates **in the same transaction**. A
-skill that exists while its candidates still read `skill_id: null` would make the
-"already exported" state a lie.
+`POST …/skill` creates the skill with `source: 'extracted'` — the first use of a
+value the contract has always had — and stamps `skill_id` on the merged
+candidates **in the same transaction**. A skill that exists while its candidates
+still read `skill_id: null` would make the "already exported" state a lie.
+
+It reaches skills through **`container.skills`**, not by importing
+`../skills/service.js`. Onion §11 makes a sibling module private and the lint
+rule enforces it; the container is the sanctioned route, exactly as `agentsRepo`
+and `reviewRepo` already are. Re-implementing the v1 snapshot and the
+duplicate-name translation locally to avoid the import would have been the worse
+trade.
+
+That transaction needed one change on the skills side: `SkillsService.create`
+now takes an optional `tx` and uses it instead of opening its own. Two
+transactions is not atomicity, and it reads exactly like code that works
+(`db/client.ts`).
 
 Duplicate names are not special-cased here: `SkillsService` already throws
 `ConflictError` with a message a person can act on, and the modal is the right
 place to rename.
+
+The **service trusts its own accepted set, not the `candidate_ids` the client
+echoes back**. A client holding a stale draft would otherwise stamp — and
+silently include — a candidate that has since been rejected.
 
 ## Pipeline
 
@@ -271,11 +286,18 @@ export const ConventionExtraction = z.object({
 });
 ```
 
-Model choice: `getFeatureModelOverride(container, workspaceId, 'conventions')`
-first, falling back to the module's own cheap default — the exact path
+Model choice: **`container.featureModel(workspaceId, 'conventions')`** first,
+falling back to the module's own cheap default (`openrouter` /
+`deepseek/deepseek-v4-flash` in `constants.ts`) — the exact path
 `feature-models.ts` reserves for "callers that keep their own dynamic default
 (e.g. conventions)". `resolveFeatureModel` would substitute the registry's
-`gpt-5.4`, which is not a cheap model.
+`gpt-5.4`, which is not a cheap model, and extraction re-runs on every re-scan.
+
+The accessor is on the container for the same §11 reason as skills:
+`modules/settings/feature-models.ts` is a sibling to every feature that asks, and
+the composition root is the layer allowed to know about both. It returns the
+override ONLY — a caller with its own default has to be able to see the absence,
+which `resolveFeatureModel` hides behind the registry value.
 
 **Prompt-injection defense.** Sampled repo files are untrusted input by the same
 definition the review path uses, so they are wrapped in `<untrusted>…</untrusted>`
@@ -380,19 +402,35 @@ fewer thing that can fail for a reason unrelated to the code.)
 - `source-reader.test.ts` (8) — every failure reads `null`; `..`, absolute paths
   and a sibling directory sharing the clone's name prefix are all refused, while
   `./` and an inward `..` still resolve.
-- `skill-draft.test.ts` — a rejected candidate's rule text does not occur in the
-  body; a pending one does not either; two categories render as two sections.
+- `conventions-helpers.test.ts` (9) — the merged body carries each rule with its
+  verified evidence, groups by category, names the repo and the short SHA, tells
+  the reviewing model not to flag mere stylistic difference, and fences a snippet
+  that itself contains backticks (real code does — a three-backtick fence would
+  close early and spill the rest of the snippet into the skill as instructions).
 
-Integration (`conventions.it.test.ts`, real Postgres, `MockLLMProvider` with a
-`structuredBySchema.ConventionExtraction` fixture):
+`reviewer-core/test/prompt.test.ts` gains one assertion: the exported
+`INJECTION_GUARD` is byte-identical to what `assemblePrompt` appends, so the
+export cannot quietly fork into a weaker second version.
 
-- extract → `GET` returns the same view; `proposed`/`kept`/`dropped` on the scan
-  row match what the mock returned;
-- `PATCH` accept → `skill-draft` contains it; `PATCH` reject → it does not;
-- `POST …/skill` creates a skill with `source: 'extracted'` and stamps `skill_id`
-  on exactly the accepted candidates;
-- re-extract preserves a prior `rejected` decision for the same rule text;
-- extract on a repo with no index → `409 not_indexed`, no scan row written.
+Integration (`conventions.it.test.ts`, 10 tests, real Postgres, `MockLLMProvider`
+with a `structuredBySchema.ConventionExtraction` fixture and `MockSourceReader`
+as the clone):
+
+- extract → the stored `evidence_snippet` is byte-identical to the fixture file's
+  lines, and the fixture supplied no snippet at all;
+- the config allowlist is sampled and `package.json` arrives reduced;
+- two ungrounded candidates are dropped and both reasons land on the scan row —
+  `proposed: 3, kept: 1`;
+- accept / reject / edit, including that editing the rule does not un-accept it;
+- re-extract preserves a prior `rejected` decision while leaving an untouched
+  candidate `pending`;
+- `skill-draft` is 422 until something is accepted, then contains the accepted
+  rule and **not** the rejected one;
+- `POST …/skill` creates a skill with `source: 'extracted'`, snapshots v1, and
+  stamps `skill_id` on exactly the accepted candidate;
+- extract on a repo with no index → `409 not_indexed`, and **no scan row** — a
+  scan that sampled nothing is not a scan;
+- `GET` before the first scan → `{ scan: null, candidates: [] }`.
 
 Prompt (`reviewer-core`): one assertion that the exported `INJECTION_GUARD` is
 the same string `assemblePrompt` appends, so the export cannot drift into a copy.

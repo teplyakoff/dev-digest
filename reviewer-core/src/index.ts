@@ -15,6 +15,10 @@
 export {
   assemblePrompt,
   wrapUntrusted,
+  // The one shared injection guard. Exported for the second untrusted-input
+  // path (the server's Conventions Extractor, which samples repo files without
+  // going through assemblePrompt) so there stays exactly one of these.
+  INJECTION_GUARD,
   type PromptParts,
   type AssembledPrompt,
 } from './prompt.js';

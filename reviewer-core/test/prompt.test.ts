@@ -4,7 +4,7 @@
  * truncation, and ordering (before the diff).
  */
 import { describe, it, expect } from 'vitest';
-import { assemblePrompt } from '../src/prompt.js';
+import { assemblePrompt, INJECTION_GUARD } from '../src/prompt.js';
 
 function userOf(parts: Parameters<typeof assemblePrompt>[0]): string {
   const { messages } = assemblePrompt(parts);
@@ -29,6 +29,15 @@ describe('assemblePrompt — shared injection guard (server + CI)', () => {
     expect(sys).toMatch(/test fixture|intentional|demo/i);
     expect(sys).toMatch(/never reduce|never .*descope|REPORT it/i);
     expect(sys).toMatch(/any language/i);
+  });
+
+  it('exports the SAME string it appends, so a second caller cannot fork it', () => {
+    // INJECTION_GUARD is exported because the server's Conventions Extractor
+    // feeds untrusted repo files to a model WITHOUT going through
+    // assemblePrompt, and the invariant is that exactly one such rule exists.
+    // An export that drifted from what assemblePrompt uses would silently give
+    // that second path a weaker guard — which is the failure this pins.
+    expect(sys).toBe(`AGENT-SYS\n\n${INJECTION_GUARD}`);
   });
 });
 
