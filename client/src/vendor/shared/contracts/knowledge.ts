@@ -219,16 +219,10 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
-// ---- Conventions ----
-export const ConventionCandidate = z.object({
-  id: z.string(),
-  rule: z.string(),
-  evidence_path: z.string(),
-  evidence_snippet: z.string(),
-  confidence: z.number().min(0).max(1),
-  accepted: z.boolean(),
-});
-export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
+// The Conventions block used to sit here. It moved to the bottom of the file
+// because `ConventionScan.provider` reuses the `Provider` enum declared below —
+// a Zod object literal evaluates on import, so referring to `Provider` from
+// above it is a temporal-dead-zone crash at module load, not a type error.
 
 // ---- Agents ----
 // 'openrouter' routes through the OpenAI-compatible API (OpenAIProvider with a
@@ -301,3 +295,118 @@ export const AgentVersion = z.object({
   created_at: z.string(),
 });
 export type AgentVersion = z.infer<typeof AgentVersion>;
+
+// ---- Conventions ----
+/**
+ * The Conventions Extractor: sample the repo with code, ask a cheap model for
+ * candidate house-rules, then DROP every candidate that cannot point at real
+ * code. That last step is the review pipeline's own grounding invariant applied
+ * one layer up — a finding that doesn't cite a real diff line is dropped; a
+ * convention that doesn't cite a real file+line is dropped.
+ *
+ * Placed after the Agents block on purpose — see the note where this section
+ * used to live.
+ */
+
+export const ConventionCategory = z.enum([
+  'naming',
+  'structure',
+  'error-handling',
+  'typing',
+  'testing',
+  'api',
+  'imports',
+  'logging',
+  'other',
+]);
+export type ConventionCategory = z.infer<typeof ConventionCategory>;
+
+/**
+ * `pending` is not a formality: "a rejected candidate never reaches the skill"
+ * is the claim this feature is judged on, and a boolean cannot tell a rejection
+ * from a candidate nobody has looked at yet.
+ */
+export const ConventionStatus = z.enum(['pending', 'accepted', 'rejected']);
+export type ConventionStatus = z.infer<typeof ConventionStatus>;
+
+/** Why a proposed candidate was thrown away. Recorded per scan, never swallowed. */
+export const ConventionDropReason = z.enum([
+  'file_not_sampled', // cited a file the model was never shown
+  'file_missing', // path not readable in the clone
+  'line_out_of_range', // start/end outside the lines we actually sent
+  'empty_snippet', // the cited span is blank or comment-only
+  'duplicate_rule', // same normalized rule as an earlier candidate
+]);
+export type ConventionDropReason = z.infer<typeof ConventionDropReason>;
+
+/**
+ * REPLACES the starter's `ConventionCandidate` (`accepted: boolean`, no line
+ * numbers, nothing that pinned the snippet to real code). Nothing consumed the
+ * old shape, so no caller had to migrate — but this IS a breaking contract
+ * change, and the API Contract Reviewer is expected to say so on the very PR
+ * that introduces it.
+ */
+export const ConventionCandidate = z.object({
+  id: z.string(),
+  category: ConventionCategory,
+  rule: z.string(),
+  evidence_path: z.string(),
+  evidence_start_line: z.number().int().positive(),
+  evidence_end_line: z.number().int().positive(),
+  /**
+   * Read from the clone at those lines — NEVER model-authored. The extraction
+   * schema has no field for a model-written snippet, so a fabricated one is
+   * unrepresentable rather than merely unlikely, and this text always matches
+   * what the evidence link resolves to on GitHub.
+   */
+  evidence_snippet: z.string(),
+  confidence: z.number().min(0).max(1),
+  status: ConventionStatus,
+  /** Set once the candidate has been merged into a skill. */
+  skill_id: z.string().nullable(),
+});
+export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
+
+/** One extraction run. `proposed` vs `kept` is the per-scan hallucination rate. */
+export const ConventionScan = z.object({
+  id: z.string(),
+  repo_id: z.string(),
+  /** The SHA the samples were read at; every evidence permalink pins to it. */
+  indexed_sha: z.string(),
+  sampled_files: z.array(z.string()),
+  config_files: z.array(z.string()),
+  proposed: z.number().int(),
+  kept: z.number().int(),
+  dropped: z.array(z.object({ rule: z.string(), reason: ConventionDropReason })),
+  provider: Provider,
+  model: z.string(),
+  tokens_in: z.number().int().nullable(),
+  tokens_out: z.number().int().nullable(),
+  /** NULL means UNKNOWN, 0 means free. Never collapse the two. */
+  cost_usd: z.number().nullable(),
+  created_at: z.string(),
+});
+export type ConventionScan = z.infer<typeof ConventionScan>;
+
+/** What the Conventions page reads: the last scan (or none yet) and its survivors. */
+export const ConventionsView = z.object({
+  scan: ConventionScan.nullable(),
+  candidates: z.array(ConventionCandidate),
+});
+export type ConventionsView = z.infer<typeof ConventionsView>;
+
+/**
+ * The merged skill, built SERVER-side from the accepted candidates only. The
+ * create-skill modal edits this text; it does not decide membership, which is
+ * what keeps "rejected candidates never reach the skill" a single server-side
+ * assertion instead of a client invariant nobody can test.
+ */
+export const ConventionSkillDraft = z.object({
+  name: SkillName,
+  description: z.string(),
+  type: SkillType,
+  enabled: z.boolean(),
+  body: z.string(),
+  candidate_ids: z.array(z.string()),
+});
+export type ConventionSkillDraft = z.infer<typeof ConventionSkillDraft>;

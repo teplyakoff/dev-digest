@@ -5,7 +5,7 @@
  *  - contracts/findings   Review, Finding, Severity, Verdict, FindingAction, trifecta
  *  - contracts/brief      Intent, BlastRadius, Risks, PrHistory, SmartDiff, PrBrief
  *  - contracts/knowledge  Conformance, Onboarding, EvalRun/EvalCase, MemoryItem,
- *                         Skill/CommunitySkill, ConventionCandidate, Agent
+ *                         Skill/CommunitySkill, Agent, ConventionCandidate/Scan
  *  - contracts/trace      RunTrace, RunEvent, RunLogLine (single-document trace)
  *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
  *  - adapters             adapter interfaces + ModelInfo
