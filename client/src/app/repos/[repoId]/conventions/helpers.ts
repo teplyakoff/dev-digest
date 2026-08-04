@@ -54,3 +54,26 @@ export function dropSummary(scan: ConventionScan): string[] {
 export function acceptedCount(candidates: readonly ConventionCandidate[]): number {
   return candidates.filter((c) => c.status === "accepted").length;
 }
+
+/**
+ * What the toolbar's bulk button should do.
+ *
+ * "Accept all" means "accept the ones I have not decided about" — it does NOT
+ * revive a candidate the user explicitly rejected. Overriding an explicit
+ * decision with a convenience button is the kind of thing that makes people stop
+ * trusting bulk actions, and it silently defeated the feature's own claim: in the
+ * first demo recording, a rejected rule was swept back in by "Accept all" and
+ * ended up in the generated skill.
+ *
+ * A rejected candidate is brought back one at a time, with its own Undo.
+ */
+export function bulkAction(
+  candidates: readonly ConventionCandidate[],
+  allAccepted: boolean,
+): { ids: string[]; status: "accepted" | "pending" } {
+  if (allAccepted) {
+    // Deselect: clear what is accepted, leave rejections alone.
+    return { ids: candidates.filter((c) => c.status === "accepted").map((c) => c.id), status: "pending" };
+  }
+  return { ids: candidates.filter((c) => c.status !== "rejected").map((c) => c.id), status: "accepted" };
+}

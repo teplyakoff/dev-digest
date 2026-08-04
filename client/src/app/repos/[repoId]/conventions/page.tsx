@@ -23,7 +23,7 @@ import { useResyncRepoIntel } from "@/lib/hooks/repo-intel";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { ApiError } from "@/lib/api";
 import { SKELETON_ROWS } from "./constants";
-import { acceptedCount, dropSummary } from "./helpers";
+import { acceptedCount, bulkAction, dropSummary } from "./helpers";
 import { s } from "./styles";
 import { ConventionCard } from "./_components/ConventionCard/ConventionCard";
 import { CreateSkillModal } from "./_components/CreateSkillModal/CreateSkillModal";
@@ -52,7 +52,10 @@ export default function ConventionsPage() {
   const scan = data?.scan ?? null;
   const candidates = data?.candidates ?? [];
   const accepted = acceptedCount(candidates);
-  const allAccepted = candidates.length > 0 && accepted === candidates.length;
+  // "All accepted" ignores rejections: a set where everything is either accepted
+  // or explicitly rejected is done, and the button should offer to clear it.
+  const allAccepted =
+    candidates.length > 0 && candidates.every((c) => c.status !== "pending") && accepted > 0;
 
   const runExtraction = async () => {
     setScanError(null);
@@ -222,12 +225,7 @@ export default function ConventionsPage() {
                 size="sm"
                 icon={allAccepted ? "X" : "Check"}
                 disabled={setAll.isPending}
-                onClick={() =>
-                  setAll.mutate({
-                    ids: candidates.map((c) => c.id),
-                    status: allAccepted ? "pending" : "accepted",
-                  })
-                }
+                onClick={() => setAll.mutate(bulkAction(candidates, allAccepted))}
               >
                 {allAccepted ? t("toolbar.deselectAll") : t("toolbar.acceptAll")}
               </Button>
