@@ -215,7 +215,7 @@ silently include — a candidate that has since been rejected.
 
 ### 1. Sample — `samples.ts`, code only
 
-Config allowlist, repo root only, first match per family:
+Config allowlist, first match per family:
 
 ```
 eslint.config.{js,mjs,cjs,ts}  ·  .eslintrc{,.json,.js,.cjs}
@@ -224,12 +224,37 @@ tsconfig.json  ·  biome.json  ·  .editorconfig
 package.json  → reduced to { scripts, dependencies, devDependencies } only
 ```
 
+Looked for at the repo root **and in each package directory**. This spec first
+said root only, and the first live run disproved it: `teplyakoff/dev-digest` is
+five standalone packages with nothing at its root, so the scan sampled ZERO
+config files — the most rule-dense input there is, missing entirely, with nothing
+on screen to say so.
+
+The package directories are **derived from the ranked sample paths' first
+segments** (`server/src/db/schema/core.ts` → `server`), not discovered by
+listing: the packages whose code ranks highest are the ones whose conventions
+matter, it costs no extra I/O, and `SourceReader` stays a one-method port instead
+of growing a directory walk. One file per family PER SCOPE — `server/tsconfig.json`
+and `client/tsconfig.json` are two different sets of rules, and collapsing them
+would hide whichever package sorted second.
+
 Then `repoIntel.getConventionSamples(repoId, SAMPLE_FILE_COUNT)` — top-12 by
 rank, tests/configs/migrations already excluded by the facade.
 
 Caps (`constants.ts`): `MAX_CONFIG_BYTES = 4_000` each · `MAX_SAMPLE_LINES = 180`
 · `MAX_SAMPLE_BYTES = 8_000` each · `SAMPLE_FILE_COUNT = 12` ·
-`MAX_TOTAL_BYTES = 120_000`.
+`MAX_PACKAGE_DIRS = 3` · `MAX_CONFIG_FILES = 8` · `MAX_TOTAL_BYTES = 120_000`.
+
+Measured effect on `teplyakoff/dev-digest`, same model, same prompt, same 20
+proposed candidates:
+
+| | configs sampled | kept | dropped |
+|---|---|---|---|
+| root-only | 0 | 7 / 20 | 13, all `duplicate_rule` |
+| + package dirs | 4 | **20 / 20** | 0 |
+
+The duplicates were a symptom, not the disease: given four config files to reason
+about, the model stopped restating one hook file's imports four different ways.
 
 Every sampled file is rendered **with 1-based line numbers**, and truncation is
 stated in-band:

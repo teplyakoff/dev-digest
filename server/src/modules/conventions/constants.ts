@@ -38,10 +38,18 @@ export const MAX_CANDIDATES = 20;
 export const MAX_EVIDENCE_SPAN = 12;
 
 /**
- * Config files, grouped by family. Repo root only, first present member of each
- * family wins — a repo with both `.eslintrc.json` and `eslint.config.js` is
+ * Config files, grouped by family. Within a family the first present member
+ * wins — a repo with both `.eslintrc.json` and `eslint.config.js` is
  * mid-migration, and showing the model both invites a "the project uses two
  * lint configs" non-rule.
+ *
+ * Looked for at the repo root AND in each package directory (see
+ * `MAX_PACKAGE_DIRS`). Root-only was the original rule and it was wrong: the
+ * first live run against `teplyakoff/dev-digest` sampled ZERO configs, because
+ * that repo is five standalone packages and every `tsconfig.json`,
+ * `eslint.config.js` and `package.json` lives one level down. Configs are the
+ * most rule-dense input there is, so missing all of them is not a degradation,
+ * it is the feature failing quietly.
  */
 export const CONFIG_FAMILIES: readonly (readonly string[])[] = [
   ['eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs', 'eslint.config.ts', '.eslintrc.json', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc'],
@@ -58,6 +66,23 @@ export const CONFIG_FAMILIES: readonly (readonly string[])[] = [
  * and `dependencies` alone can be tens of kB.
  */
 export const PACKAGE_JSON_KEYS = ['scripts', 'dependencies', 'devDependencies'] as const;
+
+/**
+ * How many package directories to look for configs in, on top of the root.
+ *
+ * They are DERIVED from the ranked sample paths' first segments rather than
+ * discovered by listing directories: the packages whose code ranks highest are
+ * exactly the ones whose conventions matter, the answer costs no extra I/O, and
+ * `SourceReader` stays a one-method port instead of growing a directory walk.
+ */
+export const MAX_PACKAGE_DIRS = 3;
+
+/**
+ * Ceiling on config files in one sample. Four families across a root and three
+ * packages is otherwise 16 files ahead of any source code, and the configs are
+ * supposed to frame the code, not crowd it out.
+ */
+export const MAX_CONFIG_FILES = 8;
 
 /**
  * This module's OWN default model, used when the workspace has not chosen one.

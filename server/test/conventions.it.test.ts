@@ -170,6 +170,35 @@ d('conventions module', () => {
     ]);
   });
 
+  it('finds the configs of a repo that keeps them one level down', async () => {
+    // The regression this exists for: the first live run against a repo of five
+    // standalone packages sampled ZERO config files, because the allowlist only
+    // looked at the root. The package dirs are derived from the ranked paths,
+    // so nothing here lists a directory.
+    const app = makeApp({
+      candidates: [],
+      ranked: ['server/src/api/users.ts', 'client/src/lib/api.ts'],
+      files: {
+        'server/tsconfig.json': '{ "compilerOptions": { "strict": true } }',
+        'server/package.json': '{ "name": "api", "scripts": { "test": "vitest" } }',
+        'client/tsconfig.json': '{ "compilerOptions": { "jsx": "preserve" } }',
+        'server/src/api/users.ts': 'export const a = 1;',
+        'client/src/lib/api.ts': 'export const b = 2;',
+      },
+    });
+    const scan = (
+      await (await app).inject({ method: 'POST', url: `/repos/${repoId}/conventions/extract` })
+    ).json().scan;
+
+    expect(scan.config_files).toEqual([
+      'server/tsconfig.json',
+      'server/package.json',
+      'client/tsconfig.json',
+    ]);
+    // Reduced, not verbatim: `endsWith`, not a root-only `===` match.
+    expect(scan.sampled_files).toContain('server/package.json');
+  });
+
   it('drops an ungrounded candidate and RECORDS why, rather than swallowing it', async () => {
     const app = makeApp({
       candidates: [

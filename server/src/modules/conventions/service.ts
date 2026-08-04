@@ -20,10 +20,14 @@ import {
   EXTRACTION_MAX_TOKENS,
   EXTRACTION_TIMEOUT_MS,
   MAX_CONFIG_BYTES,
+  MAX_CONFIG_FILES,
+  MAX_PACKAGE_DIRS,
   SAMPLE_FILE_COUNT,
 } from './constants.js';
 import {
   buildSampleBlock,
+  configCandidatePaths,
+  packageDirsFrom,
   pickConfigFiles,
   reducePackageJson,
   type SampleInput,
@@ -255,7 +259,10 @@ export class ConventionsService {
     ranked: string[],
   ): Promise<{ inputs: SampleInput[]; configFiles: string[] }> {
     const reader = this.container.sourceReader;
-    const candidates = CONFIG_FAMILIES.flat();
+    // Root AND the package dirs the ranked files name. Root-only missed every
+    // config in a repo of standalone packages — see CONFIG_FAMILIES.
+    const packageDirs = packageDirsFrom(ranked, MAX_PACKAGE_DIRS);
+    const candidates = configCandidatePaths(CONFIG_FAMILIES, packageDirs);
     const rawConfigs = await Promise.all(
       candidates.map(async (path) => ({ path, content: await reader.read(clonePath, path) })),
     );
@@ -264,10 +271,12 @@ export class ConventionsService {
 
     const inputs: SampleInput[] = [];
     const configFiles: string[] = [];
-    for (const path of pickConfigFiles(CONFIG_FAMILIES, present)) {
+    for (const path of pickConfigFiles(CONFIG_FAMILIES, present, packageDirs, MAX_CONFIG_FILES)) {
       const raw = byPath.get(path);
       if (raw == null) continue;
-      const content = path === 'package.json' ? reducePackageJson(raw) : raw;
+      // `endsWith`, not `===`: `server/package.json` needs reducing just as much
+      // as a root one, and it is the only kind this repo has.
+      const content = path.endsWith('package.json') ? reducePackageJson(raw) : raw;
       // An unparseable package.json costs one sample rather than a bad one.
       if (content == null) continue;
       inputs.push({ path, content, maxBytes: MAX_CONFIG_BYTES });

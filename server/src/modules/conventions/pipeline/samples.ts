@@ -46,19 +46,67 @@ export interface SampleBlock {
 }
 
 /**
- * Pick one file per config family from the set that turned out to be readable.
- * Order follows `CONFIG_FAMILIES`, so the prompt's config section is stable.
+ * The package directories worth looking for configs in, derived from the ranked
+ * sample paths' first segments.
+ *
+ * Derived rather than discovered: the packages whose code ranks highest are
+ * exactly the ones whose conventions matter, it costs no extra I/O, and it keeps
+ * `SourceReader` a one-method port instead of growing a directory walk. Order is
+ * rank order, because that is the order the caller's budget spends in.
+ */
+export function packageDirsFrom(paths: readonly string[], limit: number): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const path of paths) {
+    const slash = path.indexOf('/');
+    if (slash <= 0) continue; // a root-level file names no package
+    const dir = path.slice(0, slash);
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+    out.push(dir);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Every config path worth ATTEMPTING: root first, then each package dir. */
+export function configCandidatePaths(
+  families: readonly (readonly string[])[],
+  dirs: readonly string[],
+): string[] {
+  return scopesOf(dirs).flatMap((scope) => families.flat().map((file) => scope + file));
+}
+
+/**
+ * Pick one file per family PER SCOPE from those that turned out to be readable.
+ *
+ * Per scope, not per repo: `server/tsconfig.json` and `client/tsconfig.json` are
+ * two different sets of rules in a repo of standalone packages, and collapsing
+ * them to one would hide whichever package sorted second.
+ *
+ * Order — root first, then packages in rank order, families in declaration
+ * order — is what makes the prompt's config section stable across scans.
  */
 export function pickConfigFiles(
   families: readonly (readonly string[])[],
   present: ReadonlySet<string>,
+  dirs: readonly string[] = [],
+  limit = Number.POSITIVE_INFINITY,
 ): string[] {
   const out: string[] = [];
-  for (const family of families) {
-    const hit = family.find((p) => present.has(p));
-    if (hit) out.push(hit);
+  for (const scope of scopesOf(dirs)) {
+    for (const family of families) {
+      if (out.length >= limit) return out;
+      const hit = family.map((f) => scope + f).find((p) => present.has(p));
+      if (hit) out.push(hit);
+    }
   }
   return out;
+}
+
+/** The repo root (`""`) followed by each package dir, as path prefixes. */
+function scopesOf(dirs: readonly string[]): string[] {
+  return ['', ...dirs.map((d) => `${d}/`)];
 }
 
 /**

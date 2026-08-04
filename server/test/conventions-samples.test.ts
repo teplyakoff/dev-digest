@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildSampleBlock,
+  configCandidatePaths,
+  packageDirsFrom,
   pickConfigFiles,
   reducePackageJson,
   renderFile,
@@ -23,6 +25,25 @@ import {
 const lines = (n: number, prefix = 'line') =>
   Array.from({ length: n }, (_, i) => `${prefix} ${i + 1}`).join('\n');
 
+describe('packageDirsFrom', () => {
+  it('takes the ranked files first path segments, in rank order', () => {
+    expect(
+      packageDirsFrom(
+        ['server/src/db/schema/core.ts', 'client/src/lib/api.ts', 'server/src/app.ts'],
+        3,
+      ),
+    ).toEqual(['server', 'client']);
+  });
+
+  it('ignores root-level files, which name no package', () => {
+    expect(packageDirsFrom(['README.md', 'server/src/app.ts'], 3)).toEqual(['server']);
+  });
+
+  it('stops at the limit', () => {
+    expect(packageDirsFrom(['a/x.ts', 'b/x.ts', 'c/x.ts', 'd/x.ts'], 2)).toEqual(['a', 'b']);
+  });
+});
+
 describe('pickConfigFiles', () => {
   it('takes one file per family, in family order', () => {
     const present = new Set(['tsconfig.json', '.editorconfig', 'eslint.config.js', 'package.json']);
@@ -34,6 +55,49 @@ describe('pickConfigFiles', () => {
     ]);
   });
 
+  it('finds the configs of a repo that keeps them one level down', () => {
+    // The case that made this necessary: `teplyakoff/dev-digest` is five
+    // standalone packages with NOTHING at the root, and the first live run
+    // sampled zero config files.
+    const present = new Set([
+      'server/tsconfig.json',
+      'server/package.json',
+      'client/tsconfig.json',
+      'client/package.json',
+    ]);
+    expect(pickConfigFiles(CONFIG_FAMILIES, present, ['server', 'client'])).toEqual([
+      'server/tsconfig.json',
+      'server/package.json',
+      'client/tsconfig.json',
+      'client/package.json',
+    ]);
+  });
+
+  it('keeps each package own config rather than collapsing them', () => {
+    // Two tsconfigs in a repo of standalone packages are two different sets of
+    // rules; keeping one would hide whichever package sorted second.
+    const present = new Set(['server/tsconfig.json', 'client/tsconfig.json']);
+    expect(pickConfigFiles(CONFIG_FAMILIES, present, ['server', 'client'])).toHaveLength(2);
+  });
+
+  it('puts the root ahead of the packages, so the budget spends there first', () => {
+    const present = new Set(['tsconfig.json', 'server/tsconfig.json']);
+    expect(pickConfigFiles(CONFIG_FAMILIES, present, ['server'])).toEqual([
+      'tsconfig.json',
+      'server/tsconfig.json',
+    ]);
+  });
+
+  it('stops at the limit, so configs cannot crowd out the source files', () => {
+    const present = new Set([
+      'server/tsconfig.json',
+      'server/package.json',
+      'client/tsconfig.json',
+      'client/package.json',
+    ]);
+    expect(pickConfigFiles(CONFIG_FAMILIES, present, ['server', 'client'], 3)).toHaveLength(3);
+  });
+
   it('picks the first present member when a repo is mid-migration', () => {
     // Both configs exist. Showing the model both invites "this project uses two
     // lint configs", which is a fact about the migration, not a house rule.
@@ -43,6 +107,17 @@ describe('pickConfigFiles', () => {
 
   it('returns nothing for a repo with no config at all', () => {
     expect(pickConfigFiles(CONFIG_FAMILIES, new Set())).toEqual([]);
+  });
+});
+
+describe('configCandidatePaths', () => {
+  it('offers every family member at the root and in each package dir', () => {
+    const paths = configCandidatePaths(CONFIG_FAMILIES, ['server']);
+    expect(paths).toContain('tsconfig.json');
+    expect(paths).toContain('server/tsconfig.json');
+    expect(paths).toContain('server/eslint.config.js');
+    // No package dirs → root only, which is what a single-package repo wants.
+    expect(configCandidatePaths(CONFIG_FAMILIES, []).every((p) => !p.includes('/'))).toBe(true);
   });
 });
 
