@@ -4,10 +4,12 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { invalidateAgents } from "./agents";
 import type {
   AgentSkillLink,
   Skill,
   SkillImportPreview,
+  SkillStats,
   SkillType,
   SkillUsage,
   SkillVersion,
@@ -23,6 +25,7 @@ const keys = {
   one: (id: string | null | undefined) => ["skill", id] as const,
   versions: (id: string | null | undefined) => ["skill-versions", id] as const,
   usage: (id: string | null | undefined) => ["skill-usage", id] as const,
+  stats: (id: string | null | undefined) => ["skill-stats", id] as const,
   agentSkills: (agentId: string | null | undefined) => ["agent-skills", agentId] as const,
 };
 
@@ -55,6 +58,19 @@ export function useSkillUsage(id: string | null | undefined) {
   return useQuery({
     queryKey: keys.usage(id),
     queryFn: () => api.get<SkillUsage[]>(`/skills/${id}/agents`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * Usage plus what the skill has cost across the runs that loaded it. Separate
+ * from `useSkillUsage` because it reads the run traces, which is a heavier query
+ * and only the Stats tab needs it.
+ */
+export function useSkillStats(id: string | null | undefined) {
+  return useQuery({
+    queryKey: keys.stats(id),
+    queryFn: () => api.get<SkillStats>(`/skills/${id}/stats`),
     enabled: !!id,
   });
 }
@@ -101,8 +117,9 @@ export function useDeleteSkill() {
       qc.invalidateQueries({ queryKey: keys.all });
       qc.removeQueries({ queryKey: keys.one(id) });
       // Deleting a skill unlinks it from every agent, so any cached agent
-      // link-set is now wrong.
+      // link-set — and every agent's skills_count on the list — is now wrong.
       qc.invalidateQueries({ queryKey: ["agent-skills"] });
+      invalidateAgents(qc);
     },
   });
 }
@@ -172,8 +189,15 @@ export function useSetAgentSkills(agentId: string | null | undefined) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: keys.agentSkills(agentId) });
-      // The per-skill "used by N agents" count just changed.
+      // The per-skill "used by N agents" count just changed — on the usage
+      // query and on the Stats tab, which carries the same list.
       qc.invalidateQueries({ queryKey: ["skill-usage"] });
+      qc.invalidateQueries({ queryKey: ["skill-stats"] });
+      qc.invalidateQueries({ queryKey: keys.all });
+      // …and so did this agent's skills_count, which `GET /agents` denormalizes
+      // onto the card. Without this the badge keeps the count from before the
+      // drag until something else refetches the list.
+      invalidateAgents(qc);
     },
   });
 }

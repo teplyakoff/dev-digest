@@ -46,4 +46,21 @@ describe("AgentCard (smoke)", () => {
     renderWithIntl(<AgentCard ag={{ ...AGENT, description: "" }} />);
     expect(screen.getByText("No description")).toBeInTheDocument();
   });
+
+  // Zero is a real answer — an agent with no knowledge layer is exactly what the
+  // badge should say out loud — while an absent count means the caller never
+  // loaded one and must render nothing at all.
+  it("renders a zero badge, and no badge when the count is absent", () => {
+    renderWithIntl(<AgentCard ag={AGENT} skillCount={0} />);
+    expect(screen.getByText("0 skills")).toBeInTheDocument();
+
+    cleanup();
+    renderWithIntl(<AgentCard ag={AGENT} />);
+    expect(screen.queryByText(/skills?$/)).not.toBeInTheDocument();
+  });
+
+  it("says “1 skill”, not “1 skills”", () => {
+    renderWithIntl(<AgentCard ag={AGENT} skillCount={1} />);
+    expect(screen.getByText("1 skill")).toBeInTheDocument();
+  });
 });

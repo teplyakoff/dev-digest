@@ -36,7 +36,8 @@
     "tabs": {
       "config": "Config",
       "preview": "Preview",
-      "versions": "Versions"
+      "versions": "Versions",
+      "stats": "Stats"
     }
   },
   "create": {
@@ -85,6 +86,25 @@
     "bodyLabel": "Skill body (Markdown)",
     "version": "v{version}",
     "tokens": "{count} tokens"
+  },
+  "stats": {
+    "title": "Usage & cost",
+    "subtitle": "Read back from run traces. A run counts here only if this skill was in its prompt.",
+    "usedBy": "USED BY",
+    "runs": "RUNS",
+    "tokensTotal": "TOKENS",
+    "tokensAvg": "AVG",
+    "perRun": "/ run",
+    "agentsTitle": "Agents using this skill",
+    "noAgents": "No agent links it now — the runs below happened before it was unlinked.",
+    "open": "Open",
+    "lastLoaded": "Last loaded {when}.",
+    "neverLoaded": "Linked, but no run has loaded it yet.",
+    "empty": {
+      "title": "No usage yet",
+      "body": "This skill isn't linked to any agent, so no run has loaded it. Add it to an agent's Skills tab to start collecting stats."
+    },
+    "loadError": "Could not load usage stats."
   },
   "versions": {
     "title": "Version history",

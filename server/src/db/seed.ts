@@ -12,7 +12,9 @@ import {
 import {
   BREAKING_CHANGE,
   RESPONSE_SCHEMA,
+  SECRET_HANDLING,
   SEMVER_DISCIPLINE,
+  TENANT_SCOPING,
   TEST_QUALITY_RUBRIC,
 } from './seed-skills.js';
 import { DEFAULT_WORKSPACE_NAME, SYSTEM_USER_EMAIL } from './constants.js';
@@ -324,6 +326,37 @@ const SEED_SKILLS: Array<{
       version: 1,
     },
     agents: ['API Contract Reviewer'],
+  },
+  // The Security Reviewer's knowledge layer. It was the one built-in agent that
+  // linked no skill at all, which is the "before" side of the control
+  // experiment shipped as a default — the exact thing the comment on the L02
+  // agents above says not to do.
+  //
+  // Link order IS prompt order: what may never be persisted is absolute, so it
+  // comes before what may be read, which is conditional on who is asking.
+  {
+    skill: {
+      name: 'secret-handling',
+      description: 'Flag a credential written to the database, to git, to a log, or to a response.',
+      type: 'convention',
+      source: 'manual',
+      body: SECRET_HANDLING,
+      enabled: true,
+      version: 1,
+    },
+    agents: ['Security Reviewer'],
+  },
+  {
+    skill: {
+      name: 'tenant-scoping',
+      description: 'Flag a query that matches on an id without also scoping to the caller’s workspace.',
+      type: 'convention',
+      source: 'manual',
+      body: TENANT_SCOPING,
+      enabled: true,
+      version: 1,
+    },
+    agents: ['Security Reviewer'],
   },
 ];
 

@@ -22,6 +22,7 @@ import { NAV, SETTINGS_ITEM, SHORTCUTS, resolveHref } from "@devdigest/ui";
 
 const items = NAV.flatMap((group) => group.items);
 const byKey = (key: string) => items.find((i) => i.key === key);
+const sectionOf = (key: string) => NAV.find((g) => g.items.some((i) => i.key === key))?.section;
 
 describe("nav registry — every shipped route is registered", () => {
   it.each([
@@ -34,6 +35,23 @@ describe("nav registry — every shipped route is registered", () => {
     expect(item, `nav entry "${key}" is missing from NAV`).toBeDefined();
     expect(item!.href).toBe(href);
     expect(item!.gKey).toBe(gKey);
+  });
+
+  // The sidebar renders one header per group, so which group an item sits in is
+  // user-visible grouping, not an implementation detail. Pinned because the
+  // knowledge-layer pages drifted into WORKSPACE once already, while their own
+  // breadcrumbs read "Skills Lab".
+  it.each([
+    ["pulls", "WORKSPACE"],
+    ["skills", "SKILLS LAB"],
+    ["agents", "SKILLS LAB"],
+    ["conventions", "SKILLS LAB"],
+  ])("%s lives under %s", (key, section) => {
+    expect(sectionOf(key), `nav entry "${key}" is in the wrong section`).toBe(section);
+  });
+
+  it("keeps the sections distinct and in design order", () => {
+    expect(NAV.map((g) => g.section)).toEqual(["WORKSPACE", "SKILLS LAB"]);
   });
 
   it("gives every item a distinct g-key, so no shortcut shadows another", () => {

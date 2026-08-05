@@ -163,7 +163,32 @@ would be obvious to anyone reading the code, don't write it.
   live data before adding any further CHECK:
   `select severity, count(*) from findings group by 1`. (2026-08-03)
 
+- **`run_traces.trace` is the ONLY record of what a run loaded, and it is a
+  schema-less historical document — query it defensively.** Three rules, learned
+  building `GET /skills/:id/stats` (`modules/skills/repository.ts` →
+  `traceStats`). (1) Match a skill by NAME: `trace.config.skills[]` stores
+  `{name, version, tokens}` and no id, so there is nothing else to join on.
+  Names are unique per workspace so it cannot collide, but RENAMING a skill
+  orphans every run made under the old name — the count legitimately drops.
+  (2) Wrap the array in `CASE WHEN jsonb_typeof(...) = 'array' THEN ... ELSE
+  '[]'::jsonb END` before `jsonb_array_elements`. Traces written before L02 have
+  no `skills` key, and one written as JSON `null` raises `cannot extract
+  elements from a scalar` — a single such row fails the whole endpoint, not just
+  its own line. (3) Scope on `agent_runs.workspace_id`; `run_traces` has no
+  workspace column, only the run FK. (2026-08-05)
+
 ## Tool & Library Notes
+
+- **`db.execute()` returns the ROWS, not a `{ rows }` wrapper — this codebase is
+  on postgres-js, not node-postgres.** `db/client.ts` builds the client with
+  `drizzle-orm/postgres-js`, whose `execute` resolves to a `RowList` that IS an
+  array, so it is `result[0]`, never `result.rows[0]`. Most drizzle examples
+  online show the node-postgres shape; writing `.rows` type-checks (the return
+  is loosely typed), compiles, and then reads `undefined` at runtime with no
+  error. Also: `count()` and `sum()` come back as **strings** (bigint), so wrap
+  every aggregate in `Number(...)`, and an aggregate over zero rows still
+  returns one row with nulls — no length check needed, just defaults.
+  (2026-08-05)
 
 - **`pnpm lint` enforces the onion rings, and six violations are deliberately
   exempted IN THE CODE, not in the config.** Each carries an
@@ -251,7 +276,23 @@ would be obvious to anyone reading the code, don't write it.
   persisted per finding. The null-vs-zero rule extended to counters, with the
   it-test asserting the grounding-dropped WARNING lands as a real `0`.
 
+- **2026-08-05** — L02 mentor-feedback pass. Added `Agent.skills_count`
+  (denormalized on `GET /agents` by `AgentsRepository.skillCounts`, the mirror of
+  `SkillsRepository.usageCounts`) and `GET /skills/:id/stats`, which reads the
+  run traces back rather than adding a counter table — the data was already
+  persisted, nothing needed migrating. Seeded `secret-handling` and
+  `tenant-scoping` for the Security Reviewer, which had shipped since L01 with an
+  empty knowledge layer. Deliberately did NOT implement the design's
+  pull-frequency and accept-rate tiles: no table links a finding to the skill
+  that provoked it, so both numbers would have been invented.
+
 ## Open Questions
+
+- The Security, General and Performance Reviewers were all seeded with no skills;
+  only the Security Reviewer was fixed (2026-08-05), because that is what the
+  review asked for. Whether the other two should get a knowledge layer, or
+  whether one deliberately bare agent is useful as the control condition, is
+  undecided.
 
 - The seeded General Reviewer agent uses `provider: openrouter`, so a review run
   needs `OPENROUTER_API_KEY` — but `.env.example` presents OpenAI/Anthropic

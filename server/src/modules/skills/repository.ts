@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db, DbTx } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillSource, SkillType } from '@devdigest/shared';
@@ -167,6 +167,58 @@ export class SkillsRepository {
   }
 
   // ---- usage (read-only join across agent_skills) -------------------------
+
+  /**
+   * What this skill cost across the runs that loaded it, read back out of the
+   * persisted traces.
+   *
+   * Three things about the SQL are load-bearing:
+   *
+   * - The match is on skill NAME, because that is what `run-executor` writes
+   *   into `trace.config.skills` — there is no id in the trace. Names are unique
+   *   per workspace, so this cannot collide; a rename does orphan older runs,
+   *   which the contract documents.
+   * - The `jsonb_typeof(...) = 'array'` guard is not defensive noise. Traces
+   *   persisted before L02 have no `skills` key at all, and one written as JSON
+   *   `null` would make `jsonb_array_elements` raise "cannot extract elements
+   *   from a scalar" — one bad row would fail the whole endpoint.
+   * - `agent_runs.workspace_id` is the tenant boundary; `run_traces` has no
+   *   workspace column of its own.
+   */
+  async traceStats(
+    workspaceId: string,
+    skillName: string,
+  ): Promise<{ runs: number; tokensTotal: number; lastLoadedAt: Date | null }> {
+    // postgres-js hands `execute` the rows themselves (a RowList, which IS an
+    // array) — there is no `.rows` wrapper here, unlike node-postgres.
+    const rows = (await this.db.execute(sql`
+      SELECT count(*) AS runs,
+             coalesce(sum((s->>'tokens')::bigint), 0) AS tokens_total,
+             max(ar.ran_at) AS last_loaded_at
+      FROM ${t.runTraces} rt
+      JOIN ${t.agentRuns} ar ON ar.id = rt.run_id
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE WHEN jsonb_typeof(rt.trace->'config'->'skills') = 'array'
+             THEN rt.trace->'config'->'skills'
+             ELSE '[]'::jsonb END
+      ) AS s
+      WHERE ar.workspace_id = ${workspaceId}
+        AND s->>'name' = ${skillName}
+    `)) as unknown as Array<{
+      runs: string | number;
+      tokens_total: string | number;
+      last_loaded_at: Date | string | null;
+    }>;
+    // `count`/`sum` come back as strings (bigint), and an aggregate over no rows
+    // still returns one row — with a null max — so this never needs a length check.
+    const row = rows[0];
+    const last = row?.last_loaded_at ?? null;
+    return {
+      runs: Number(row?.runs ?? 0),
+      tokensTotal: Number(row?.tokens_total ?? 0),
+      lastLoadedAt: last === null ? null : new Date(last),
+    };
+  }
 
   /**
    * Agents in this workspace that link the skill. Scoped on the AGENT's

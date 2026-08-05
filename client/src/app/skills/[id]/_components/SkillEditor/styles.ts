@@ -55,6 +55,67 @@ export const s = {
     padding: "16px 18px",
   } satisfies CSSProperties,
 
+  // ---- stats tab ----
+  statsWrap: { maxWidth: 720 } satisfies CSSProperties,
+  statsSubtitle: {
+    fontSize: 12.5,
+    color: "var(--text-muted)",
+    margin: "4px 0 16px",
+  } satisfies CSSProperties,
+  statGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+    gap: 12,
+    marginBottom: 20,
+  } satisfies CSSProperties,
+  statTile: {
+    padding: 15,
+    borderRadius: 9,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+  } satisfies CSSProperties,
+  statLabel: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "var(--text-muted)",
+    letterSpacing: "0.03em",
+  } satisfies CSSProperties,
+  statValue: { fontSize: 22, fontWeight: 700, marginTop: 8 } satisfies CSSProperties,
+  statSuffix: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: "var(--text-muted)",
+    marginLeft: 4,
+  } satisfies CSSProperties,
+  agentList: { display: "flex", flexDirection: "column", gap: 8, marginTop: 10 } satisfies CSSProperties,
+  agentRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    padding: "8px 10px",
+    borderRadius: 7,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+  } satisfies CSSProperties,
+  agentIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    background: "var(--accent-bg)",
+    color: "var(--accent)",
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  agentName: { fontSize: 12.5, fontWeight: 600, flex: 1 } satisfies CSSProperties,
+  statsFootnote: {
+    fontSize: 11.5,
+    color: "var(--text-muted)",
+    marginTop: 18,
+    paddingTop: 12,
+    borderTop: "1px solid var(--border)",
+  } satisfies CSSProperties,
+
   // ---- versions tab ----
   versionsWrap: { maxWidth: 720 } satisfies CSSProperties,
   versionsHead: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 } satisfies CSSProperties,

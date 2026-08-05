@@ -177,6 +177,35 @@ export const SkillUsage = z.object({
 export type SkillUsage = z.infer<typeof SkillUsage>;
 
 /**
+ * What one skill has actually cost and where it is loaded — `GET /skills/:id/stats`.
+ *
+ * Every number here is READ BACK from persisted run traces, never modelled: a
+ * run counts only if its trace records this skill in `config.skills`, and the
+ * tokens are the ones the trace already attributed to the rendered block. The
+ * design's Stats tab also shows pull-frequency and accept-rate; both are absent
+ * on purpose, because nothing in the schema links a finding back to the skill
+ * that provoked it, and a plausible number is worse than none.
+ *
+ * Runs are matched by skill NAME, which is what a trace stores. Names are unique
+ * per workspace, so the match is unambiguous — but RENAMING a skill orphans the
+ * runs made under its old name, and `runs` drops accordingly. That is the honest
+ * reading: those runs really did load a differently-named block.
+ */
+export const SkillStats = z.object({
+  /** Agents that link the skill right now — the same list as `/skills/:id/agents`. */
+  agents: z.array(SkillUsage),
+  /** Runs whose trace loaded this skill. */
+  runs: z.number().int(),
+  /** Tokens the rendered block added, summed across those runs. */
+  tokens_total: z.number().int(),
+  /** Mean tokens per run that loaded it; 0 when `runs` is 0. */
+  tokens_avg: z.number().int(),
+  /** ISO timestamp of the most recent run that loaded it; null if never. */
+  last_loaded_at: z.string().nullable(),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
+
+/**
  * The result of parsing an uploaded skill. Returned by `POST /skills/import/preview`
  * and echoed back to `/confirm`. NOTHING here has been written yet — the preview
  * is the mandatory human gate before someone else's instructions enter an
@@ -261,6 +290,18 @@ export const Agent = z.object({
   // Inject repo-intel context (repo skeleton + callers + rank note) into this
   // agent's review prompt. Default on; gated again by the global flag.
   repo_intel: z.boolean().default(true),
+  /**
+   * How many skills this agent links. **List endpoint only** — denormalized on
+   * read by `GET /agents`, the mirror image of `Skill.used_by`. Absent on single
+   * -agent reads and on create/update responses, so the card can tell "not
+   * loaded" from "zero skills" and render the badge only for the latter.
+   *
+   * Counts LINKS, not what a run would load: `run-executor` additionally drops
+   * skills whose master switch is off, so an agent can show 3 here and send 0 to
+   * the model. That is deliberate — this number matches the editor's Skills tab,
+   * which lists the same three rows with their own toggles.
+   */
+  skills_count: z.number().int().nullish(),
 });
 export type Agent = z.infer<typeof Agent>;
 

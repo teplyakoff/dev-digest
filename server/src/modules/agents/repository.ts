@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -202,6 +202,27 @@ export class AgentsRepository {
   async skillIdsForAgent(agentId: string): Promise<string[]> {
     const links = await this.linkedSkills(agentId);
     return links.map((l) => l.skill.id);
+  }
+
+  /**
+   * How many skills each of `agentIds` links, as ONE grouped query — the list
+   * endpoint's read-time aggregation, and the mirror of
+   * `SkillsRepository.usageCounts`. Agents with no skills are absent from the
+   * map; the caller defaults them to 0.
+   *
+   * Scoped on the SKILL's workspace as well as the agent's: `agent_skills` has
+   * no workspace column, so the join predicate is the only thing stopping a
+   * cross-tenant link row from inflating the count.
+   */
+  async skillCounts(workspaceId: string, agentIds: string[]): Promise<Map<string, number>> {
+    if (agentIds.length === 0) return new Map();
+    const rows = await this.db
+      .select({ agentId: t.agentSkills.agentId, n: count() })
+      .from(t.agentSkills)
+      .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+      .where(and(inArray(t.agentSkills.agentId, agentIds), eq(t.skills.workspaceId, workspaceId)))
+      .groupBy(t.agentSkills.agentId);
+    return new Map(rows.map((r) => [r.agentId, Number(r.n)]));
   }
 
   /** Link a skill to an agent at a given order (idempotent: upserts order). */

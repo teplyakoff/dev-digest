@@ -109,7 +109,31 @@ _(no entries yet)_
   `SkillBodyEditor.test.tsx` asserts a 200-line body renders the same height as
   a 1-line one. (2026-08-03)
 
+- **A component test that passes the prop by hand proves nothing about whether
+  anything passes it, and both halves look correct in isolation.**
+  `AgentCard.test.tsx` had asserted the skill-count badge since L02 by rendering
+  `<AgentCard skillCount={3} />` — green, and the badge had never once appeared
+  in the app, because `AgentsListView` never passed it. Neither file is wrong on
+  its own; the gap is between them, and no amount of component-level coverage
+  can see it. Whenever a component takes an optional display prop, the guard
+  that matters is a test on the VIEW that renders it from mocked API data
+  (`AgentsListView.test.tsx` mocks `useAgents` and asserts the badge text). Mock
+  the shell — `vi.mock("…/components/app-shell")` — or you inherit the repo
+  switcher, theme and router. (2026-08-05)
+
 ## Codebase Patterns
+
+- **A denormalized count is invalidated by the OTHER feature's mutation, and the
+  hook that owns it usually lives in a different file.** `GET /agents` carries
+  `skills_count` and `GET /skills` carries `used_by`, but the mutation that
+  changes both — `useSetAgentSkills` — is in `lib/hooks/skills.ts`, so it has to
+  invalidate `["agents"]` as well as its own keys. Same for `useDeleteSkill`:
+  deleting a skill unlinks it everywhere, so every agent's count moves. The
+  symptom of getting this wrong is not an error — it is a stale number that
+  looks right until you reload, which is exactly the kind of thing a demo
+  surfaces and a test does not. When you add a denormalized field to a list
+  endpoint, grep for every mutation that can change it and invalidate from
+  there. (2026-08-05)
 
 - The Zod contracts under `src/vendor/shared/**` are **hand-copied from
   `server/src/vendor/shared/**`, and there is no re-vendor script.** A field
@@ -191,6 +215,27 @@ _(no entries yet)_
   `5dd941dc-…815d` = `prdetail_runs.jsx`, `f798d8ad-…ff8a` = `screen_trace.jsx`.
   These are the visual source of truth when porting a screen. (2026-07-28)
 
+- **`MonoLink` with no `href` renders a `<button>`, so wrapping it in a
+  `next/link` nests a button inside an anchor.** The `href` prop is not "the
+  same link, typed" — it switches the primitive to an `<a target="_blank">`,
+  which is wrong for in-app navigation. For an internal destination pass
+  `onClick={() => router.push(...)}` and let the button be the control;
+  `SkillStatsTab` navigates to `/agents/:id?tab=skills` that way. Read the
+  vendored primitive before composing it — several in `src/vendor/ui/primitives`
+  change element type based on which props are set. (2026-08-05)
+
+- **Extends the 2026-07-28 design-bundle decode entry: L02 ships a SECOND bundle
+  with different UUIDs, and the line-170 recipe does not open it.**
+  `_assets/L02/DevDigest Design (standalone) (3).html` is the source of truth for
+  anything L02, and its manifest is not on the same line — find it with a regex
+  on `<script type="__bundler/manifest">` instead of indexing line 169, then
+  decode entries the same way (base64 → gzip). Useful UUID prefixes in that file:
+  `d71d023c` = `chrome.jsx` (the sidebar `NAV`, which is where the WORKSPACE /
+  SKILLS LAB split is specified), `2d3fde59` = `screen_skills.jsx`
+  (`SkillStatsTab`, `SkillCard`), `09ba214d` = `screen_agents.jsx`,
+  `729ddc3e` = `screen_conv_conf.jsx`. The module names are in a leading comment
+  on line 1 of each decoded blob, not in the manifest. (2026-08-05)
+
 ## Recurring Errors & Fixes
 
 _(no entries yet)_
@@ -225,6 +270,17 @@ _(no entries yet)_
   and `FindingsPanel` (toggle filter chips composing with hide-low-confidence).
   The predicted `common`-namespace fan-out from the 2026-07-28 entry landed
   exactly as warned — `RunHistory.test.tsx` had to add `common` to its messages.
+
+- **2026-08-05** — L02 mentor-feedback pass. Split the sidebar into WORKSPACE and
+  SKILLS LAB in `src/vendor/ui/nav.ts` (the design had it that way all along, and
+  both `/skills` and `/agents` already said "Skills Lab" in their breadcrumbs);
+  `nav-registry.test.ts` now pins section membership as well as routes, and the
+  command palette picked up the grouping for free because `useShellCommands`
+  already maps `group: g.section`. Fed `AgentCard`'s dormant skill-count badge
+  from the new `Agent.skills_count`, and added the skill editor's fourth tab,
+  Stats — usage and token cost only. The design's pull-frequency and accept-rate
+  tiles were left out rather than stubbed: nothing links a finding to the skill
+  that caused it.
 
 ## Open Questions
 

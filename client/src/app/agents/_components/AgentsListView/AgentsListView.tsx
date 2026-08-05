@@ -86,6 +86,10 @@ export function AgentsListView() {
               <AgentCard
                 key={a.id}
                 ag={a}
+                // `GET /agents` denormalizes this; `?? undefined` keeps a
+                // missing count (an older API) rendering no badge at all rather
+                // than claiming zero skills.
+                skillCount={a.skills_count ?? undefined}
                 onClick={() => router.push(`/agents/${a.id}?tab=config`)}
                 onToggle={(enabled) => update.mutate({ id: a.id, patch: { enabled } })}
               />

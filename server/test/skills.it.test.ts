@@ -186,7 +186,12 @@ d('skills module', () => {
       .set({ workspaceId: other!.id })
       .where(eq(t.skills.id, id));
 
-    for (const url of [`/skills/${id}`, `/skills/${id}/versions`, `/skills/${id}/agents`]) {
+    for (const url of [
+      `/skills/${id}`,
+      `/skills/${id}/versions`,
+      `/skills/${id}/agents`,
+      `/skills/${id}/stats`,
+    ]) {
       expect((await app.inject({ method: 'GET', url })).statusCode, url).toBe(404);
     }
     expect((await app.inject({ method: 'DELETE', url: `/skills/${id}` })).statusCode).toBe(404);
@@ -224,6 +229,125 @@ d('skills module', () => {
     // take three agents down with it.
     expect((await app.inject({ method: 'GET', url: `/agents/${agentId}` })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: `/agents/${agentId}/skills` })).json()).toEqual([]);
+    await app.close();
+  });
+
+  /**
+   * `GET /skills/:id/stats` reads the run traces back, so the assertions below
+   * write traces by hand rather than triggering runs — the shape of
+   * `trace.config.skills` is the contract under test, not the executor.
+   */
+  it('adds up what a skill cost across the runs that loaded it', async () => {
+    const app = await makeApp();
+    const payload = body();
+    const skillId = (await app.inject({ method: 'POST', url: '/skills', payload })).json()
+      .id as string;
+
+    const statsOf = async () =>
+      (await app.inject({ method: 'GET', url: `/skills/${skillId}/stats` })).json();
+
+    // Never loaded: zeroes and a null, not a 404 and not a NaN average.
+    expect(await statsOf()).toMatchObject({
+      agents: [],
+      runs: 0,
+      tokens_total: 0,
+      tokens_avg: 0,
+      last_loaded_at: null,
+    });
+
+    // The runs must land in the SAME workspace the API reads as, so take it off
+    // the skill the API just created rather than guessing at the row order of
+    // `workspaces` — an earlier test in this file inserts a second one.
+    const [row] = await pg.handle.db.select().from(t.skills).where(eq(t.skills.id, skillId));
+    const writeRun = async (ranAt: Date, trace: unknown) => {
+      const [run] = await pg.handle.db
+        .insert(t.agentRuns)
+        .values({ workspaceId: row!.workspaceId, ranAt, status: 'done' })
+        .returning();
+      await pg.handle.db.insert(t.runTraces).values({ runId: run!.id, trace });
+    };
+    const traceWith = (skills: unknown) => ({ config: { agent: 'A', model: 'm', skills } });
+
+    await writeRun(
+      new Date('2026-08-01T10:00:00Z'),
+      traceWith([{ name: payload.name, version: 1, tokens: 300 }]),
+    );
+    await writeRun(
+      new Date('2026-08-02T10:00:00Z'),
+      // A second skill in the same run: only this one's tokens count.
+      traceWith([
+        { name: 'some-other-skill', version: 1, tokens: 999 },
+        { name: payload.name, version: 2, tokens: 500 },
+      ]),
+    );
+
+    // A run that loaded nothing, and a pre-L02 trace with no `skills` key at
+    // all. Both must be ignored rather than crash `jsonb_array_elements`.
+    await writeRun(new Date('2026-08-03T10:00:00Z'), traceWith(null));
+    await writeRun(new Date('2026-08-04T10:00:00Z'), { config: { agent: 'A', model: 'm' } });
+
+    const stats = await statsOf();
+    expect(stats).toMatchObject({ runs: 2, tokens_total: 800, tokens_avg: 400 });
+    // The newest run that loaded THIS skill — not the newest run overall.
+    expect(new Date(stats.last_loaded_at).toISOString()).toBe('2026-08-02T10:00:00.000Z');
+    await app.close();
+  });
+
+  /**
+   * The other direction of the same join. `Skill.used_by` has been on the list
+   * since L02; `Agent.skills_count` was the half nobody wired, so every agent
+   * card rendered without its badge.
+   */
+  it('denormalizes skills_count onto the agent list, and nowhere else', async () => {
+    const app = await makeApp();
+    const agentId = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: {
+          name: `Counter ${Math.random().toString(36).slice(2, 8)}`,
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          system_prompt: 'Review the diff.',
+        },
+      })
+    ).json().id as string;
+
+    const countOf = async (id: string) => {
+      const list = (await app.inject({ method: 'GET', url: '/agents' })).json() as Array<{
+        id: string;
+        skills_count?: number;
+      }>;
+      return list.find((a) => a.id === id)?.skills_count;
+    };
+
+    // A fresh agent reports 0 — a real answer, not a missing one.
+    expect(await countOf(agentId)).toBe(0);
+
+    const first = (await app.inject({ method: 'POST', url: '/skills', payload: body() })).json()
+      .id as string;
+    const second = (await app.inject({ method: 'POST', url: '/skills', payload: body() })).json()
+      .id as string;
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agentId}/skills`,
+      payload: { skill_ids: [first, second] },
+    });
+    expect(await countOf(agentId)).toBe(2);
+
+    // Disabling a skill does NOT change the count: the card mirrors the editor's
+    // Skills tab, which still lists the row with its toggle off.
+    await app.inject({ method: 'PUT', url: `/skills/${first}`, payload: { enabled: false } });
+    expect(await countOf(agentId)).toBe(2);
+
+    // Unlinking does, and deleting the skill unlinks it.
+    await app.inject({ method: 'DELETE', url: `/skills/${second}` });
+    expect(await countOf(agentId)).toBe(1);
+
+    // The single-agent read stays clean — absent, so the client can tell "not
+    // loaded" from "zero".
+    const one = (await app.inject({ method: 'GET', url: `/agents/${agentId}` })).json();
+    expect(one).not.toHaveProperty('skills_count');
     await app.close();
   });
 });

@@ -1,5 +1,5 @@
-/* SkillEditor — tabbed skill editor (Config / Preview / Versions), mirroring
-   the agent editor's shell. */
+/* SkillEditor — tabbed skill editor (Config / Preview / Versions / Stats),
+   mirroring the agent editor's shell. */
 "use client";
 
 import React from "react";
@@ -8,6 +8,7 @@ import { Tabs } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { SkillConfigTab } from "./_components/SkillConfigTab";
 import { SkillPreviewTab } from "./_components/SkillPreviewTab";
+import { SkillStatsTab } from "./_components/SkillStatsTab";
 import { SkillVersionsTab } from "./_components/SkillVersionsTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
@@ -32,6 +33,7 @@ export function SkillEditor({
         {tab === "config" && <SkillConfigTab skill={skill} />}
         {tab === "preview" && <SkillPreviewTab skill={skill} />}
         {tab === "versions" && <SkillVersionsTab skill={skill} />}
+        {tab === "stats" && <SkillStatsTab skill={skill} />}
       </div>
     </div>
   );

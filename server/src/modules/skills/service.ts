@@ -3,6 +3,7 @@ import type { DbTx } from '../../db/client.js';
 import type {
   Skill,
   SkillImportPreview,
+  SkillStats,
   SkillType,
   SkillUsage,
   SkillVersion,
@@ -219,5 +220,28 @@ export class SkillsService {
     if (!skill) return undefined;
     const rows = await this.repo.usage(workspaceId, skillId);
     return rows.map((r) => ({ agent_id: r.agentId, agent_name: r.agentName }));
+  }
+
+  /**
+   * What the skill has cost so far: who links it, and what the runs that loaded
+   * it actually spent. Two reads — the link join and the trace aggregate — and
+   * nothing derived beyond the mean, which is computed here rather than in SQL
+   * so the "0 runs ⇒ 0, never NaN" rule lives with the rest of the business
+   * logic. Returns undefined for an unknown skill (the route maps that to 404).
+   */
+  async stats(workspaceId: string, skillId: string): Promise<SkillStats | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    const [agents, trace] = await Promise.all([
+      this.repo.usage(workspaceId, skillId),
+      this.repo.traceStats(workspaceId, skill.name),
+    ]);
+    return {
+      agents: agents.map((r) => ({ agent_id: r.agentId, agent_name: r.agentName })),
+      runs: trace.runs,
+      tokens_total: trace.tokensTotal,
+      tokens_avg: trace.runs === 0 ? 0 : Math.round(trace.tokensTotal / trace.runs),
+      last_loaded_at: trace.lastLoadedAt?.toISOString() ?? null,
+    };
   }
 }
