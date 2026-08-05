@@ -7,7 +7,15 @@ export interface EditorTab {
   icon: IconName;
 }
 
-/** Editor tabs. Part-0 ships Config only; later lessons add the rest. */
+/** Editor tabs. L02 adds Skills; Evals/Stats/CI come with later lessons. */
 export const TABS: readonly EditorTab[] = [
   { key: "config", labelKey: "editor.tabs.config", icon: "Settings" },
+  { key: "skills", labelKey: "editor.tabs.skills", icon: "Sparkles" },
 ];
+
+/**
+ * Tabs the `?tab=` param may select. Kept beside TABS because the page's
+ * fallback is SILENT — an unlisted key renders Config and ignores the URL, which
+ * looks like a working page rather than a missing entry.
+ */
+export const VALID_TABS = TABS.map((t) => t.key);

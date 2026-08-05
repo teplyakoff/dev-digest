@@ -1,29 +1,18 @@
 /**
- * repo-intel constants. Phase-tagged: [T1] used now; [T2]/[T3]
- * exported early so the pipeline lands against a single source of truth.
+ * repo-intel constants — the literals only this feature uses. Phase-tagged:
+ * [T1] used now; [T2]/[T3] exported early so the pipeline lands against a single
+ * source of truth.
+ *
+ * Three groups of literals used to live here and no longer do, because they were
+ * read from outside this folder and a cross-feature constant import is the
+ * coupling onion §11 forbids:
+ *
+ *   - job kinds        → `platform/job-kinds.ts`   (shared with `repos`)
+ *   - walk/parse scope → `platform/source-scope.ts` (shared with the astgrep adapter)
+ *
+ * Import them from there. Do not re-export them here: two names for one value is
+ * how the next reader ends up updating only one of them.
  */
-
-// --- Job kinds (registered on JobRunner; enqueued from repos/service.ts) ----
-export const INDEX_JOB_KIND = 'repo-intel-index';
-export const REFRESH_JOB_KIND = 'repo-intel-refresh';
-/** Manual "re-analyze": fetch latest from origin + incremental reindex. */
-export const RESYNC_JOB_KIND = 'repo-intel-resync';
-
-// --- Walk / parse scope -----------------------------------------------------
-/** [T1] Files we parse (diff-scoped in T1; whole walk in T2). */
-export const SUPPORTED_EXT = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'] as const;
-
-/** [T1] Directories never walked. `.gitignore` is layered on top in T2 walk. */
-export const EXCLUDED_DIRS = [
-  'node_modules',
-  'dist',
-  'build',
-  'coverage',
-  '.next',
-  'out',
-  'vendor',
-  '.git',
-] as const;
 
 // --- Read-time limits -------------------------------------------------------
 /** [T1] Caller fan-out cap per changed symbol (ORDER BY rank DESC LIMIT N). */
@@ -49,5 +38,3 @@ export const INDEX_SOFT_BUDGET_MS = 110_000;
 export const BFS_DEPTH = 2;
 export const HOTNESS_WINDOW_DAYS = 180;
 export const DEFAULT_REPO_MAP_TOKEN_BUDGET = 1500;
-/** Signatures are trimmed to this many chars in the parse phase (cache stability). */
-export const MAX_SIGNATURE_CHARS = 120;

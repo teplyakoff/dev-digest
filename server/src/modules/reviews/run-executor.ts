@@ -1,11 +1,16 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import type { Provider, Review, RunTrace, TraceSkill, UnifiedDiff } from '@devdigest/shared';
+import { reviewPullRequest, countBlockers, renderSkillBlock } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
+// SANCTIONED — onion §15 names this file in its exemptions list: it imports
+// db/schema in TYPE POSITION ONLY, to describe a repo row it passes straight
+// through. Marked here rather than silenced globally so the next person to
+// change this signature sees the standing instruction: prefer a contract type.
+// eslint-disable-next-line no-restricted-imports
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import { REVIEW_STRATEGY, RUN_DEADLINE_MS } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 
@@ -15,6 +20,25 @@ export class RunCancelledError extends Error {
     super('Run cancelled');
     this.name = 'RunCancelledError';
   }
+}
+
+/**
+ * Did this error come from an aborted request?
+ *
+ * Matched structurally rather than with `instanceof`, because the abort travels
+ * up through whichever SDK made the call — OpenAI's `APIUserAbortError`,
+ * Anthropic's equivalent, or a bare `DOMException` named `AbortError` — and none
+ * of them is a class this module should be importing (onion §5: library error
+ * classes do not travel inward).
+ */
+function isAbortError(err: unknown): boolean {
+  const e = err as { name?: string; message?: string } | null;
+  if (!e) return false;
+  return (
+    e.name === 'AbortError' ||
+    e.name === 'APIUserAbortError' ||
+    /aborted|abort(ed)? by/i.test(e.message ?? '')
+  );
 }
 
 /** Minimal structured logger (pino-compatible: (obj, msg)) for runtime logs. */
@@ -155,6 +179,16 @@ export class ReviewRunExecutor {
 
     runLog.info(`Starting review with agent "${agent.name}" (${agent.provider}/${agent.model})`);
 
+    // Two things can end this run early, and both abort the SAME controller so
+    // the provider request is actually torn down rather than merely un-awaited:
+    //   - the user cancelling (runBus.cancel → registerAborter's controller)
+    //   - the run deadline below
+    // `checkCancelled` stays as the between-chunk checkpoint; it is what turns a
+    // cancel into a clean RunCancelledError rather than a raw abort error.
+    const aborter = new AbortController();
+    this.container.runBus.registerAborter(runId, aborter);
+    const deadline = setTimeout(() => aborter.abort(), RUN_DEADLINE_MS);
+
     try {
       // Resolve the agent's LLM provider. (container.llm throws if the provider
       // key is missing — caught below and persisted as a failed run.)
@@ -170,6 +204,19 @@ export class ReviewRunExecutor {
       // flag, which still gates the facade internally.
       const repoIntelOn = agent.repoIntel !== false;
       if (!repoIntelOn) runLog.info('Repo intel disabled for this agent — skipping context enrichment');
+
+      // L02 — the agent's knowledge layer. Two filters, meaning different
+      // things: `agent_skills` decides whether this skill is attached to THIS
+      // agent (and in what order), `skills.enabled` is the workspace-wide master
+      // switch. A disabled skill loads for nobody.
+      //
+      // This used to read "disabled → absent from the log AND the trace". Half of
+      // that is reversed: it is still absent from the trace and the prompt, but
+      // the LOG now says so out loud, because a silent log is what makes "why is
+      // my skill not in the prompt?" unanswerable from the place people look.
+      // Absent-from-the-trace is a contract (the UI hides the row); silence in
+      // the log was never a feature.
+      const { skills, traceSkills } = await this.resolveSkills(agent.id, runLog);
 
       // T1.3 — callers-in-prompt. Best-effort: when repo-intel is off the facade
       // returns []; we omit the section and behavior is identical to the
@@ -198,6 +245,9 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // L02 — passed only when the agent has enabled skills linked, so an
+        // agent with none gets a prompt byte-identical to the pre-L02 one.
+        ...(skills.length > 0 ? { skills } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -212,49 +262,77 @@ export class ReviewRunExecutor {
         checkCancelled: () => {
           if (this.container.runBus.isCancelled(runId)) throw new RunCancelledError();
         },
+        // Reaches the SDK call itself, so cancelling closes the socket instead
+        // of leaving the generation running (and billing) unobserved.
+        signal: aborter.signal,
       });
       const { tokensIn, tokensOut, costUsd, grounding } = outcome;
 
       const keptFindings = outcome.review.findings;
-
-      // ---- Persist review + findings ----------------------------------------
-      const review = await this.repo.insertReview({
-        workspaceId,
-        prId: pull.id,
-        agentId: agent.id,
-        runId,
-        kind: 'review',
-        verdict: outcome.review.verdict,
-        summary: outcome.review.summary,
-        score: outcome.review.score,
-        model: agent.model,
-      });
-      const findingRows = await this.repo.insertFindings(review.id, keptFindings);
-      runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
-
-      // Mark the commit this review ran against so the PR list can tell
-      // reviewed / needs-review (head moved) / stale apart.
-      await this.repo.markReviewed(pull.id, pull.headSha);
-
       const durationMs = Date.now() - start;
 
       // Deterministic blocker count (severity ≥ the agent's gate) — the signal
       // the timeline colors on, NOT the model's self-reported verdict.
       const blockers = countBlockers(keptFindings, agent.ciFailOn);
 
-      // ---- Observability: agent_runs + ONE run_traces document --------------
-      await this.repo.completeAgentRun(runId, {
-        status: 'done',
-        durationMs,
-        tokensIn,
-        tokensOut,
-        costUsd,
-        findingsCount: findingRows.length,
-        grounding,
-        score: outcome.review.score,
-        blockers,
-        error: null,
+      // ---- Persist the whole result atomically ------------------------------
+      // Four writes, ONE business fact: "this agent reviewed this PR". Run
+      // separately they can half-land — a crash after insertReview leaves a
+      // review with no findings and a score computed from nothing, which the UI
+      // renders as a confident clean bill of health. The service owns this
+      // boundary because it is the layer that knows the four belong together
+      // (onion §8); the repository methods just accept the tx.
+      let settled = false;
+      const { review, findingRows } = await this.container.db.transaction(async (tx) => {
+        const review = await this.repo.insertReview(
+          {
+            workspaceId,
+            prId: pull.id,
+            agentId: agent.id,
+            runId,
+            kind: 'review',
+            verdict: outcome.review.verdict,
+            summary: outcome.review.summary,
+            score: outcome.review.score,
+            model: agent.model,
+          },
+          tx,
+        );
+        const findingRows = await this.repo.insertFindings(review.id, keptFindings, tx);
+
+        // Mark the commit this review ran against so the PR list can tell
+        // reviewed / needs-review (head moved) / stale apart.
+        await this.repo.markReviewed(pull.id, pull.headSha, tx);
+
+        settled = await this.repo.completeAgentRun(
+          runId,
+          {
+            status: 'done',
+            durationMs,
+            tokensIn,
+            tokensOut,
+            costUsd,
+            findingsCount: findingRows.length,
+            grounding,
+            score: outcome.review.score,
+            blockers,
+            error: null,
+          },
+          tx,
+        );
+        return { review, findingRows };
       });
+      runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
+
+      // The run reached a terminal status while this call was still in flight —
+      // almost always a user cancel, which cannot abort the provider request.
+      // The findings above are still persisted and still real; what must NOT
+      // happen is the row flipping back to `done` and being billed.
+      if (!settled) {
+        runLog.info(
+          'Run had already been cancelled or reaped — keeping that status instead of marking it done',
+        );
+      }
 
       const trace: RunTrace = {
         config: {
@@ -264,6 +342,10 @@ export class ReviewRunExecutor {
           model: agent.model,
           pr: pull.number,
           source: 'local',
+          // Omitted (not `[]`) when nothing loaded, so the trace UI's "Skills
+          // loaded" row is absent rather than empty — same distinction the
+          // prompt makes by omitting the section.
+          ...(traceSkills.length > 0 ? { skills: traceSkills } : {}),
         },
         stats: {
           duration_ms: durationMs,
@@ -295,9 +377,24 @@ export class ReviewRunExecutor {
     } catch (err) {
       // Failure/cancel: persist status + the error text + the log-so-far so the
       // run (and WHY it failed) is visible on the UI after a reload.
-      const cancelled = err instanceof RunCancelledError;
+      //
+      // Three ways to get here, and they must not be conflated:
+      //   - RunCancelledError — the between-chunk checkpoint saw the cancel flag
+      //   - an abort while the flag is set — the socket was torn down by cancel
+      //   - an abort with no flag — the deadline fired, which is a FAILURE and
+      //     needs to say so, not masquerade as something the user asked for
+      const abortedInFlight = isAbortError(err);
+      const cancelled =
+        err instanceof RunCancelledError ||
+        (abortedInFlight && this.container.runBus.isCancelled(runId));
+      const timedOut = abortedInFlight && !cancelled;
+
       const status = cancelled ? 'cancelled' : 'failed';
-      const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
+      const msg = cancelled
+        ? 'Cancelled by user'
+        : timedOut
+          ? `Run exceeded the ${Math.round(RUN_DEADLINE_MS / 60000)}-minute deadline and was aborted`
+          : (err as Error).message;
       runLog.error(cancelled ? 'Run cancelled by user' : `Run failed: ${msg}`);
       await this.repo
         .completeAgentRun(runId, {
@@ -318,7 +415,67 @@ export class ReviewRunExecutor {
         .catch(() => undefined);
       this.container.runBus.complete(runId);
       throw err;
+    } finally {
+      // Always: an un-cleared 10-minute timer keeps the process alive after a
+      // fast run, and would abort a controller nobody is listening to.
+      clearTimeout(deadline);
     }
+  }
+
+  /**
+   * Resolve the agent's knowledge layer: linked skills, in `agent_skills.order`,
+   * filtered to the ones globally enabled, rendered into prompt blocks and
+   * priced.
+   *
+   * `renderSkillBlock` comes from the engine so the studio and the CI runner
+   * render the same skill identically — a CI review that can't be compared to a
+   * local one is worse than no CI review.
+   *
+   * Tokens are counted on the RENDERED block, not the raw body, so the figure in
+   * the trace is what the model was actually sent. Best-effort by construction:
+   * `Tokenizer` falls back to a chars/4 heuristic rather than throwing, because a
+   * token count is reporting — it must never be the reason a review fails.
+   */
+  private async resolveSkills(
+    agentId: string,
+    runLog: RunLogger,
+  ): Promise<{ skills: string[]; traceSkills: TraceSkill[] }> {
+    const links = await this.agents.linkedSkills(agentId);
+    // No links at all — the agent was never given a knowledge layer, so there is
+    // nothing to report. Silence is the correct log here, and the ONLY case
+    // where it is.
+    if (links.length === 0) return { skills: [], traceSkills: [] };
+
+    const active = links.filter((l) => l.skill.enabled);
+    const skipped = links.length - active.length;
+
+    // Every linked skill is switched off at the workspace level. This is exactly
+    // the state that prompts "why is my skill not in the prompt?", so the run log
+    // has to answer it — returning early without a line left the question
+    // unanswerable from the one place a person looks for the answer.
+    if (active.length === 0) {
+      runLog.info(`Loaded 0 skill(s) — ${skipped} linked but disabled`);
+      return { skills: [], traceSkills: [] };
+    }
+
+    const skills: string[] = [];
+    const traceSkills: TraceSkill[] = [];
+    for (const { skill } of active) {
+      const block = renderSkillBlock(skill.name, skill.body);
+      skills.push(block);
+      traceSkills.push({
+        name: skill.name,
+        version: skill.version,
+        tokens: this.container.tokenizer.count(block),
+      });
+    }
+
+    const total = traceSkills.reduce((n, s) => n + s.tokens, 0);
+    runLog.info(
+      `Loaded ${active.length} skill(s) (${total.toLocaleString('en-US')} tokens)` +
+        (skipped > 0 ? ` — ${skipped} linked but disabled` : ''),
+    );
+    return { skills, traceSkills };
   }
 
   /**

@@ -26,3 +26,12 @@ export function formatSeconds(ms: number): string {
 export function formatTokens(tokensIn: number, tokensOut: number): string {
   return `${(tokensIn / 1000).toFixed(0)}k→${(tokensOut / 1000).toFixed(1)}k`;
 }
+
+/**
+ * What the skills block cost this run, summed from the per-skill counts the
+ * server measured on the RENDERED blocks. Not recomputed here: a chars/4
+ * estimate in the UI would disagree with the number the run actually paid.
+ */
+export function skillTokens(trace: RunTrace): number {
+  return (trace.config.skills ?? []).reduce((n, sk) => n + sk.tokens, 0);
+}

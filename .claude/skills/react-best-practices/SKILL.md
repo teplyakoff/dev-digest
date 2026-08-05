@@ -23,7 +23,8 @@ Each rule is tagged with a severity for use by consuming agents:
 - Business logic in hooks/helpers, NOT in component bodies
 - Container components fetch data; presentational components receive props and render UI
 - Helper functions extracted OUTSIDE the component body
-- Max 200 lines per component — split if larger
+- Past ~200 lines, look for a reason to split — length alone is not one
+  (see [frontend-architecture](../frontend-architecture/SKILL.md) § Splitting Components)
 - Max 5-7 props — more suggests the component does too much
 - One component per file (small colocated internal helpers are fine)
 
@@ -117,7 +118,7 @@ New arrays, objects, and functions created inline in JSX props break `React.memo
 - Use utility classes for all styling — no inline `style={}` objects
 - Use responsive prefixes (`sm:`, `md:`, `lg:`) for responsive design
 - Extract repeated class combinations into reusable components (Button, Card, Badge)
-- Prefer the project's `components/ui/` over recreating common elements
+- Prefer the project's existing shared components over recreating common elements
 
 ## Error Boundaries (HIGH)
 
@@ -166,9 +167,9 @@ New arrays, objects, and functions created inline in JSX props break `React.memo
 
 ## Code Organization (MEDIUM)
 
-### Feature-Based Structure
-- Colocate component + hook + helpers + tests per feature
-- Shared utilities go in `utils/` or `components/ui/`
+File placement — which folder a component, hook, constant, type or helper belongs in, and when
+it graduates to a shared location — is owned by
+[frontend-architecture](../frontend-architecture/SKILL.md). Follow it rather than improvising.
 
 ### File Quality
 - Order: imports, constants, helpers, component, exports

@@ -84,7 +84,7 @@ would be obvious to anyone reading the code, don't write it.
 
 - The Zod contracts are **vendored twice — `server/src/vendor/shared/**` and
   `client/src/vendor/shared/**` — and there is no re-vendor script.** Both
-  `CLAUDE.md` files say "edit the source, then re-vendor", but the only mechanism
+  `AGENTS.md` files say "edit the source, then re-vendor", but the only mechanism
   is copying by hand. Add a field to one copy only and nothing fails loudly: the
   client type-checks against its own stale copy and simply reads `undefined` at
   runtime. Today the two differ only in comments — keep it that way. (2026-07-28)
@@ -115,13 +115,80 @@ would be obvious to anyone reading the code, don't write it.
   When you reverse a documented "we deliberately don't do X", grep for the
   comment that documents it. (2026-07-31)
 
+- **Extends the 2026-07-31 "reverse it in two places" entry: the third place is a
+  TEST, and it is the one that fights back.** Reversing "a disabled skill is
+  absent from the log and the trace" meant editing four things, not two — the
+  code, the comment above the call site, `docs/plans/L02-skills.md`'s exit
+  checklist, and `reviews.it.test.ts`, which pinned the old behaviour as
+  `expect(off.log.some(l => l.msg.includes('Loaded'))).toBe(false)`. A green
+  suite after a reversal means you have not found the assertion yet. Before
+  reversing a documented negative decision, grep the tests for the behaviour you
+  are about to add, not just the comments describing what you are removing — and
+  keep the halves apart in the new wording, because only the log changed here
+  while the trace contract (`config.skills` omitted, never `[]`) deliberately did
+  not. (2026-08-03)
+
+- **Nothing in `server/src` opens a database transaction, and there is no `DbTx`
+  type.** `grep -rn "\.transaction("` over `server/src` returns zero hits, and
+  `db/client.ts` exports only `Db`, `DbHandle` and `createDb`. Every write today
+  is a single statement, so the question has never come up. The first multi-write
+  operation needs the alias added next to `Db`:
+  `export type DbTx = Parameters<Parameters<Db['transaction']>[0]>[0];` — then
+  repository methods take `tx?: DbTx` and resolve `const invoker = tx ?? this.db`,
+  so the *service* owns the boundary and the repository stays usable both inside
+  and outside a transaction. Do not open a transaction inside a repository method:
+  two repositories each opening their own gives two transactions and no
+  atomicity. (2026-08-03)
+
+- **A `done` write can no longer resurrect a cancelled run — but only because
+  `completeAgentRun` now filters on status.** This closes the 2026-07-28 entry
+  above ("cancel does not stop it"): the settle query carries
+  `WHERE id = :id AND (status = 'running' OR status = :incomingStatus)`, so
+  `running → anything` and `cancelled → cancelled` are allowed while
+  `cancelled → done` is refused. The second half matters and is easy to delete by
+  accident: `POST /runs/:id/cancel` writes ONLY `status`, so the executor's catch
+  path still has to come back and fill in `duration_ms` and `error`. The method
+  now returns a boolean — `false` means the write was refused, and the executor
+  logs it rather than assuming it won. Regression tests:
+  `test/run-settle.it.test.ts`. (2026-08-03)
+
+- **The `findings` CHECK constraints and `vendor/shared/contracts/findings.ts`
+  must be edited together.** Migration `0011` pins the exact enum members into
+  the database, and they are NOT what you would guess: severity is UPPERCASE
+  (`CRITICAL`/`WARNING`/`SUGGESTION`) while category and kind are lowercase
+  (`bug`/`security`/`perf`/`style`/`test`, `finding`/`secret_leak`/
+  `lethal_trifecta`/`phantom`/`hook`). Add a member to the Zod enum without
+  adding it to the CHECK and inserts fail at runtime with
+  `new row for relation "findings" violates check constraint`. Verify against
+  live data before adding any further CHECK:
+  `select severity, count(*) from findings group by 1`. (2026-08-03)
+
 ## Tool & Library Notes
+
+- **`pnpm lint` enforces the onion rings, and six violations are deliberately
+  exempted IN THE CODE, not in the config.** Each carries an
+  `eslint-disable-next-line no-restricted-imports` with the reason directly
+  above it: four `node:fs` imports in `repo-intel` (awaiting a `SourceReader`
+  port) and two type-position `db/schema` imports in `reviews` (sanctioned by
+  the skill's §15). `grep -rn "eslint-disable-next-line no-restricted-imports"
+  src` is the live list of backend architectural debt — shorter than the skill's
+  §15 table, because the rest were fixed. Do not add a seventh without the same
+  written reason. (2026-08-03)
 
 - The API imports `reviewer-core`'s raw TypeScript through a tsconfig path alias,
   so `reviewer-core/node_modules` must exist or boot dies with
   `ERR_MODULE_NOT_FOUND` — even though nothing in `server/package.json` references
   that package. `scripts/dev.sh` installs it separately, with **npm**, for exactly
   this reason. (2026-07-27)
+
+- **`pnpm db:generate` rewrites `migrations/meta/_journal.json`** and adds a
+  `migrations/meta/NNNN_snapshot.json` beside it, so "already-applied files in
+  `src/db/migrations/` are do-not-touch" (`AGENTS.md`) holds for the `.sql`
+  files only. Any automated check that treats the whole folder as immutable
+  fires on every legitimate new migration instead: generating `0011` shows
+  `meta/_journal.json` as MODIFIED and `meta/0011_snapshot.json` as ADDED in the
+  same diff. Scope such a check to `*.sql`, and expect the snapshot to be large
+  (3 560 lines for `0011`) — it is generated, not worth reviewing. (2026-08-03)
 
 ## Recurring Errors & Fixes
 
@@ -137,7 +204,31 @@ would be obvious to anyone reading the code, don't write it.
   dual-provider test's own findings-length assert. Grep the file for every
   count/score assertion before extending the fixture. (2026-07-31)
 
+- `Error: MockLLMProvider fixture failed schema: ...` → the canned fixture no
+  longer satisfies the Zod schema the *caller* passed to `completeStructured`.
+  `MockLLMProvider` (`src/adapters/mocks.ts`) runs `req.schema.safeParse(fixture)`
+  and throws on failure by design, so a contract change breaks the fixture loudly
+  instead of letting a stale shape flow into the test. Fix the fixture (or the
+  `structuredBySchema` entry for that `schemaName`), not the mock. (2026-08-03)
+
 ## Session Notes
+
+- **2026-08-03** — Architecture pass driven by the `onion-architecture` skill.
+  Turned §14 into a lint lane (`server/eslint.config.js` + the `lint` workflow),
+  which reproduced the skill's §15 violation table exactly — 19 errors — and then
+  drove fixing 13 of them. Extracted `pulls/` into
+  routes→service→repository→helpers (395 → 57-line `routes.ts`, 12 new
+  Docker-free tests in `test/pulls-helpers.test.ts`), and gave `polling`,
+  `settings` and `workspace` the same trio. Promoted the constants that caused
+  the sibling/adapter-inward imports to ring 1 (`platform/job-kinds.ts`,
+  `platform/source-scope.ts`, `db/constants.ts`). Added `DbTx` and the first
+  three transactions in the codebase. Migration `0011` added the four missing
+  indexes on `reviews`/`findings`/`agent_runs` — those tables had none at all
+  beyond their PK, while the PR list reads all three on every request.
+  `scripts/vendor-shared.sh` now re-vendors the contracts and CI fails on drift;
+  it found the copies had ALREADY diverged on five files, including a `Provider`
+  enum on the client missing `'openrouter'` — the provider the seeded default
+  agent runs on.
 
 - **2026-07-27** — First boot from zero on this machine. Docker Desktop was not
   running; after starting it, Postgres, migrations and seed all came up clean.

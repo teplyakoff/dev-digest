@@ -64,13 +64,18 @@ export class AnthropicProvider implements LLMProvider {
 
   private async doComplete(req: CompletionRequest): Promise<CompletionResult> {
     const { system, rest } = splitSystem(req.messages);
-    const res = await this.client.messages.create({
-      model: req.model,
-      system: system || undefined,
-      messages: rest,
-      max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
-      temperature: req.temperature ?? 0.2,
-    });
+    const res = await this.client.messages.create(
+      {
+        model: req.model,
+        system: system || undefined,
+        messages: rest,
+        max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
+        temperature: req.temperature ?? 0.2,
+      },
+      // Aborting must close the socket, not just stop us awaiting it — see the
+      // note on `signal` in vendor/shared/adapters.ts.
+      { signal: req.signal },
+    );
     const text = res.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
@@ -113,7 +118,7 @@ export class AnthropicProvider implements LLMProvider {
               },
             ],
             tool_choice: { type: 'tool', name: toolName },
-          }),
+          }, { signal: req.signal }),
           req.timeoutMs ?? DEFAULT_TIMEOUT,
         ),
       );

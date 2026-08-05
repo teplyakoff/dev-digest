@@ -1,4 +1,4 @@
-import type { Db } from '../../db/client.js';
+import type { Db, DbTx } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
 
@@ -41,22 +41,30 @@ export class ReviewRepository {
 
   // ---- reviews + findings -------------------------------------------------
 
-  insertReview(values: {
-    workspaceId: string;
-    prId: string;
-    agentId: string | null;
-    runId: string | null;
-    kind: 'summary' | 'review';
-    verdict: string | null;
-    summary: string | null;
-    score: number | null;
-    model: string | null;
-  }): Promise<ReviewRow> {
-    return reviewRepo.insertReview(this.db, values);
+  // Write methods take an optional transaction and resolve `tx ?? this.db`, so
+  // each works identically inside and outside one. The SERVICE opens the
+  // transaction, because it is the only layer that knows where one business
+  // operation begins and ends (onion §8). Never open one in here.
+
+  insertReview(
+    values: {
+      workspaceId: string;
+      prId: string;
+      agentId: string | null;
+      runId: string | null;
+      kind: 'summary' | 'review';
+      verdict: string | null;
+      summary: string | null;
+      score: number | null;
+      model: string | null;
+    },
+    tx?: DbTx,
+  ): Promise<ReviewRow> {
+    return reviewRepo.insertReview(tx ?? this.db, values);
   }
 
-  insertFindings(reviewId: string, findings: Finding[]): Promise<FindingRow[]> {
-    return reviewRepo.insertFindings(this.db, reviewId, findings);
+  insertFindings(reviewId: string, findings: Finding[], tx?: DbTx): Promise<FindingRow[]> {
+    return reviewRepo.insertFindings(tx ?? this.db, reviewId, findings);
   }
 
   /** Reviews for a PR (newest first), each with its findings. */
@@ -148,6 +156,12 @@ export class ReviewRepository {
     return runRepo.createAgentRun(this.db, values);
   }
 
+  /**
+   * Settle a run. Returns FALSE when the write was refused because the run had
+   * already reached a different terminal status — a cancelled run must not be
+   * resurrected as `done` by a provider response that arrives late. See
+   * `run.repo.ts` for the transition table.
+   */
   completeAgentRun(
     runId: string,
     values: {
@@ -167,13 +181,14 @@ export class ReviewRepository {
       /** Failure reason (status='failed') / cancellation note. Null clears it. */
       error?: string | null;
     },
-  ): Promise<void> {
-    return runRepo.completeAgentRun(this.db, runId, values);
+    tx?: DbTx,
+  ): Promise<boolean> {
+    return runRepo.completeAgentRun(tx ?? this.db, runId, values);
   }
 
   /** Record the head SHA a review ran against (PR-list freshness derivation). */
-  markReviewed(prId: string, sha: string): Promise<void> {
-    return pullRepo.markReviewed(this.db, prId, sha);
+  markReviewed(prId: string, sha: string, tx?: DbTx): Promise<void> {
+    return pullRepo.markReviewed(tx ?? this.db, prId, sha);
   }
 
   /** Persist the WHOLE run log as ONE document. PK = runId → agent_runs. */

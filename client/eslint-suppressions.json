@@ -1,0 +1,312 @@
+{
+  "src/app/agents/[id]/_components/AgentEditor/_components/ConfigTab/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/agents/[id]/_components/AgentEditor/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/agents/[id]/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 13
+    }
+  },
+  "src/app/agents/_components/AgentCard/AgentCard.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/agents/_components/AgentCard/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/agents/_components/AgentsListView/_components/CreateAgentModal/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/agents/_components/AgentsListView/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/onboarding/_components/AddRepoView/AddRepoView.tsx": {
+    "no-restricted-syntax": {
+      "count": 16
+    }
+  },
+  "src/app/onboarding/_components/AddRepoView/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/FindingCard/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/FindingsPanel/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/PrDetailHeader/PrDetailHeader.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/PrDetailHeader/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/ReviewRunAccordion/ReviewRunAccordion.tsx": {
+    "no-restricted-syntax": {
+      "count": 11
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/ReviewRunAccordion/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunHistory/RunHistory.tsx": {
+    "no-restricted-syntax": {
+      "count": 15
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunReviewDropdown/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunStatus/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/FindingsSection/FindingsSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/FindingsSection/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/PromptBlock/PromptBlock.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/PromptBlock/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/PromptModalBody/PromptModalBody.tsx": {
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/PromptModalBody/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/ToolCallRow/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/TraceBody/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/TraceSection/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/index.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/app/repos/[repoId]/pulls/[number]/_components/VerdictBanner/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/_components/FilterBar/FilterBar.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/_components/FilterBar/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/repos/[repoId]/pulls/_components/PRRow/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/settings/[section]/_components/SettingsView/_components/SectionTitle/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/settings/[section]/_components/SettingsView/_components/SettingsApiKeys/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/settings/[section]/_components/SettingsView/_components/SettingsModels/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/app/settings/[section]/_components/SettingsView/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/app-shell/hooks/index.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/components/app-shell/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/CodeLine/CodeLine.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/CodeLine/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/CommentCard/CommentCard.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/CommentCard/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/CommentThreadView/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/DiffViewer/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/FileCard/FileCard.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/FileCard/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/InlineComposer/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/OutdatedComments/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/diff-viewer/index.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/components/mermaid-diagram/MermaidDiagram.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/mermaid-diagram/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/page-shell/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/repo-not-found/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/run-cost-badge/index.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/components/severity-counters/index.ts": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "src/components/showcase/index.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/lib/hooks/index.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "src/lib/toast.tsx": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "recorded_at": "2026-08-04T12:36:02.849Z",
+  "repo": "teplyakoff/dev-digest",
+  "scan": {
+    "id": "d664e951-1dc9-4d93-8b91-79a231596c35",
+    "repo_id": "574318a8-1866-4391-9829-0504a84e85e1",
+    "indexed_sha": "66727c85ce06d7b16e64f888925d131d558cbe51",
+    "sampled_files": [
+      "server/tsconfig.json",
+      "server/package.json",
+      "client/tsconfig.json",
+      "client/package.json",
+      "server/src/db/schema/_shared.ts",
+      "server/src/db/schema/core.ts",
+      "server/src/db/schema.ts",
+      "client/src/lib/api.ts",
+      "client/src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/styles.ts",
+      "client/src/components/diff-viewer/comments.ts",
+      "server/src/modules/repo-intel/constants.ts",
+      "server/src/db/schema/repos.ts",
+      "client/src/app/repos/[repoId]/pulls/constants.ts",
+      "server/src/adapters/git/diff-parser.ts",
+      "client/src/lib/hooks/agents.ts",
+      "client/src/lib/hooks/index.ts"
+    ],
+    "config_files": [
+      "server/tsconfig.json",
+      "server/package.json",
+      "client/tsconfig.json",
+      "client/package.json"
+    ],
+    "proposed": 20,
+    "kept": 20,
+    "dropped": [],
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-v4-flash",
+    "tokens_in": 12813,
+    "tokens_out": 1645,
+    "cost_usd": 0.002238317,
+    "created_at": "2026-08-04T12:34:48.274Z"
+  },
+  "candidates": 20,
+  "evidence_link_sample": "https://github.com/teplyakoff/dev-digest/blob/66727c85ce06d7b16e64f888925d131d558cbe51/client/src/lib/api.ts#L65-L74",
+  "created_skill": "repo-conventions",
+  "linked_to_agent": "General Reviewer",
+  "experiment": {
+    "pr": 4,
+    "without_skills": {
+      "run_id": "6e899a51-a5ba-4e43-831c-125e14840656",
+      "findings": 0,
+      "tokens_in": 4187,
+      "cost_usd": 0.00052136
+    },
+    "with_skills": {
+      "run_id": "970a2f7a-067e-4376-b26b-92a9841cffb1",
+      "findings": 3,
+      "blockers": 3,
+      "tokens_in": 6287,
+      "cost_usd": 0.000972944
+    }
+  }
+}

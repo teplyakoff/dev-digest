@@ -68,11 +68,16 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   private async doComplete(req: CompletionRequest): Promise<CompletionResult> {
-    const res = await this.client.chat.completions.create({
-      model: req.model,
-      messages: req.messages,
-      ...tuningParams(req.model, req.temperature ?? 0.2, req.maxTokens),
-    });
+    const res = await this.client.chat.completions.create(
+      {
+        model: req.model,
+        messages: req.messages,
+        ...tuningParams(req.model, req.temperature ?? 0.2, req.maxTokens),
+      },
+      // Aborting must close the socket, not just stop us awaiting it — see the
+      // note on `signal` in vendor/shared/adapters.ts.
+      { signal: req.signal },
+    );
     const text = res.choices?.[0]?.message?.content ?? '';
     const tokensIn = res.usage?.prompt_tokens ?? 0;
     const tokensOut = res.usage?.completion_tokens ?? 0;
@@ -96,15 +101,18 @@ export class OpenAIProvider implements LLMProvider {
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
       const res = await withRetry(() =>
         withTimeout(
-          this.client.chat.completions.create({
-            model: req.model,
-            messages,
-            ...tuningParams(req.model, req.temperature, req.maxTokens),
-            response_format: {
-              type: 'json_schema',
-              json_schema: { name: req.schemaName, schema: jsonSchema.schema, strict: true },
+          this.client.chat.completions.create(
+            {
+              model: req.model,
+              messages,
+              ...tuningParams(req.model, req.temperature, req.maxTokens),
+              response_format: {
+                type: 'json_schema',
+                json_schema: { name: req.schemaName, schema: jsonSchema.schema, strict: true },
+              },
             },
-          }),
+            { signal: req.signal },
+          ),
           req.timeoutMs ?? DEFAULT_TIMEOUT,
         ),
       );

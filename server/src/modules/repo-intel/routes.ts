@@ -15,7 +15,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { RepoIntelService } from './service.js';
-import { RESYNC_JOB_KIND } from './constants.js';
+import { RESYNC_JOB_KIND } from '../../platform/job-kinds.js';
 import type { IndexState } from './types.js';
 
 export default async function repoIntelRoutes(appBase: FastifyInstance) {

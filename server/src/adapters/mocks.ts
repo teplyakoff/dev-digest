@@ -26,6 +26,7 @@ import type {
   CodeMatch,
   CodeSymbol,
   CodeReference,
+  SourceReader,
   AuthProvider,
   AuthUser,
   AuthWorkspace,
@@ -305,6 +306,26 @@ export class MockCodeIndex implements CodeIndex {
   }
   async references(_repo: RepoRef, symbol: string): Promise<CodeReference[]> {
     return [{ fromPath: 'src/api/public/index.ts', toSymbol: symbol, line: 23 }];
+  }
+}
+
+// ---------- Mock SourceReader ----------
+/**
+ * An in-memory clone: repo-relative path → file contents. Anything not in the
+ * map reads `null`, which is exactly how the fs adapter reports "not here", so
+ * a test can model a missing config file by simply leaving it out.
+ *
+ * `clonePath` is ignored — the double stores one repo's worth of files, and no
+ * test so far needs two clones to differ.
+ */
+export class MockSourceReader implements SourceReader {
+  public reads: string[] = [];
+
+  constructor(private files: Record<string, string> = {}) {}
+
+  async read(_clonePath: string, relPath: string): Promise<string | null> {
+    this.reads.push(relPath);
+    return this.files[relPath] ?? null;
   }
 }
 

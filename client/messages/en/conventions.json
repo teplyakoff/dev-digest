@@ -15,12 +15,77 @@
       "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
       "cta": "Run extraction"
     },
-    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files"
+    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files",
+    "scanSummary": "{sampled, plural, one {# file} other {# files}} sampled · {kept} of {proposed} candidates kept",
+    "dropped": "{n, plural, one {# candidate was dropped} other {# candidates were dropped}} for missing evidence"
+  },
+  "toolbar": {
+    "accepted": "{accepted} of {total} accepted",
+    "acceptAll": "Accept all",
+    "deselectAll": "Deselect all",
+    "createSkill": "Create skill"
+  },
+  "create": {
+    "title": "Create skill from conventions",
+    "banner": "Merged from <b>{count, plural, one {# accepted convention} other {# accepted conventions}}</b> in <repoName>{repo}</repoName>. Everything below is editable before you save.",
+    "name": "Name",
+    "nameHint": "Lowercase letters, digits and hyphens. Unique in this workspace.",
+    "description": "Description",
+    "type": "Type",
+    "enabled": "Enabled",
+    "enabledHint": "Whether this block is added to agents' prompts.",
+    "body": "Skill body",
+    "bodyHint": "The only text sent to the model. Merged from the accepted rules and their evidence — edit freely.",
+    "savedAs": "Saved as ",
+    "addedToLab": " · added to Skills Lab",
+    "cancel": "Cancel",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "loading": "Merging the accepted conventions…",
+    "failed": "Could not create the skill."
   },
   "card": {
     "confidence": "Confidence",
+    "accept": "Accept",
     "accepted": "Accepted",
     "accepting": "Accepting…",
-    "acceptAsSkill": "Accept as Skill"
+    "acceptAsSkill": "Accept as Skill",
+    "reject": "Reject",
+    "rejected": "Rejected",
+    "undo": "Undo reject",
+    "edit": "Edit",
+    "category": {
+      "naming": "naming",
+      "structure": "structure",
+      "error-handling": "error handling",
+      "typing": "typing",
+      "testing": "testing",
+      "api": "api",
+      "imports": "imports",
+      "logging": "logging",
+      "other": "other"
+    }
+  },
+  "edit": {
+    "title": "Edit convention",
+    "subtitle": "This wording goes into the skill verbatim.",
+    "rule": "Rule",
+    "ruleHint": "Phrase it as an instruction a reviewer can act on. 10–200 characters.",
+    "category": "Category",
+    "categoryHint": "Groups the rule into a section of the generated skill.",
+    "evidence": "Evidence",
+    "evidenceHint": "Read from the repo at the cited lines and verified — not editable.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…"
+  },
+  "errors": {
+    "retry": "Retry",
+    "reindex": "Index this repo",
+    "generic": "Nothing was written — try again, or check the model settings for this workspace.",
+    "not_indexed": "The extractor samples the repo's highest-ranked files, and that ranking comes from the index. Index the repo, then scan again.",
+    "not_cloned": "The repo has to finish cloning before its files can be sampled.",
+    "noneSurvived": "{proposed, plural, one {# candidate} other {# candidates}} proposed, none survived",
+    "noneSurvivedBody": "Every candidate cited a file or a line the sample did not contain, so all of them were dropped. Re-scanning may do better; a repeat of this usually means the model needs a larger sample."
   }
 }

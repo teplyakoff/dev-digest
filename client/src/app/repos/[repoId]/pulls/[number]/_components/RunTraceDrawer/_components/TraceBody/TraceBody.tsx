@@ -8,7 +8,7 @@ import { Badge } from "@devdigest/ui";
 import type { RunTrace, FindingRecord } from "@devdigest/shared";
 import { formatCost } from "@/components/run-cost-badge";
 import { PROMPT_COLORS } from "../../constants";
-import { formatSeconds, formatTokens } from "../../helpers";
+import { formatSeconds, formatTokens, skillTokens } from "../../helpers";
 import { s } from "../../styles";
 import { TraceSection } from "../TraceSection";
 import { ToolCallRow } from "../ToolCallRow";
@@ -33,6 +33,19 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
               {trace.config.provider ?? "—"}
             </span>
           </Row>
+          {/* Absent when the agent had no enabled skills linked — the same
+              distinction the prompt makes by omitting the section entirely. */}
+          {trace.config.skills != null && trace.config.skills.length > 0 && (
+            <Row label={t("trace.config.skillsLoaded")}>
+              <div style={s.specsWrap}>
+                {trace.config.skills.map((sk) => (
+                  <Badge key={sk.name} mono color="var(--text-secondary)">
+                    {sk.name} v{sk.version}
+                  </Badge>
+                ))}
+              </div>
+            </Row>
+          )}
           <Row label={t("trace.config.memoryPulled")}>
             <span>{t("trace.config.items", { count: trace.memory_pulled.length })}</span>
           </Row>
@@ -74,7 +87,15 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
       <TraceSection icon="FileText" title={t("trace.promptAssembly")} defaultOpen={false}>
         <PromptBlock label={t("trace.prompt.system")} text={trace.prompt_assembly.system} color={PROMPT_COLORS.system} />
         {trace.prompt_assembly.skills != null && (
-          <PromptBlock label={t("trace.prompt.skills")} text={trace.prompt_assembly.skills} color={PROMPT_COLORS.skills} />
+          <PromptBlock
+            // The token cost of the knowledge layer, on the block that carries
+            // it — "what did this skill buy me" needs both halves in one place.
+            label={`${t("trace.prompt.skills")} · ${t("trace.prompt.skillTokens", {
+              count: skillTokens(trace).toLocaleString("en-US"),
+            })}`}
+            text={trace.prompt_assembly.skills}
+            color={PROMPT_COLORS.skills}
+          />
         )}
         {trace.prompt_assembly.memory != null && (
           <PromptBlock label={t("trace.prompt.memory")} text={trace.prompt_assembly.memory} color={PROMPT_COLORS.memory} />

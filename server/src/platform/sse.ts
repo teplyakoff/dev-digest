@@ -22,11 +22,30 @@ export class RunBus {
   private seq = new Map<string, number>();
   private completed = new Set<string>();
   private cancelled = new Set<string>();
+  private aborters = new Map<string, AbortController>();
 
-  /** Request cancellation of an in-flight run. The runner checks `isCancelled`
-   *  at its next checkpoint (between map-reduce files) and stops. */
+  /**
+   * Register the controller that can abort a run's in-flight LLM request.
+   *
+   * The executor calls this as the run starts. Cancelling then does two things:
+   * sets the flag the between-chunk checkpoint reads, AND aborts the socket. The
+   * flag alone was never enough — a single-pass review has one chunk, so the
+   * checkpoint runs once and then the run is unreachable for however long the
+   * provider takes (945 s, in the worst case on record).
+   */
+  registerAborter(runId: string, controller: AbortController): void {
+    // A cancel that arrived before the run got going still applies.
+    if (this.cancelled.has(runId)) controller.abort();
+    else this.aborters.set(runId, controller);
+  }
+
+  /**
+   * Request cancellation of an in-flight run: raise the flag the runner checks
+   * at its next checkpoint, and abort the request already on the wire.
+   */
   cancel(runId: string): void {
     this.cancelled.add(runId);
+    this.aborters.get(runId)?.abort();
   }
 
   /** Whether cancellation has been requested for a run. */
@@ -77,6 +96,7 @@ export class RunBus {
     const e = this.emitters.get(runId);
     this.completed.add(runId);
     this.cancelled.delete(runId);
+    this.aborters.delete(runId);
     e?.emit('done');
     // Keep the buffer briefly available for late subscribers; clear emitter.
     this.emitters.delete(runId);

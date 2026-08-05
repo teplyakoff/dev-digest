@@ -81,6 +81,11 @@ export class OpenRouterProvider implements LLMProvider {
         // OpenRouter usage accounting — ask it to return the REAL generation
         // cost (USD) in `usage.cost`, instead of estimating from a price book.
         ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
+      }, {
+        // Aborting must close the socket, not just stop us awaiting it. Without
+        // this, `POST /runs/:id/cancel` is advisory: the row reads `cancelled`
+        // while the generation keeps running and being billed.
+        signal: req.signal,
       });
 
       // OpenRouter can return HTTP 200 with no `choices` (an upstream provider

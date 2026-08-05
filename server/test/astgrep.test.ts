@@ -5,7 +5,7 @@ import {
   parseImports,
   langForFile,
 } from '../src/adapters/astgrep/index.js';
-import { MAX_SIGNATURE_CHARS } from '../src/modules/repo-intel/constants.js';
+import { MAX_SIGNATURE_CHARS } from '../src/platform/source-scope.js';
 
 /**
  * T1.2 — unit tests for the @ast-grep/napi adapter.

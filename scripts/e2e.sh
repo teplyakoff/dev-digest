@@ -41,6 +41,13 @@ export DATABASE_URL="postgres://${PG_USER}:${PG_PASS}@127.0.0.1:${PG_PORT}/${PG_
 export API_PORT WEB_PORT
 export NEXT_PUBLIC_API_BASE="http://localhost:${API_PORT}"
 export E2E_BASE_URL="http://localhost:${WEB_PORT}"
+# The API's GLOBAL RATE LIMIT (120 req/min, app.ts) is on unless NODE_ENV=test,
+# and eight browser flows comfortably exceed it — the second `./scripts/e2e.sh`
+# of a session starts failing with 429s that surface as `wait --text` timeouts
+# scattered across unrelated flows, which reads as flakiness rather than as
+# throttling. Measured: 58 × 429 over four back-to-back runs without this, 5/5
+# clean runs with it.
+export NODE_ENV="${NODE_ENV:-test}"
 
 log()  { printf '\033[1;36m▸ %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m! %s\033[0m\n' "$*"; }

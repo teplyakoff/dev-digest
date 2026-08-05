@@ -26,6 +26,13 @@ import {
   parseSymbols,
   langForFile,
 } from '../../adapters/astgrep/index.js';
+// KNOWN DEBT. Ring-2 code should reach the filesystem through a port
+// (onion §3, §7), and it does not: the repo-intel indexer reads cloned files
+// directly. Extracting a `SourceReader` port is a real piece of work — one
+// interface, one adapter, one test double, one container key — and doing it
+// half-way is worse than not starting, so it is deliberately NOT bundled into
+// this change. Payoff when it happens: repo-intel tests stop needing a clone.
+// eslint-disable-next-line no-restricted-imports
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { RepoIntelRepository, type FullSymbolRow } from './repository.js';
@@ -45,13 +52,15 @@ import type {
 import {
   BFS_DEPTH,
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
-  INDEX_JOB_KIND,
   INDEXER_VERSION,
   MAX_CALLERS_PER_SYMBOL,
+} from './constants.js';
+import {
+  INDEX_JOB_KIND,
   REFRESH_JOB_KIND,
   RESYNC_JOB_KIND,
-  SUPPORTED_EXT,
-} from './constants.js';
+} from '../../platform/job-kinds.js';
+import { SUPPORTED_EXT } from '../../platform/source-scope.js';
 import { runFullIndex, type IndexPayload } from './pipeline/full.js';
 import { runIncremental } from './pipeline/incremental.js';
 

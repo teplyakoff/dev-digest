@@ -38,6 +38,16 @@ export interface CompletionRequest {
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
+  /**
+   * Cancellation. Aborting it must abort the in-flight HTTP request, not merely
+   * stop the caller from awaiting it.
+   *
+   * This exists because `POST /runs/:id/cancel` used to be advisory: it marked
+   * the row `cancelled` while the socket stayed ESTABLISHED and the tokens kept
+   * being generated and billed. A provider that ignores this field turns cancel
+   * back into a lie, so wire it into the SDK call.
+   */
+  signal?: AbortSignal;
 }
 
 export interface CompletionResult {
@@ -61,6 +71,22 @@ export interface StructuredRequest<T> {
   maxTokens?: number;
   timeoutMs?: number;
   maxRetries?: number;
+  /**
+   * OpenRouter session id — groups related generations (e.g. all map-reduce
+   * chunks of one review) into a session in the OpenRouter dashboard. Sent as
+   * the `session_id` body field; ignored by providers that don't support it.
+   */
+  sessionId?: string;
+  /**
+   * Cancellation. Aborting it must abort the in-flight HTTP request, not merely
+   * stop the caller from awaiting it.
+   *
+   * This exists because `POST /runs/:id/cancel` used to be advisory: it marked
+   * the row `cancelled` while the socket stayed ESTABLISHED and the tokens kept
+   * being generated and billed. A provider that ignores this field turns cancel
+   * back into a lie, so wire it into the SDK call.
+   */
+  signal?: AbortSignal;
 }
 
 export interface StructuredResult<T> {
@@ -74,7 +100,7 @@ export interface StructuredResult<T> {
 }
 
 export interface LLMProvider {
-  readonly id: 'openai' | 'anthropic';
+  readonly id: 'openai' | 'anthropic' | 'openrouter';
   listModels(): Promise<ModelInfo[]>;
   complete(req: CompletionRequest): Promise<CompletionResult>;
   completeStructured<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>>;
@@ -119,6 +145,21 @@ export interface OpenPrPayload {
   body: string;
 }
 
+/** A single file to write in a commit (path relative to repo root + UTF-8 text). */
+export interface CommitFile {
+  path: string;
+  contents: string;
+}
+
+export interface CommitFilesPayload {
+  /** Branch to create-or-update with the commit (e.g. "devdigest/ci"). */
+  branch: string;
+  /** Base branch to fork from when `branch` does not yet exist (e.g. "main"). */
+  base: string;
+  message: string;
+  files: CommitFile[];
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -132,6 +173,14 @@ export interface GitHubClient {
     input: CreateReviewCommentInput,
   ): Promise<PrReviewComment>;
   openPullRequest(repo: RepoRef, payload: OpenPrPayload): Promise<{ url: string }>;
+  /**
+   * Commit `files` onto `branch` as ONE atomic commit (Git Data API: blobs →
+   * tree → commit → ref). Creates the branch from `base` if missing, else
+   * fast-forwards it. Idempotent: re-publishing just adds a new commit.
+   */
+  commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
+  /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
+  findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
@@ -176,8 +225,22 @@ export interface GitCommit {
 export interface GitClient {
   clone(repo: RepoRef, url: string, opts?: CloneOptions): Promise<{ path: string }>;
   fetchPullHead(repo: RepoRef, n: number): Promise<void>;
+  /**
+   * Resync an already-cloned repo to the tip of `branch`: fetch from origin and
+   * advance the local working tree to `origin/<branch>`. Unlike `clone`'s bare
+   * `fetch` (which only moves remote-tracking refs), this moves local HEAD so a
+   * subsequent index reflects the latest code. Returns the new HEAD sha.
+   */
+  sync(repo: RepoRef, branch: string): Promise<{ head: string }>;
   currentHead(repo: RepoRef): Promise<string>;
   diff(repo: RepoRef, base: string, head: string): Promise<UnifiedDiff>;
+  /**
+   * Names of files changed between two commits (`git diff --name-only base..head`).
+   * Two-dot form is intentional — we want files reachable from `head` but not `base`,
+   * matching the incremental indexer's "what moved since last_indexed_sha?" semantics.
+   * Returns an empty array when the two refs resolve to the same commit.
+   */
+  diffNameOnly(repo: RepoRef, base: string, head: string): Promise<string[]>;
   blame(repo: RepoRef, path: string): Promise<BlameLine[]>;
   log(repo: RepoRef, path?: string): Promise<GitCommit[]>;
   readFile(repo: RepoRef, path: string): Promise<string>;
@@ -208,6 +271,37 @@ export interface CodeIndex {
   grep(repo: RepoRef, pattern: string): Promise<CodeMatch[]>;
   symbols(repo: RepoRef): Promise<CodeSymbol[]>;
   references(repo: RepoRef, symbol: string): Promise<CodeReference[]>;
+}
+
+// ---------- SourceReader (repo-relative file reads out of a clone) ----------
+/**
+ * Reading one file out of a cloned repo, behind a port.
+ *
+ * This is the port `repo-intel/service.ts` has been documenting as KNOWN DEBT:
+ * ring-2 code needs the text of a file in the clone, and until now the only way
+ * to get it was `node:fs` directly, with an eslint-disable and a written excuse.
+ * The Conventions Extractor needs the same thing, so it was built rather than
+ * excused a second time.
+ *
+ * `read` answers `null` for every "you cannot have this" — absent, a directory,
+ * unreadable, or a path that tries to leave the clone. Callers treat a missing
+ * file as data (a config that isn't there, a sample that moved), never as an
+ * error, so a throw here would only ever be caught and discarded.
+ *
+ * repo-intel is NOT migrated onto this yet; its four raw imports stay until
+ * someone does that as its own change.
+ */
+export interface SourceReader {
+  /**
+   * UTF-8 contents of `relPath` inside `clonePath`, or `null`.
+   *
+   * `relPath` MUST stay inside the clone: an absolute path, or one that escapes
+   * via `..`, answers `null` rather than reading it. No caller passes an
+   * untrusted path today — the model only ever names files it was shown — but a
+   * port that can be talked out of its own root is a directory traversal
+   * waiting for its first careless caller.
+   */
+  read(clonePath: string, relPath: string): Promise<string | null>;
 }
 
 // ---------- Auth (pluggable; MVP = LocalNoAuthProvider) ----------

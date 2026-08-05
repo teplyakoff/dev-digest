@@ -41,9 +41,10 @@ export const PromptAssembly = z.object({
   skills: z.string().nullish(),
   memory: z.string().nullish(),
   specs: z.string().nullish(),
-  /** Callers-of-changed-symbols digest (repo-intel); null when absent. */
+  /** Callers-of-changed-symbols digest (T1.3); null when absent. */
   callers: z.string().nullish(),
-  /** Repo skeleton / map (repo-intel); null when absent. */
+  /** Repo skeleton / map (T3); null when absent. Enables per-slot token
+      attribution in the run trace. */
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
@@ -69,6 +70,18 @@ export const RunStats = z.object({
 });
 export type RunStats = z.infer<typeof RunStats>;
 
+/**
+ * One skill that was loaded into a run's prompt, with what it cost. `tokens`
+ * counts the RENDERED block (heading + body), not the raw body, so the number
+ * matches what the model was actually sent.
+ */
+export const TraceSkill = z.object({
+  name: z.string(),
+  version: z.number().int(),
+  tokens: z.number().int(),
+});
+export type TraceSkill = z.infer<typeof TraceSkill>;
+
 /** The single-document trace stored in `run_traces.trace`. */
 export const RunTrace = z.object({
   config: z.object({
@@ -78,6 +91,13 @@ export const RunTrace = z.object({
     model: z.string(),
     pr: z.number().int().nullish(),
     source: z.enum(['local', 'ci']).default('local'),
+    /**
+     * Skills loaded for this run, in prompt order. Nullish — every trace
+     * persisted before L02 has no such key and must still parse. Absent or
+     * empty means the agent had no enabled skills linked, which is also why
+     * `prompt_assembly.skills` is null on the same trace.
+     */
+    skills: z.array(TraceSkill).nullish(),
   }),
   stats: RunStats,
   prompt_assembly: PromptAssembly,

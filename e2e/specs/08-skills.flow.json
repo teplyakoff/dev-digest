@@ -1,0 +1,22 @@
+{
+  "name": "Skills page and the agent's Skills tab render the seeded skill",
+  "description": "Loads /skills and confirms the seeded test-quality-rubric card renders, opens its preview drawer, then opens the Test Quality Reviewer agent and switches to its Skills tab to confirm the linked skill is listed. Exercises the /skills route and its fetch, the sidebar nav registration, and — the step with real regression value — the ?tab=skills entry in the agent editor's VALID_TABS, which falls back to Config SILENTLY when missing. The 'Skills' tab is matched by role=button because the sidebar's 'Skills' nav item is a link. Read-only seeded data (no model call). Assumes a freshly-seeded DB — guaranteed by e2e-web.yml; run locally via the hermetic stack (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/skills"], "label": "load the skills page" },
+    { "cmd": ["wait", "--url", "/skills"], "label": "skills route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "skills fetch settles" },
+    { "cmd": ["wait", "--text", "test-quality-rubric"], "label": "seeded skill card is visible" },
+    { "cmd": ["find", "text", "test-quality-rubric", "click"], "label": "open the preview drawer" },
+    { "cmd": ["wait", "--text", "Open editor"], "label": "preview drawer is open" },
+
+    { "cmd": ["open", "{BASE}/agents"], "label": "load the agents page" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "agents fetch settles" },
+    { "cmd": ["wait", "--text", "Test Quality Reviewer"], "label": "seeded L02 agent card is visible" },
+    { "cmd": ["find", "text", "Test Quality Reviewer", "click"], "label": "open the agent editor" },
+    { "cmd": ["wait", "--url", "/agents/"], "label": "agent editor reached" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Skills"], "label": "switch to the Skills tab" },
+    { "cmd": ["wait", "--url", "tab=skills"], "label": "?tab=skills survived VALID_TABS" },
+    { "cmd": ["wait", "--text", "Order matters"], "label": "the Skills tab actually rendered" },
+    { "cmd": ["wait", "--text", "test-quality-rubric"], "label": "the agent's linked skill is listed" }
+  ]
+}

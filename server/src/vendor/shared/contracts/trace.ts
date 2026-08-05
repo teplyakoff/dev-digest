@@ -70,6 +70,18 @@ export const RunStats = z.object({
 });
 export type RunStats = z.infer<typeof RunStats>;
 
+/**
+ * One skill that was loaded into a run's prompt, with what it cost. `tokens`
+ * counts the RENDERED block (heading + body), not the raw body, so the number
+ * matches what the model was actually sent.
+ */
+export const TraceSkill = z.object({
+  name: z.string(),
+  version: z.number().int(),
+  tokens: z.number().int(),
+});
+export type TraceSkill = z.infer<typeof TraceSkill>;
+
 /** The single-document trace stored in `run_traces.trace`. */
 export const RunTrace = z.object({
   config: z.object({
@@ -79,6 +91,13 @@ export const RunTrace = z.object({
     model: z.string(),
     pr: z.number().int().nullish(),
     source: z.enum(['local', 'ci']).default('local'),
+    /**
+     * Skills loaded for this run, in prompt order. Nullish — every trace
+     * persisted before L02 has no such key and must still parse. Absent or
+     * empty means the agent had no enabled skills linked, which is also why
+     * `prompt_assembly.skills` is null on the same trace.
+     */
+    skills: z.array(TraceSkill).nullish(),
   }),
   stats: RunStats,
   prompt_assembly: PromptAssembly,

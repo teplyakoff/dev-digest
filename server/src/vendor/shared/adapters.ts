@@ -38,6 +38,16 @@ export interface CompletionRequest {
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
+  /**
+   * Cancellation. Aborting it must abort the in-flight HTTP request, not merely
+   * stop the caller from awaiting it.
+   *
+   * This exists because `POST /runs/:id/cancel` used to be advisory: it marked
+   * the row `cancelled` while the socket stayed ESTABLISHED and the tokens kept
+   * being generated and billed. A provider that ignores this field turns cancel
+   * back into a lie, so wire it into the SDK call.
+   */
+  signal?: AbortSignal;
 }
 
 export interface CompletionResult {
@@ -67,6 +77,16 @@ export interface StructuredRequest<T> {
    * the `session_id` body field; ignored by providers that don't support it.
    */
   sessionId?: string;
+  /**
+   * Cancellation. Aborting it must abort the in-flight HTTP request, not merely
+   * stop the caller from awaiting it.
+   *
+   * This exists because `POST /runs/:id/cancel` used to be advisory: it marked
+   * the row `cancelled` while the socket stayed ESTABLISHED and the tokens kept
+   * being generated and billed. A provider that ignores this field turns cancel
+   * back into a lie, so wire it into the SDK call.
+   */
+  signal?: AbortSignal;
 }
 
 export interface StructuredResult<T> {
@@ -251,6 +271,37 @@ export interface CodeIndex {
   grep(repo: RepoRef, pattern: string): Promise<CodeMatch[]>;
   symbols(repo: RepoRef): Promise<CodeSymbol[]>;
   references(repo: RepoRef, symbol: string): Promise<CodeReference[]>;
+}
+
+// ---------- SourceReader (repo-relative file reads out of a clone) ----------
+/**
+ * Reading one file out of a cloned repo, behind a port.
+ *
+ * This is the port `repo-intel/service.ts` has been documenting as KNOWN DEBT:
+ * ring-2 code needs the text of a file in the clone, and until now the only way
+ * to get it was `node:fs` directly, with an eslint-disable and a written excuse.
+ * The Conventions Extractor needs the same thing, so it was built rather than
+ * excused a second time.
+ *
+ * `read` answers `null` for every "you cannot have this" — absent, a directory,
+ * unreadable, or a path that tries to leave the clone. Callers treat a missing
+ * file as data (a config that isn't there, a sample that moved), never as an
+ * error, so a throw here would only ever be caught and discarded.
+ *
+ * repo-intel is NOT migrated onto this yet; its four raw imports stay until
+ * someone does that as its own change.
+ */
+export interface SourceReader {
+  /**
+   * UTF-8 contents of `relPath` inside `clonePath`, or `null`.
+   *
+   * `relPath` MUST stay inside the clone: an absolute path, or one that escapes
+   * via `..`, answers `null` rather than reading it. No caller passes an
+   * untrusted path today — the model only ever names files it was shown — but a
+   * port that can be talked out of its own root is a directory traversal
+   * waiting for its first careless caller.
+   */
+  read(clonePath: string, relPath: string): Promise<string | null>;
 }
 
 // ---------- Auth (pluggable; MVP = LocalNoAuthProvider) ----------

@@ -3,11 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Screencast recorder for the DevDigest web app — Playwright, real stack, real LLM run.",
+  "description": "Screencast recorder for the DevDigest web app \u2014 Playwright, real stack, real LLM run.",
   "scripts": {
     "setup": "playwright install chromium",
     "record": "tsx record.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "record:skills": "tsx record-skills.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "record:conventions": "tsx record-conventions.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

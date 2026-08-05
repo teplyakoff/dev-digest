@@ -28,6 +28,30 @@ _(no entries yet)_
   inside a clickable row needs `stopPropagation` on its cell or hovering users
   navigate away when they click inside it (`PRRow.tsx`). (2026-07-31)
 
+- **Importing anything from `@devdigest/shared` for a VALUE (not a type) used to
+  break the build outright.** Every existing import was type-only —
+  `src/lib/types.ts` re-exports with `export type { … }`, which is erased at
+  build time — so webpack had never once resolved
+  `src/vendor/shared/index.ts`. The moment it had to, ~12 errors appeared at
+  once: `Module not found: Can't resolve './contracts/findings.js'`, one per
+  `export *` line. Cause: the vendored files are copied verbatim from the
+  server's ESM-with-extensions source, so they import `./contracts/findings.js`
+  while the file on disk is `.ts`. `tsc` (moduleResolution `Bundler`) and Vitest
+  both resolve that; webpack does not, by default. **So type-check and `pnpm
+  test` stay green while `pnpm build` fails** — always run `pnpm build` after
+  touching an import from that path. Fixed by `config.resolve.extensionAlias` in
+  `next.config.mjs`; do not remove it. (2026-08-03)
+
+- **Importing one Zod schema from `@devdigest/shared` costs ~15 kB First Load JS
+  on EVERY route.** Measured: `/repos/[repoId]/pulls` went 200 → 217 kB. The
+  barrel is `export *` over every contract, so one schema drags all of them plus
+  `zod` — which nothing else in this package bundles — into the shared chunk.
+  Importing the contract module directly
+  (`@devdigest/shared/contracts/platform`) recovered only 2 kB, because the bulk
+  is `zod` itself. Budget for that before adding runtime validation; a dev-only
+  check is not worth it (see the note on `validateInDev` in `src/lib/api.ts`).
+  (2026-08-03)
+
 - On **pnpm 11**, every `pnpm <script>` in this package fails before running
   anything, with `ERR_PNPM_IGNORED_BUILDS`. pnpm 11 flipped `strictDepBuilds` to
   true, so the automatic pre-run dependency check refuses to pass while any
@@ -36,6 +60,54 @@ _(no entries yet)_
   prebuilt binary via optionalDependencies). A `pnpm` field in `package.json`,
   `strict-dep-builds` in `.npmrc`, and the `npm_config_*` env vars are all
   ignored in pnpm 11 — only `pnpm-workspace.yaml` is read. (2026-07-27)
+
+- **`rerender()` with the SAME element reference does nothing.** React bails out
+  before the component body runs, so a test that mutates a mocked hook's value
+  and re-renders observes no change — and the failure reads exactly like a
+  component bug. `RootErrorView.test.tsx` mocks `usePathname` off a `vi.hoisted`
+  ref; the "resets once the user navigates away" case set `pathname.current` and
+  called `view.rerender(ui)` with the element it had already rendered, and failed
+  with `expected "spy" to be called once, but got 0 times`. Half an hour went
+  into the component before the test was suspected. Build the element in a
+  function and pass a fresh one each time: `view.rerender(ui())`. (2026-08-03)
+
+- **Synthetic `DragEvent`s fired in one tick cannot exercise `SkillsTab`'s
+  drag-reorder, and the failure is indistinguishable from a broken feature.**
+  `onDrop` closes over `dragIndex` from the render it was attached in, so a
+  `dragstart` → `dragover` → `drop` sequence dispatched synchronously still sees
+  `dragIndex === null` and returns early: the order never changes, and the
+  obvious conclusion — "reorder is broken" — is wrong. Put a real gap between
+  `dragstart` and `drop` (a `setTimeout` of a few hundred ms) so React
+  re-renders in between, then **re-query the row elements**, since the list
+  re-orders under you. Measured on
+  `app/agents/[id]/_components/AgentEditor/_components/SkillsTab`: identical
+  events one tick apart changed nothing; 400 ms apart wrote the new
+  `agent_skills.order`. Note this is a hazard for hand-driven browser
+  verification only — Playwright's `dragTo()` and a real mouse both leave frames
+  in between. (2026-08-03)
+
+- **`pnpm build` while `pnpm dev` is running kills the dev server**, because both
+  write `client/.next`. The production build overwrites the dev chunks, the
+  running server keeps serving from the manifests it has, and every route goes
+  blank with a bare "1 Issue" badge and an empty console — no error naming the
+  cause. Recovering needs `rm -rf client/.next` **and** a restart, and because
+  `scripts/dev.sh` runs the client in the foreground with a `trap cleanup EXIT`
+  that kills the API, killing the Next process takes the whole stack down with
+  it. This collides head-on with the 2026-08-03 note above that `pnpm build` is
+  the only thing that catches the webpack `.js`→`.ts` trap: run the build when
+  the dev server is stopped, or expect to restart the stack afterwards.
+  (2026-08-03)
+
+- A **flex row whose children are `align-items: stretch` takes its height from
+  the tallest child**, which silently defeated `rows` on the skill body editor:
+  the line gutter renders one `div` per line, so a 30-line body made the frame
+  620 px, the textarea stretched to match, `scrollHeight === clientHeight`, and
+  the gutter's scroll-sync handler became dead code that never fired. It looks
+  fine on a short body and degrades with length, so the screenshot that "proves"
+  it works proves nothing. `SkillBodyEditor` pins the frame height from `rows`
+  (`rows * lineHeight + 2 * padding`) and gives the textarea `height: 100%`;
+  `SkillBodyEditor.test.tsx` asserts a 200-line body renders the same height as
+  a 1-line one. (2026-08-03)
 
 ## Codebase Patterns
 
@@ -52,6 +124,17 @@ _(no entries yet)_
   ships the full set — `Component.tsx`, `helpers.ts`, `styles.ts`, `index.ts`,
   `Component.test.tsx`. `run-cost-badge/` is the current example: the PR list and
   three places on the PR detail page all render it. (2026-07-28)
+
+- **Supersedes the `index.ts` part of the 2026-07-28 "full set" note above.** The
+  new `.claude/skills/frontend-architecture` skill forbids adding barrel files, so
+  a promoted component ships `Component.tsx` + `Component.test.tsx` and then only
+  the `helpers.ts` / `styles.ts` / `constants.ts` it actually has content for —
+  no new `index.ts`, and import the component file directly
+  (`@/components/run-cost-badge/RunCostBadge`). Existing `index.ts` files stay;
+  removing them is a separate migration, not a side effect. Note also that the
+  "ships a test" rule is aspirational, not descriptive: only `run-cost-badge/` and
+  `severity-counters/` of the eight folders in `src/components/` have a
+  `*.test.tsx`, so the other six are debt, not a precedent to copy. (2026-08-02)
 
 - Anything derived from an agent run — cost, tokens, duration, the timeline —
   is **empty on freshly seeded data**, because `pnpm db:seed` inserts a review
@@ -82,6 +165,21 @@ _(no entries yet)_
 
 ## Tool & Library Notes
 
+- **`next build` runs ESLint through its own runner, which does NOT read
+  `eslint-suppressions.json`.** So the moment an `eslint.config.mjs` exists here,
+  every build fails on the pre-existing inline-style and barrel violations that
+  the lint lane deliberately accepts. Fix already applied:
+  `eslint: { ignoreDuringBuilds: true }` in `next.config.mjs`. Linting lives in
+  `pnpm lint` and the `lint` CI workflow — do not turn it back on in the build
+  unless the suppressions are gone. (2026-08-03)
+
+- **The lint baseline is a ceiling, not a quota.** `eslint-suppressions.json`
+  records 148 pre-existing violations (inline `style={{}}`, barrel `index.ts`).
+  ESLint's default is to FAIL when a suppressed violation no longer occurs, which
+  would break the build every time someone improves something — so `pnpm lint`
+  passes `--pass-on-unpruned-suppressions`. Lower the counts deliberately with
+  `pnpm lint:baseline`, never to make a build pass. (2026-08-03)
+
 - `_assets/DevDigest Design (standalone).html` is a **self-unpacking bundle, not
   markup** — grepping it for `cost`, `token` or any class name finds nothing. The
   React sources are gzip+base64 inside `<script type="__bundler/manifest">` on
@@ -108,6 +206,18 @@ _(no entries yet)_
   trace drawer (COST stat tile). Format rule that matters: a typical OpenRouter
   run costs ~$0.0016, so the formatter drops to four decimals below a cent —
   `toFixed(2)` would have rendered every real run as "$0.00".
+
+- **2026-08-03** — Architecture pass driven by the `frontend-architecture` and
+  `react-best-practices` skills. Added `eslint.config.mjs` (data-hook ownership,
+  env boundary, no new barrels, no new inline styles) with the 148 pre-existing
+  violations baselined into `eslint-suppressions.json`. Added the app's first
+  React error boundary — `src/app/error.tsx` → `_components/RootErrorView/` —
+  which `nextjs.md` §8 had flagged as a real gap rather than a deliberate
+  absence. Thinned two drifted pages to a single import each (root 49→8,
+  PR detail 185→9) into `HomeRedirectView` / `PrDetailView`. Query keys are now
+  module-private in `lib/hooks/reviews.ts` behind `useInvalidatePrRuns`. The
+  unplanned discovery was the webpack `.js`→`.ts` resolution trap above, found
+  only because `pnpm build` was run — `typecheck` and `test` never see it.
 
 - **2026-07-31** — L01 rework: severity counters. `SeverityCounters` +
   `FindingsPopover` in `src/components/severity-counters/`, on the PR list

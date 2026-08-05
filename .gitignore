@@ -17,6 +17,10 @@ coverage/
 .pnpm-store/
 *.log
 .devdigest/cache/
+# pr-self-review reports and run log — per-clone review state, never shared.
+# The verdict token the hook reads lives in .git/devdigest/ and is unreachable
+# from here by design.
+.devdigest/pr-self-review/
 clones/
 playwright-report/
 test-results/

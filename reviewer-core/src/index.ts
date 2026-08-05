@@ -15,9 +15,17 @@
 export {
   assemblePrompt,
   wrapUntrusted,
+  // The one shared injection guard. Exported for the second untrusted-input
+  // path (the server's Conventions Extractor, which samples repo files without
+  // going through assemblePrompt) so there stays exactly one of these.
+  INJECTION_GUARD,
   type PromptParts,
   type AssembledPrompt,
 } from './prompt.js';
+
+// Skill → prompt-block rendering, shared so the studio and the CI runner render
+// the same skill identically.
+export { renderSkillBlock, SKILLS_PREAMBLE } from './skills.js';
 
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';

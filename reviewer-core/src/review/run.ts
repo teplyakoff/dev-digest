@@ -88,8 +88,20 @@ export interface ReviewInput {
    * Cancellation checkpoint, called before each (expensive) chunk LLM call.
    * Supply a function that THROWS to abort mid-run (the caller owns the error
    * type, e.g. the server's RunCancelledError); the engine stays agnostic.
+   *
+   * This only fires BETWEEN chunks. To interrupt a call already in flight, pass
+   * `signal` as well — the two are complementary, not alternatives.
    */
   checkCancelled?: () => void;
+  /**
+   * Cancellation for the in-flight request, forwarded to every LLM call.
+   *
+   * `checkCancelled` alone cannot stop a single-pass review: there is one chunk,
+   * so the checkpoint runs once, before the call that then takes as long as it
+   * takes. Runs of 945 s and 674 s were observed against an 8–99 s norm, with
+   * cancel unable to touch them. Passing a signal makes cancel actually cancel.
+   */
+  signal?: AbortSignal;
 }
 
 export interface ReviewOutcome {
@@ -178,6 +190,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       messages: a.messages,
       maxRetries,
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+      ...(input.signal ? { signal: input.signal } : {}),
     });
     tokensIn += res.tokensIn;
     tokensOut += res.tokensOut;

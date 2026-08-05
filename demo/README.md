@@ -1,20 +1,28 @@
-# `@devdigest/demo` — screencast recorder
+# `@devdigest/demo` — screencast recorders
 
-Records a video of the real review loop: PR list → run every enabled agent →
-watch them work → verdict, score and **Run Cost Badge** → run trace → back to the
-list with the COST column filled in.
+Two recorders, both producing a captioned video plus one PNG per scene:
 
-This is a **demo recorder, not a test.** It exists to produce shareable evidence
-that the loop works against a real stack; `../e2e` is what actually asserts
+| Script | Records | Cost |
+|---|---|---|
+| `npm run record` | the review loop: PR list → run every enabled agent → watch them work → verdict, score and **Run Cost Badge** → run trace → back to the list with the COST column filled in | **real money** |
+| `npm run record:skills` | the L02 Skills feature: the grid and preview drawer → authoring and versioning → the import preview's ignored-entries list → the agent Skills tab → the run trace's skills block and token count | free |
+
+These are **demo recorders, not tests.** They exist to produce shareable evidence
+that the app works against a real stack; `../e2e` is what actually asserts
 behaviour.
 
-## Why it is not part of `../e2e`
+## Why they are not part of `../e2e`
 
 `e2e` is deliberately deterministic, key-free and free: its flows target
-read-only seeded data and never touch a model. This recorder does the opposite —
-it triggers a real `POST /pulls/:id/review`, so **every run costs real money** and
+read-only seeded data and never touch a model. `record` does the opposite — it
+triggers a real `POST /pulls/:id/review`, so **every run costs real money** and
 takes as long as the models take. Keeping the two apart is what lets `npm test`
 in `e2e` stay cheap and CI-safe.
+
+`record:skills` sits between them: it calls no model, but it **writes** — it
+authors a skill, imports one and re-links an agent, so it needs a stack it is
+allowed to mutate. That is why it lives here and not in `e2e`, whose flows are
+strictly read-only.
 
 ## Setup (once)
 
@@ -52,13 +60,43 @@ Everything is env-driven, so the same script serves any repo/PR:
 DEMO_REPO=acme/payments-api DEMO_PR=482 npm run record
 ```
 
+### Recording the Skills feature
+
+```bash
+npm run record:skills
+```
+
+Reads `DEMO_BASE_URL`, `DEMO_API_URL`, `DEMO_OUT` (default
+`./recordings/l02-skills`) and `DEMO_HEADED`. No repo or PR to choose — it drives
+`/skills`, the agent editor and one existing run trace.
+
+Two things worth knowing before you run it:
+
+- **It writes.** It authors `migration-safety`, imports `error-handling-guard`
+  from an archive it builds in memory, and ticks a skill onto an agent. Both
+  skills are deleted by name first so the run is repeatable — `skills` has a
+  unique `(workspace_id, name)` index — and the agent's link set is restored on
+  the way out, including after a failure.
+- **The trace scenes need a run that already loaded a skill.** No model is called
+  here, so the recorder cannot create one; it searches every run for a non-empty
+  `trace.config.skills` and, finding none, records the other scenes and exits
+  non-zero rather than filming an empty drawer. Link a skill to an agent, run
+  `npm run record` once, and every skills recording afterwards has a trace.
+
+It also asserts rather than just filming: if the import preview fails to name
+every non-body entry of the fixture archive as ignored, the run fails. That list
+is the product claim, so a recording that silently lost it is worse than none.
+
 ## Output
 
 Into `recordings/` (git-ignored):
 
-- `devdigest-review-loop-<timestamp>.mp4` — the video, captioned per step
+- `devdigest-review-loop-<timestamp>.mp4` / `devdigest-skills-<timestamp>.mp4` —
+  the video, captioned per step
 - `NN-<step>.png` — one frame per step, at 2× for stills
-- `summary.json` — cost before/after, plus per-agent status, cost and findings
+- `summary.json` — for `record`, cost before/after plus per-agent status, cost
+  and findings; for `record:skills`, what it authored and imported, the ignored
+  entries it asserted on, and the trace run it used
 
 Playwright can only record VP8/WebM, and the ffmpeg it bundles is built with
 libvpx alone, so it cannot re-encode. If a real `ffmpeg` is on `PATH` the

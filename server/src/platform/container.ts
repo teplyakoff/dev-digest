@@ -4,8 +4,11 @@ import type {
   GitHubClient,
   GitClient,
   CodeIndex,
+  SourceReader,
   Embedder,
   LLMProvider,
+  FeatureModelChoice,
+  FeatureModelId,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -16,6 +19,7 @@ import { LocalNoAuthProvider } from '../adapters/auth/local.js';
 import { OctokitGitHubClient } from '../adapters/github/octokit.js';
 import { SimpleGitClient } from '../adapters/git/simple-git.js';
 import { RipgrepCodeIndex } from '../adapters/codeindex/ripgrep.js';
+import { FsSourceReader } from '../adapters/source/fs-reader.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
 import { AnthropicProvider } from '../adapters/llm/anthropic.js';
 import { OpenAIEmbedder } from '../adapters/embedder/openai.js';
@@ -25,6 +29,8 @@ import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
+import { SkillsService } from '../modules/skills/service.js';
+import { getFeatureModelOverride } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
@@ -43,6 +49,8 @@ export interface ContainerOverrides {
   github?: GitHubClient;
   git?: GitClient;
   codeIndex?: CodeIndex;
+  /** Repo-relative file reads out of a clone; tests inject `MockSourceReader`. */
+  sourceReader?: SourceReader;
   embedder?: Embedder;
   /** Pre-built providers by id (skip key lookup). */
   llm?: Partial<Record<'openai' | 'anthropic' | 'openrouter', LLMProvider>>;
@@ -64,6 +72,7 @@ export class Container {
   private _git?: GitClient;
   private _github?: GitHubClient;
   private _codeIndex?: CodeIndex;
+  private _sourceReader?: SourceReader;
   private _embedder?: Embedder;
   private llmCache = new Map<string, LLMProvider>();
 
@@ -72,6 +81,7 @@ export class Container {
   // `container.agentsRepo` instead of reaching into another module's folder.
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
+  private _skills?: SkillsService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -107,6 +117,17 @@ export class Container {
   }
 
   /**
+   * Reading a file out of a clone. This is the port the onion lint rule points
+   * ring-2 code at when it reaches for `node:fs`; `repo-intel` predates it and
+   * still imports fs directly, which is its own change to make.
+   */
+  get sourceReader(): SourceReader {
+    if (this.overrides.sourceReader) return this.overrides.sourceReader;
+    this._sourceReader ??= new FsSourceReader();
+    return this._sourceReader;
+  }
+
+  /**
    * The repo-intel facade (T1.1). All higher-level features (reviews,
    * blast/onboarding migrations, phantom-gate) code against this interface.
    * Tests inject a mock via `ContainerOverrides.repoIntel`.
@@ -117,6 +138,36 @@ export class Container {
     return this._repoIntel;
   }
 
+  /**
+   * The skills service, shared across features.
+   *
+   * Here for the same reason `agentsRepo` and `reviewRepo` are: a second module
+   * needs skills, and onion §11 makes a sibling module private — the container
+   * IS the sanctioned route. The Conventions Extractor creates a skill from
+   * accepted candidates and must not re-implement the v1 snapshot or the
+   * duplicate-name translation to do it.
+   */
+  get skills(): SkillsService {
+    return (this._skills ??= new SkillsService(this));
+  }
+
+  /**
+   * A workspace's chosen provider+model for one system feature, or `undefined`
+   * when it has not chosen. Exposed here rather than imported from
+   * `modules/settings` because that is a sibling module to every feature that
+   * asks — the composition root is allowed to know about both.
+   *
+   * Returns the OVERRIDE only. Callers with a static default use the registry;
+   * callers with their own dynamic default (conventions) need to see the
+   * absence, which `resolveFeatureModel` would hide behind the registry value.
+   */
+  async featureModel(
+    workspaceId: string,
+    id: FeatureModelId,
+  ): Promise<FeatureModelChoice | undefined> {
+    return getFeatureModelOverride(this, workspaceId, id);
+  }
+
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */
   get depgraph(): DepGraph {
     if (this.overrides.depgraph) return this.overrides.depgraph;
@@ -124,7 +175,8 @@ export class Container {
     return this._depgraph;
   }
 
-  /** Token counter (js-tiktoken) for the repo-map budget search. */
+  /** Token counter (js-tiktoken): the repo-map budget search + per-skill
+   *  token attribution in the run trace. Never throws — falls back to chars/4. */
   get tokenizer(): Tokenizer {
     if (this.overrides.tokenizer) return this.overrides.tokenizer;
     this._tokenizer ??= new TiktokenTokenizer();
