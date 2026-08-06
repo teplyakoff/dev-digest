@@ -1,0 +1,69 @@
+{
+  "recorded_at": "2026-08-06T15:56:26.018Z",
+  "repo": "teplyakoff/dev-digest",
+  "pr": 4,
+  "started_empty": true,
+  "intent": {
+    "summary": "Renames the repo refresh endpoint and its timestamp field so they read as one thing: POST /repos/:id/refresh becomes /sync, and Repo.last_polled_at becomes Repo.synced_at, with the web client and shell labels updated in the same change.",
+    "confidence": "high",
+    "in_scope": [
+      "Rename endpoint to /sync",
+      "Rename field to synced_at",
+      "Update client call site",
+      "Update shell label",
+      "Patch bump on @devdigest/api"
+    ],
+    "out_of_scope": [],
+    "sources": [
+      {
+        "kind": "pr_title",
+        "ref": "refactor(repos): clearer names for the repo sync endpoint and field",
+        "status": "used"
+      },
+      {
+        "kind": "pr_body",
+        "ref": "PR description",
+        "status": "used"
+      },
+      {
+        "kind": "changed_files",
+        "ref": "7 file(s), 8 hunk header(s)",
+        "status": "used"
+      },
+      {
+        "kind": "link",
+        "ref": "https://claude.com/claude-code",
+        "status": "unavailable",
+        "note": "external links are not fetched"
+      }
+    ],
+    "missing_context": [
+      "the external link https://claude.com/claude-code was not fetched"
+    ],
+    "head_sha": "b6ce1dab5a56d49a0494d8948779563b498088da",
+    "model": "openrouter/deepseek/deepseek-v4-flash-0731",
+    "tokens_in": 2630,
+    "tokens_out": 8378,
+    "cost_usd": 0.00271404
+  },
+  "two_passes": {
+    "classifierModel": "deepseek/deepseek-v4-flash-0731",
+    "reviewModel": "deepseek/deepseek-v4-flash",
+    "trace_run": "bb35398b-66c2-475e-87a7-d86e5ac0a7c3",
+    "from_this_take": true,
+    "fresh_derivation": true
+  },
+  "reuse_line_shown": true,
+  "stale_scenes_shown": false,
+  "runs": [
+    {
+      "run_id": "bb35398b-66c2-475e-87a7-d86e5ac0a7c3",
+      "agent": "General Reviewer",
+      "status": "done",
+      "model": "deepseek/deepseek-v4-flash",
+      "cost_usd": 0.000548532,
+      "findings": 1,
+      "score": 65
+    }
+  ]
+}

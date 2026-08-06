@@ -9,7 +9,8 @@
     "record": "tsx record.ts",
     "record:skills": "tsx record-skills.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "record:conventions": "tsx record-conventions.ts"
+    "record:conventions": "tsx record-conventions.ts",
+    "record:intent": "tsx record-intent.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

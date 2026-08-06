@@ -1,11 +1,13 @@
 # `@devdigest/demo` — screencast recorders
 
-Two recorders, both producing a captioned video plus one PNG per scene:
+Four recorders, each producing a captioned video plus one PNG per scene:
 
 | Script | Records | Cost |
 |---|---|---|
 | `npm run record` | the review loop: PR list → run every enabled agent → watch them work → verdict, score and **Run Cost Badge** → run trace → back to the list with the COST column filled in | **real money** |
 | `npm run record:skills` | the L02 Skills feature: the grid and preview drawer → authoring and versioning → the import preview's ignored-entries list → the agent Skills tab → the run trace's skills block and token count | free |
+| `npm run record:conventions` | the L02 homework: the Conventions Extractor's candidate queue, evidence links and skill merge → the API Contract Reviewer control experiment, with and without skills | **real money** (one extraction) |
+| `npm run record:intent` | the L03 Intent Layer: the empty card → a real review deriving the intent, with both model calls labelled by role in the Live Log → the reuse on a second trigger → `derive_intent` beside `review_file` in the trace → the model registry → stale and re-derive | **real money** (two reviews + two classifier calls) |
 
 These are **demo recorders, not tests.** They exist to produce shareable evidence
 that the app works against a real stack; `../e2e` is what actually asserts
@@ -86,6 +88,44 @@ Two things worth knowing before you run it:
 It also asserts rather than just filming: if the import preview fails to name
 every non-body entry of the fixture archive as ignored, the run fails. That list
 is the product claim, so a recording that silently lost it is worse than none.
+
+### Recording the Intent Layer
+
+```bash
+npm run record:intent
+```
+
+Reads `DEMO_BASE_URL`, `DEMO_API_URL`, `DEMO_OUT` (default `./recordings/l03-intent`),
+`DEMO_HEADED`, `DEMO_RUN_TIMEOUT`, plus:
+
+| Env | Default | Meaning |
+|---|---|---|
+| `DEMO_REPO` | `teplyakoff/dev-digest` | the repo both PRs live in |
+| `DEMO_PR` | `4` | the PR the intent is derived on, inside a real review |
+| `DEMO_STALE_PR` | `5` | a PR whose intent was derived against an older commit; `""` skips those scenes |
+| `DEMO_AGENT` | `General Reviewer` | the agent whose trigger derives the intent |
+| `DEMO_AGENT_2` | `Security Reviewer` | a second trigger, to film the reuse line; `""` skips it |
+
+Three things worth knowing before you run it:
+
+- **It spends money twice over.** Two review passes plus the classifier call
+  behind the first one, and one more classifier call when it re-derives on the
+  stale PR. Roughly $0.003–0.01 depending on the diff.
+- **The first scene needs the target PR to have no intent yet.** Nothing in the
+  product deletes an intent, so there is no route for the recorder to call. A
+  re-take against an already-derived PR films the derived card instead and says
+  so in its output. To get the empty state back:
+
+  ```bash
+  docker exec devdigest-postgres psql -U devdigest -d devdigest -c "delete from pr_intent where pr_id = '<pr uuid>';"
+  ```
+
+- **It asserts the claim the footage exists to make.** The trace must carry a
+  `derive_intent` entry labelled `cheap classifier`, a `review_file` entry beside
+  it, a classifier slug that is *not* the reviewing agent's, and a non-null
+  `prompt_assembly.intent`. The classifier default and the seeded agents' model
+  differ by the `-0731` suffix alone, so a regression that reviewed on the
+  classifier's model would still have filmed a video that looks right.
 
 ## Output
 
