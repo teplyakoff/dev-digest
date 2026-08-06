@@ -102,6 +102,16 @@ here. Here is for what has no package at all.
   legitimate use is a *long* fallback for work the harness cannot track.
   (2026-08-06)
 
+- **`.claude/hooks/pr-guard.sh` gates `git push` but NOT `gh pr edit`** — its
+  `GUARDED` list is `gh pr create|gh pr ready|gh pr merge|git push`. So a pull
+  request's title and body can be rewritten with no verdict at all, while the
+  branch behind them cannot move. That asymmetry is usable (update the prose,
+  then push) and also a hole worth knowing about: a description can be made to
+  claim things the pushed tree does not contain. Note too that the guard matches
+  the payload as whole TEXT, so a command that merely *mentions* `git push` — an
+  echo, a heredoc, a doc edit — is blocked too; that is documented and accepted,
+  and costs one `PSR_SKIP=1`. (2026-08-06)
+
 ## Codebase Patterns
 
 - **A review subagent that needs two skills in one pass takes no `Skill` tool —
@@ -171,6 +181,16 @@ here. Here is for what has no package at all.
   agent is given that path. This follows the upstream guidance to write a
   self-contained spec and execute it from a clean context, and it survives the
   session ending, which a message does not. (2026-08-06)
+
+- **`docs/results/<lab>/` may keep a frame from a different take, but only if it
+  says which one and why.** `docs/results/README.md` says re-recording *replaces*
+  the file, which reads as "never mix takes" — and mostly it should, because the
+  L02 evidence's own postmortem is a mislabelled still. The exception is a state
+  the current take structurally cannot produce: `13-intent-stale.png` needs a PR
+  whose head moved after its intent was derived, and only a push does that. Keep
+  the older frame, and name it as borrowed in that lab's `README.md` next to the
+  reason. An unlabelled borrowed frame is the failure; a labelled one is evidence
+  the take could not otherwise carry. (2026-08-06)
 
 ## Tool & Library Notes
 
@@ -268,6 +288,17 @@ _(no entries yet)_
   and roughly 200 k of badly-scoped reviewer input — about 30 % recoverable with
   no check removed. Not the checking: four layers each found what the previous
   could not, and 249 unit tests were green through all of it.
+
+- **2026-08-06** — Filmed the L03 Intent Layer (`demo/record-intent.ts`, evidence
+  in `docs/results/l03/`) and rewrote PR #5's title and description around it.
+  The subject had claimed *"Intent layer · Smart Diff"*; only the Intent Layer is
+  in the branch, so the title was narrowed and a *Not in this branch* section
+  says what the lesson pairs it with and why that is absent. Three takes, ~$0.012,
+  and the two discarded ones produced better lessons than the one that shipped —
+  both are in `demo/INSIGHTS.md`. The sharpest is not about recording at all:
+  `buildApp` reaps `running` runs on construction, so the **server test suite
+  marks live billed reviews `failed` in the dev database** (written up in
+  `server/INSIGHTS.md`, tracked as separate work off `main`).
 
 ## Open Questions
 

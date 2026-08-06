@@ -167,6 +167,34 @@ would be obvious to anyone reading the code, don't write it.
   `package.json`, `strict-dep-builds` in `.npmrc`, and the `npm_config_*` env
   vars — pnpm 11 reads this setting only from `pnpm-workspace.yaml`. (2026-07-27)
 
+- **`buildApp` writes to whatever database `DATABASE_URL` points at, before a
+  single route runs — so the test suite fails live review runs in the dev DB.**
+  `app.ts:81` awaits `ReviewService.reapStaleRuns()` on every construction, and
+  `reapStaleRunningRuns` (`repository/run.repo.ts:105`) is an unscoped
+  `UPDATE agent_runs SET status='failed' WHERE status='running'` — no workspace
+  filter, no age filter, no error text, no duration. `test/routes-smoke.test.ts`
+  calls `buildApp({config})` with `loadConfig({...process.env})` and its own
+  docstring claims these tests "don't touch the database (postgres-js connects
+  lazily)"; the reaper makes that false. Observed 2026-08-06: a real in-flight
+  run (`b78152e4`) was marked `failed` by `pnpm exec vitest run --exclude
+  '**/*.it.test.ts'` in another terminal; the provider answered ~3 min later and
+  the server logged *"Run had already been cancelled or reaped — keeping that
+  status"*, so the run was **billed**, produced 3 findings, persisted its trace,
+  and still reads `failed`. Reproduced deterministically: insert one `running`
+  row, run `vitest run test/routes-smoke.test.ts`, watch it flip. Do not run the
+  suite against a stack with live runs until this is bounded. (2026-08-06)
+
+- **The OpenRouter schema-repair round is real, and it is not cheap.** The intent
+  classifier sets no `provider: { require_parameters: true }`, so a `strict` miss
+  triggers a silent second request (`openrouter.ts:104-115`). First observed
+  2026-08-06 on `dev-digest#4`: `Intent derived (confidence=high, **2 attempts**)
+  — 2 630 in / **8 378 out** · **$0.002714**`, against the ~$0.0003 and ~300
+  output tokens `docs/plans/L03-intent-layer.md` budgeted — an order of magnitude,
+  from one retry. The same call on the same PR minutes earlier took 1 attempt and
+  cost $0.000441. So `attempts` in the log is the only thing distinguishing "the
+  cheap pass got expensive" from "the price estimate was wrong", and a cost
+  regression here will look like model drift if you do not read it. (2026-08-06)
+
 ## Codebase Patterns
 
 - The Zod contracts are **vendored twice — `server/src/vendor/shared/**` and

@@ -74,6 +74,39 @@ would be obvious to anyone reading the code, don't write it.
   — the committed verdict-banner still targets the `Critical` filter chip, not
   the "PR SCORE" label the recorder's step 6 uses. (2026-07-31)
 
+- **A run that settles is not a run whose trace exists.** `saveRunTrace` is the
+  last thing `runOneAgent` does, so `GET /runs/:id/trace` right after
+  `waitForRuns` returns can 404 — and it does so hardest on a run that settled
+  *early*, because something else marked it terminal while the provider call was
+  still out. The first take of `record-intent.ts` died exactly there: the run was
+  `failed` at 18:38:57 and had a perfectly good trace at 18:39:36. Never pick the
+  trace run by `status` and hope; FETCH each candidate's trace and check its
+  contents, falling back down a preference list. (2026-08-06)
+
+- **Running the server test suite kills the review you are recording.**
+  `buildApp` awaits the orphan-run reaper on every construction, and
+  `server/test/routes-smoke.test.ts` builds the app against the ambient
+  `DATABASE_URL` — so `pnpm exec vitest run` in another terminal marks every
+  `running` agent_run in the *dev* database `failed`, with a null duration and no
+  error text. It cost a live billed run mid-recording on 2026-08-06 (the provider
+  answered 3 min later, the run persisted 3 findings, and the row still reads
+  `failed`). Reproduced deterministically: one `running` row plus
+  `vitest run test/routes-smoke.test.ts` flips it. **Do not run any package's
+  tests while a recording is in flight**, and if a take dies with a run that
+  "failed" for no stated reason, check what else was running before blaming the
+  provider. (2026-08-06)
+
+- **`waitFor` passing does not mean the line is on screen.** `LiveLogStream` is a
+  fixed-height pane (`LOG_HEIGHT = 420`) that does **not** follow its own tail,
+  so a log line can be in the DOM, satisfy `getByText(...).waitFor()`, and sit
+  far below the visible viewport. Take two of `record-intent.ts` shipped three
+  stills captioned `INTENT CLASSIFIER…` and `REVIEW model…` over a pane still
+  showing `Loading PR diff…`. Extends the `page.mouse.wheel()` entry above: the
+  fix is the same `locator.scrollIntoViewIfNeeded()` on an element inside the
+  pane, but the trap is different — there was no visible symptom to notice,
+  because the wait *succeeded*. Wrap it: wait, scroll, settle, shoot.
+  (2026-08-06)
+
 ## Codebase Patterns
 
 - This package is deliberately **not** part of `../e2e`. `e2e` is deterministic,
@@ -106,7 +139,26 @@ would be obvious to anyone reading the code, don't write it.
   one load-bearing invariant per recorder, not a test suite smuggled in here.
   (2026-08-03)
 
+- **Some states a recorder cannot manufacture, and pretending otherwise is worse
+  than skipping the scene.** A stale intent needs a PR whose head moved *after*
+  its intent was derived — only a push does that, and there is no DELETE route
+  for an intent because nothing in the product deletes one. `record-intent.ts`
+  therefore films the on-demand `Re-derive` half when no stale PR is available
+  and says so in its own output, and `docs/results/l03/README.md` names the one
+  frame kept from an earlier take and why. Naming the borrowed frame is the whole
+  point: the L02 evidence's own postmortem is about a mislabelled still.
+  (2026-08-06)
+
 ## Tool & Library Notes
+
+- **A vendored `DropdownItem` renders its hint inside the same `<button>`**, so
+  an agent's accessible name is `"General Reviewer deepseek/deepseek-v4-flash"`,
+  not `"General Reviewer"` — `getByRole("button", {name, exact: true})` silently
+  matches nothing. Match by prefix. Separately, the run-trace drawer passes its
+  `Tabs` as bare strings (`["trace", "log"]`), so the tab labels are literally
+  `trace` and `log`; there is no "Live log" text to click. Both were found by a
+  free locator probe run before the paid take, which is the cheap habit here: the
+  product's own strings are not what the design calls them. (2026-08-06)
 
 - `npm run setup` (`playwright install chromium`) fetches ~95 MB into
   `~/Library/Caches/ms-playwright`: the full `chromium-*` build, the
@@ -197,6 +249,19 @@ _(no entries yet)_
   loaded a skill — API Contract Reviewer on `dev-digest#2`, `api-contract-guard
   v1`, 308 tokens — because nothing in this package can produce one; the L02
   control experiment still has no recorded evidence.
+
+- **2026-08-06** — Added `record-intent.ts` for the L03 Intent Layer: 16 scenes,
+  5 min 20 s, one unedited take against `dev-digest#4`. Three takes were needed
+  and the first two are the two "What Doesn't Work" entries above (a trace that
+  did not exist yet; a log pane that never scrolled). Budget lesson: the three
+  takes cost roughly $0.012 all in, and **the failed takes still bill** — the
+  classifier and review calls they started are paid for whether or not a video
+  came out. Run the free locator probe first; it caught three broken selectors
+  before any money was spent. The take that shipped fired the OpenRouter schema
+  repair round for the first time seen in this repo — `2 attempts`, 8 378 output
+  tokens, **$0.002714** against the ~$0.0003 the plan budgeted — which is a real
+  demonstration of why `attempts` is logged, and is written up in
+  `docs/results/l03/README.md` rather than hidden.
 
 ## Open Questions
 
