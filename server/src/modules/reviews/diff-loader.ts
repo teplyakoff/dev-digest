@@ -1,25 +1,34 @@
 import type { Container } from '../../platform/container.js';
-import type { UnifiedDiff } from '@devdigest/shared';
+import type { RepoRef, UnifiedDiff } from '@devdigest/shared';
 import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
-// SANCTIONED — onion §15 names this file in its exemptions list: it imports
-// db/schema in TYPE POSITION ONLY, to describe a repo row it passes straight
-// through. Marked here rather than silenced globally so the next person to
-// change this signature sees the standing instruction: prefer a contract type.
-// eslint-disable-next-line no-restricted-imports
-import * as schema from '../../db/schema.js';
 import type { ReviewRepository, PullRow } from './repository.js';
+
+/** The three fields `loadDiff` reads off a PR row. */
+export type DiffPullRef = Pick<PullRow, 'id' | 'base' | 'headSha'>;
 
 /**
  * Load the unified diff for a PR. Prefers a real `git diff base...head`; falls
  * back to assembling a synthetic unified diff from the persisted pr_files
  * patches (so the reviewer works even before a clone completes / in tests).
+ *
+ * The two row parameters are STRUCTURAL, not ORM rows. This file used to carry
+ * an `eslint-disable no-restricted-imports` for a type-position
+ * `db/schema` import, whose standing instruction was "the next person to change
+ * this signature should prefer a contract type" (onion §15). L03 changed the
+ * signature — `container.loadPrDiff` now hands the same call to a second
+ * feature — so the instruction was taken and the exemption is gone.
+ *
+ * Narrowing is what keeps the ring-2 ban enforceable: with `repoRow` typed as
+ * `typeof repos.$inferSelect`, any ring-2 caller reached through the container
+ * depended on an ORM row shape WITHOUT importing `db/schema`, so
+ * `eslint.config.js`'s rule structurally could not fire on it.
  */
 export async function loadDiff(
   container: Container,
   repo: ReviewRepository,
   workspaceId: string,
-  pull: PullRow,
-  repoRow: typeof schema.repos.$inferSelect,
+  pull: DiffPullRef,
+  repoRow: RepoRef,
 ): Promise<UnifiedDiff> {
   try {
     const diff = await container.git.diff(

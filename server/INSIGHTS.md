@@ -70,6 +70,93 @@ would be obvious to anyone reading the code, don't write it.
   tokens, findings — must target a genuinely imported repo with a clone, not the
   seed. (2026-07-28)
 
+- **An `*.it.test.ts` that omits ONE adapter override silently makes live, billed
+  API calls — the only symptom is a `waitForPrRuns` timeout.** `appWith` in
+  `reviews.it.test.ts` injected only the agent's own LLM provider. When L03 made
+  the review path also resolve `openrouter` (the intent classifier) and, because
+  that file's PR body reads `Closes #471`, `container.github()`, both fell
+  through to `LocalSecretsProvider` → `process.env` → the REAL keys in
+  `server/.env`, which vitest loads. Five tests went from 2.8 s to 10 s each
+  (`expected 'running' to be 'failed'`, `expected [] to have a length of 1`) and
+  real OpenRouter generations were billed. Nothing logged, nothing errored — an
+  un-injected port is a live network call, not a failure. When a test triggers a
+  code path that resolves a provider by NAME rather than from the fixture, inject
+  every external port exhaustively, not minimally. (2026-08-06)
+
+- **A safety bound keyed on "was anything at all missing?" is an off switch, and
+  only a run against real data shows it.** The intent scope filter armed on three
+  conditions, one of which was `missing_context.length === 0`. Every unit test
+  passed and the rule read as prudent. Against three real PRs of this repo it
+  armed **zero times** — and on two of them the sole gap was an unfetched
+  external link, one being `https://claude.com/claude-code`, the footer every
+  Claude Code-authored PR carries. So the feature could essentially never run in
+  the repo it was built for. The fix is to distinguish a **material** gap
+  (something the collector set out to read and could not: a `linked_issue` or
+  `repo_file` marked `unavailable`) from a merely recorded one (a `link` we never
+  intended to fetch). Same three PRs afterwards: the one naming a document it
+  could not read stays disarmed, the two whose gaps were only URLs arm.
+  Generalisable: when a gate's precondition is a count of "anything unusual",
+  check what that count actually is on production data before trusting it —
+  a fixture chooses its own inputs and will never contain a marketing footer.
+  (2026-08-06)
+
+- **A gate that reports only when it acts is indistinguishable from a gate that
+  never ran.** The scope filter logged its drops and its disarmed reason, but
+  said nothing when armed and clean — so `Scope filter: …` missing from a trace
+  could mean "nothing was out of scope" or "the arming rule silently said no",
+  and telling them apart meant reading the code. `groundFindings` had it right
+  all along: it emits `Citation grounding: N/M passed` unconditionally. The gate
+  now emits `Scope filter: N/M kept — every finding was in scope` whenever it is
+  armed. Make a gate's *silence* mean exactly one thing. (2026-08-06)
+
+- **A `Parameters<typeof fn>[N]` parameter type can make the onion lint lane
+  blind, and it looks like tidy reuse.** `container.loadPrDiff` was typed
+  `pull: Parameters<typeof loadDiff>[3], repoRow: Parameters<typeof loadDiff>[4]`,
+  which resolve to `PullRow` and `typeof repos.$inferSelect`. Every ring-2 caller
+  reaching it through the container therefore depended on an ORM row shape
+  **without importing `db/schema`** — so the `RING_2_FORBIDDEN` rule in
+  `eslint.config.js` could not fire, by construction, and §5's "row types never
+  cross inward" stopped being enforced on that path while still appearing to be.
+  The fix is to name the shape structurally at the boundary: `loadDiff` now takes
+  `DiffPullRef` (`Pick<PullRow,'id'|'base'|'headSha'>`) and `RepoRef`, which is
+  all it ever read. That also retired `diff-loader.ts`'s
+  `eslint-disable no-restricted-imports` — the exemption whose own comment asked
+  the next person changing the signature to prefer a contract type — so the
+  `reviews` module is down from two type-position `db/schema` imports to one
+  (`run-executor.ts`). When you re-export a function through the composition
+  root, write its parameter types out; inheriting them re-exports the import ban
+  too, silently. (2026-08-06)
+
+- **Supersedes the fix in the entry above: enumerating providers is not the
+  remedy, `secrets: new MockSecretsProvider({})` is.** The first fix injected
+  `llm.openrouter` and `github` and declared the list "exhaustive". It was not.
+  `appWith` still injected `llm[provider]` — one of `openai`/`anthropic` — so the
+  `{ all: true }` test, which picks up the `provider: 'anthropic'` agent an
+  earlier test leaves in the same workspace, still reached
+  `container.llm('anthropic')` → `new AnthropicProvider(key)`. It only looked
+  fixed because this machine has no `ANTHROPIC_API_KEY`, so it threw
+  `ConfigError` and the suite stayed green and cheap — **the bug is invisible
+  exactly where it is harmless and bills only on a machine that happens to have
+  the key**. Any list of ports is a list someone will fail to extend. Inject an
+  EMPTY `MockSecretsProvider` instead: `buildLlm` reads its key through
+  `SecretsProvider`, so with nothing to find it raises `ConfigError` before
+  constructing a client, and a forgotten port becomes a loud deterministic
+  failure on every machine. `MockSecretsProvider` had existed in
+  `adapters/mocks.ts` since L01 with zero callers. Verified: with
+  `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` set to bogus values in the environment,
+  `reviews.it.test.ts` still passes in 2.8 s. (2026-08-06)
+
+- **`pnpm db:generate` is interactive whenever a column is dropped and another
+  added on the same table, and it cannot be answered from a pipe.** Renaming
+  `pr_intent.intent` → `summary` alongside ten new columns made drizzle-kit ask
+  "created or renamed from another column?" for each one. `printf '\033[B\n' |`
+  hangs (no TTY) and `script -q /dev/null` hangs too (the keystrokes arrive
+  before the prompt, then stdin closes). What works is `expect(1)`, which is on
+  macOS by default: spawn `pnpm exec drizzle-kit generate`, match on
+  `rename column` → send `\033[B` then `\r`, match on `create column` → send
+  `\r`, `exp_continue`. Answering "create" instead of "rename" would have been
+  silently wrong rather than an error. (2026-08-06)
+
 - On **pnpm 11**, every `pnpm <script>` in this package fails before running
   anything, with `ERR_PNPM_IGNORED_BUILDS`. pnpm 11 flipped `strictDepBuilds` to
   true, so the automatic pre-run dependency check refuses to pass while any
@@ -162,6 +249,28 @@ would be obvious to anyone reading the code, don't write it.
   `new row for relation "findings" violates check constraint`. Verify against
   live data before adding any further CHECK:
   `select severity, count(*) from findings group by 1`. (2026-08-03)
+
+- **A shared helper that a SECOND module needs goes onto the container, not into
+  a sibling import — and `modules/reviews/diff-loader.ts` is now the worked
+  example.** The intent classifier needs a PR's diff (paths + hunk headers), and
+  `loadDiff` lives in `modules/reviews/`, which is a sibling. Importing it would
+  have tripped the onion lint lane, and moving the file would have re-pointed the
+  review path for no gain. `container.loadPrDiff(workspaceId, pull, repoRow)`
+  delegates to it from the composition root, which already imports from
+  `modules/` by sanctioned exemption. Same route as `container.skills`. The
+  parameter types are taken with `Parameters<typeof loadDiff>[3]` rather than
+  re-imported, so the container does not grow its own `db/schema` import.
+  (2026-08-06)
+
+- **A repo-path regex that matches nothing is safe and USELESS — make the
+  denylist do the rejecting so it can be reported.** The intent module's first
+  `REPO_PATH_PATTERN` required a slash and an extension, so a PR body saying
+  "see .env for context" matched nothing: the file was never read (correct) but
+  also never recorded, so the card could not say the read had been refused. The
+  pattern now has a second alternative for dot-segment paths purely so
+  `classifyCandidatePath` can return `denied` and put a line in
+  `missing_context`. Silence and refusal look identical to a user; only one of
+  them is a feature. (2026-08-06)
 
 - **`run_traces.trace` is the ONLY record of what a run loaded, and it is a
   schema-less historical document — query it defensively.** Three rules, learned
@@ -275,6 +384,20 @@ would be obvious to anyone reading the code, don't write it.
   mirroring the score/cost blocks; no migration — severity was already
   persisted per finding. The null-vs-zero rule extended to counters, with the
   it-test asserting the grounding-dropped WARNING lands as a real `0`.
+
+- **2026-08-06** — L03 Intent Layer. Built `modules/intent/` on the Conventions
+  Extractor's shape (collect → one cheap model call → compute in code → persist)
+  and hung it off `container.intent`; migration `0015` renamed
+  `pr_intent.intent` → `summary` and added ten provenance columns while the table
+  was still empty. The structural call worth remembering: the classifier's Zod
+  schema has NO `sources` or `missing_context` field, so a hallucinated source is
+  unrepresentable rather than merely unlikely — the same trick the extractor
+  plays with evidence snippets. Two things bit: `pnpm db:generate` needed
+  `expect(1)` to answer its rename prompts, and `reviews.it.test.ts` started
+  making real billed OpenRouter and GitHub calls because `appWith` injected only
+  the agent's own provider. `contracts.test.ts` also had to move to
+  `Intent.summary` — a renamed contract field breaks the test that pins it, and
+  that test is not in any plan's file list.
 
 - **2026-08-05** — L02 mentor-feedback pass. Added `Agent.skills_count`
   (denormalized on `GET /agents` by `AgentsRepository.skillCounts`, the mirror of

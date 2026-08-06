@@ -67,9 +67,13 @@ describe('AI contracts parse fixtures', () => {
   });
 
   it('Intent / BlastRadius / Risks / PrHistory', () => {
+    // `intent` was renamed to `summary` in L03 (migration 0015), while
+    // `pr_intent` still had zero rows and `upsertIntent` had zero callers — it
+    // was the last moment `PrBrief.intent.intent` could be fixed for free.
     expect(() =>
-      Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
+      Intent.parse({ summary: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
     ).not.toThrow();
+    expect(() => Intent.parse({ intent: 'x', in_scope: [], out_of_scope: [] })).toThrow();
     expect(() =>
       BlastRadius.parse({
         changed_symbols: [{ name: 'rateLimit', file: 'a.ts', kind: 'function' }],

@@ -163,6 +163,9 @@ export function PrDetailView() {
               // A settled run (done OR failed) must appear in "Run history"
               // immediately, with no page reload.
               invalidateRuns.history();
+              // The run derived the intent as shared pre-work, so the card may
+              // be showing a state the run has already replaced.
+              invalidateRuns.intent();
               refetchReviews();
             }}
           />

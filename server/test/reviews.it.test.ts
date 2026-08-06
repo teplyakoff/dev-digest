@@ -4,7 +4,14 @@ import { waitForPrRuns } from './helpers/runs.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
-import { MockLLMProvider, MockEmbedder, MockGitClient } from '../src/adapters/mocks.js';
+import {
+  MockLLMProvider,
+  MockEmbedder,
+  MockGitClient,
+  MockGitHubClient,
+  MockSourceReader,
+  MockSecretsProvider,
+} from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { Review } from '@devdigest/shared';
@@ -25,6 +32,22 @@ const DIFF = `diff --git a/src/config.ts b/src/config.ts
    port: 3000,
 +  stripeKey: "sk_live_xxx",
    redisUrl: x,`;
+
+/**
+ * What the intent classifier is allowed to answer (L03): four fields, no
+ * provenance — `sources` and `missing_context` are the server's.
+ *
+ * The review findings carry no `scope` tag, which is the point: `scope` is
+ * `.nullish()` on the engine's extended schema, so REVIEW_FIXTURE parses against
+ * it untouched and the scope filter drops nothing. Every count and score
+ * assertion in this file is therefore unchanged by the intent layer.
+ */
+const INTENT_FIXTURE = {
+  summary: 'Adds rate limiting to the public endpoints.',
+  in_scope: ['rate limiting'],
+  out_of_scope: [],
+  confidence: 'medium',
+};
 
 /**
  * A Review fixture: two valid findings (line 11, CRITICAL + SUGGESTION), one
@@ -127,15 +150,63 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     await pg?.stop();
   });
 
+  /**
+   * EVERY external port is injected — and `llm` names ALL THREE provider ids
+   * unconditionally, not just the one this call is about.
+   *
+   * An un-injected port in this repo is a live network call, not a test
+   * failure. `platform/config.ts` runs `import 'dotenv/config'`, so vitest
+   * loads `server/.env`; `LocalSecretsProvider` then falls through to
+   * `process.env` and `container.llm()` builds a REAL client. Nothing logs it.
+   * The only symptom is `waitForPrRuns` timing out while a billed generation
+   * runs to completion.
+   *
+   * That already happened once here. L03 made the review path derive intent as
+   * shared pre-work, which resolves `openrouter`, and — because this file's PR
+   * body says "Closes #471" — also calls GitHub; both were un-injected and both
+   * went live.
+   *
+   * Injecting only `[provider]` would leave the SAME hole open one step further
+   * out, and this is not hypothetical: the "run all enabled agents" test posts
+   * `{ all: true }`, which picks up the `provider: 'anthropic'` agent an earlier
+   * test created in this same workspace. On a machine with no
+   * `ANTHROPIC_API_KEY` that throws `ConfigError` and the suite stays green and
+   * cheap — so the bug is INVISIBLE exactly where it is cheap, and bills only on
+   * a developer machine that happens to have the key set. Name all three.
+   */
   function appWith(structured: unknown, provider: 'openai' | 'anthropic' = 'openai') {
+    // The intent classifier's cheap pass. `structuredBySchema` keys on the
+    // caller's `schemaName`, so this answers `IntentExtraction` without
+    // touching what the review call (`Review`) receives.
+    const intentMock = () =>
+      new MockLLMProvider('openai', {
+        structuredBySchema: { IntentExtraction: INTENT_FIXTURE },
+      });
+    // Every id the container can resolve. The one under test answers the
+    // `Review` schema; the other two exist so that reaching them is a mock
+    // call, never a socket.
+    const idle = (id: 'openai' | 'anthropic') =>
+      id === provider ? new MockLLMProvider(id, { structured }) : intentMock();
     return buildApp({
       config: config(),
       db: pg.handle.db,
       overrides: {
+        // THE BACKSTOP, and the part that outlives this file's provider list.
+        // Enumerating llm ids fixes today's hole; an empty secrets provider
+        // closes the whole class. `container.buildLlm` reads its key through
+        // `SecretsProvider`, so with nothing to find it raises `ConfigError`
+        // before constructing a client — an un-injected port becomes a loud,
+        // deterministic failure on every machine instead of a silent billed
+        // request on the machines that happen to have the key.
+        secrets: new MockSecretsProvider({}),
         embedder: new MockEmbedder(),
         git: new MockGitClient({ diff: DIFF }),
+        github: new MockGitHubClient(),
+        sourceReader: new MockSourceReader({}),
         llm: {
-          [provider]: new MockLLMProvider(provider, { structured }),
+          openai: idle('openai'),
+          anthropic: idle('anthropic'),
+          openrouter: intentMock(),
         },
       },
     });

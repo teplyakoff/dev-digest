@@ -53,8 +53,21 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: 'review_intent',
     label: 'PR Review · Intent',
     description: 'Derives a PR’s intent and scope before review.',
-    defaultProvider: 'openai',
-    defaultModel: 'gpt-4.1',
+    // The cheap CLASSIFIER pass, not the review pass. Cheapest confirmed
+    // structured-output model in the catalogue (~$0.00032 per derivation).
+    //
+    // MIND THE `-0731` SUFFIX. Without it this is `deepseek/deepseek-v4-flash`,
+    // which is what the seeded reviewer agents run — the feature would then
+    // silently lose the "classifier on its own separate model" property while
+    // still working. Because the two slugs differ only by that suffix, every log
+    // line and trace entry labels the call's ROLE (INTENT CLASSIFIER / REVIEW),
+    // never just its slug; see `modules/intent/service.ts`.
+    //
+    // Mirrored BY HAND in `client/src/lib/feature-models.ts` — the client cannot
+    // import a runtime value from `@devdigest/shared`, and `vendor-shared.sh`
+    // does not touch that file. Change both.
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash-0731',
   },
   {
     id: 'risk_brief',

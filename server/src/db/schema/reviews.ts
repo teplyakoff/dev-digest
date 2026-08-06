@@ -103,14 +103,80 @@ export const findings = pgTable(
   }),
 );
 
-export const prIntent = pgTable('pr_intent', {
-  prId: uuid('pr_id')
-    .primaryKey()
-    .references(() => pullRequests.id, { onDelete: 'cascade' }),
-  intent: text('intent').notNull(),
-  inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-  outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-});
+/**
+ * The derived intent of one PR (L03). Owned by `modules/intent`.
+ *
+ * Two halves, and the split is the feature: `summary`/`in_scope`/`out_of_scope`
+ * are what the MODEL claimed; everything from `confidence` down is what the
+ * SERVER computed or observed around that claim. A model asked to report its own
+ * sources invents them, so `sources` and `missing_context` are never in the
+ * model-facing schema at all.
+ *
+ * Tenancy: no `workspace_id` here (nor before L03). Every read and write scopes
+ * through the PR — resolve `getPull(db, workspaceId, prId)` first and never
+ * query this table on a bare `prId` taken from a request.
+ *
+ * `intent` was renamed to `summary` in migration 0015, along with the ten added
+ * columns. Safe because the table had never been written to: `upsertIntent` had
+ * existed with zero callers since the starter.
+ */
+export const prIntent = pgTable(
+  'pr_intent',
+  {
+    prId: uuid('pr_id')
+      .primaryKey()
+      .references(() => pullRequests.id, { onDelete: 'cascade' }),
+    /** One sentence: what this PR is for. Renamed from `intent` in 0015. */
+    summary: text('summary').notNull(),
+    inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+
+    // ---- server-computed provenance ----------------------------------------
+    /**
+     * How much the classifier trusts its answer, after the server's floor is
+     * applied. `text` + CHECK rather than a PG enum, matching
+     * `findings_severity_ck` above: the value set is business logic, and a
+     * CHECK is one `ALTER` to change where an enum type is a migration dance.
+     */
+    confidence: text('confidence', { enum: ['high', 'medium', 'low'] })
+      .notNull()
+      .default('low'),
+    /**
+     * Every input the derivation considered, used or not. Mirrors `IntentSource`
+     * in `vendor/shared/contracts/review-api.ts`; typed structurally here
+     * because no other schema file imports a contract.
+     */
+    sources: jsonb('sources')
+      .$type<
+        {
+          kind: 'pr_title' | 'pr_body' | 'linked_issue' | 'repo_file' | 'link' | 'changed_files';
+          ref: string;
+          status: 'used' | 'unavailable';
+          note?: string | null;
+        }[]
+      >()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** What could NOT be read. The record that a gap was a gap, not invention. */
+    missingContext: jsonb('missing_context').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** The commit this was derived against; a moved head makes the row stale. */
+    headSha: text('head_sha').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    derivedAt: timestamp('derived_at', { withTimezone: true }).defaultNow().notNull(),
+    tokensIn: integer('tokens_in'),
+    tokensOut: integer('tokens_out'),
+    /** null = UNKNOWN price, 0 = free. Never coalesced to 0 anywhere. */
+    costUsd: doublePrecision('cost_usd'),
+  },
+  (t) => ({
+    // ONE EDIT IN TWO PLACES with `IntentConfidence` in
+    // vendor/shared/contracts/review-api.ts. Add a member to the Zod enum
+    // without adding it here and the insert fails at runtime with
+    // `new row for relation "pr_intent" violates check constraint`.
+    confidenceCk: check('pr_intent_confidence_ck', sql`${t.confidence} in ('high','medium','low')`),
+  }),
+);
 
 export const prBrief = pgTable('pr_brief', {
   prId: uuid('pr_id')

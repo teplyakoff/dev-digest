@@ -36,13 +36,28 @@ const VERDICT_RANK: Record<string, number> = {
   approve: 0,
 };
 
+/** A Review whose findings carry any subtype of `Finding`. */
+export type ReviewOf<F extends Finding> = Omit<Review, 'findings'> & { findings: F[] };
+
 /**
  * Merge N partial Reviews (one per mapped file/chunk) into a single Review:
  * concat findings, take the worst verdict, mean score, joined summaries.
+ *
+ * Generic in the finding type so the caller's shape survives the reduce.
+ *
+ * Be precise about what this buys, because the obvious justification is wrong:
+ * it is NOT that the alternative needs a cast. One line past this call,
+ * `run.ts` hands the findings to `groundFindings`, whose signature is
+ * `(Finding[]) => { kept: Finding[] }` — so L03's `scope` tag is erased there
+ * regardless, and `applyScopeFilter` would infer `F = Finding` and compile
+ * either way. The generic pays for itself in the OTHER direction: it stops this
+ * function from silently widening a caller's richer finding type, so if
+ * grounding ever learns to preserve subtypes, the reduce is already correct
+ * instead of being the place that quietly threw the information away.
  */
-export function reduceReviews(partials: Review[]): Review {
+export function reduceReviews<F extends Finding>(partials: ReviewOf<F>[]): ReviewOf<F> {
   if (partials.length === 1) return partials[0]!;
-  const findings = partials.flatMap((p) => p.findings);
+  const findings: F[] = partials.flatMap((p) => p.findings);
   let verdict: Review['verdict'] = 'approve';
   for (const p of partials) {
     if ((VERDICT_RANK[p.verdict] ?? 0) > (VERDICT_RANK[verdict] ?? 0)) verdict = p.verdict;

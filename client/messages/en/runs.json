@@ -47,6 +47,7 @@
       "system": "System",
       "skills": "Skills (dynamic)",
       "memory": "Memory (dynamic)",
+      "intent": "PR intent — derived (dynamic)",
       "repoMap": "Repo skeleton — repo-intel (dynamic)",
       "specs": "Project context (dynamic)",
       "callers": "Callers of changed symbols — repo-intel (dynamic)",

@@ -121,7 +121,58 @@ _(no entries yet)_
   the shell — `vi.mock("…/components/app-shell")` — or you inherit the repo
   switcher, theme and router. (2026-08-05)
 
+- **Corrects the symptom in the 2026-08-03 `pnpm build` entry above: the routes
+  do NOT go blank. The page renders perfectly and loses only its CSS** — which
+  is a much worse failure, because it names the wrong culprit. What you actually
+  see is the full app in serif type: correct markup, correct data, every card and
+  list in place, links underlined and blue, no dark theme. It reads as "my styles
+  broke", so the next twenty minutes go into `styles.ts`, the design tokens, or
+  whichever component was touched last — none of which is the cause. The cause is
+  that a production build overwrote `client/.next` under a running dev server.
+  Two tells that cost seconds instead: the **"1 Issue"** badge bottom-left, and
+  in the network log **exactly one 404 on
+  `_next/static/css/app/layout.css?v=<timestamp>`** while every other request is
+  200. Recovery is unchanged — `rm -rf client/.next` **and** a full restart; the
+  running server cannot recover on its own, and reloading the page does nothing.
+  (2026-08-06)
+
+- **The `pnpm build` hazard is not "someone forgets" — it is baked into every
+  verification checklist in this repo, and prose will not save you.**
+  `docs/plans/L03-intent-layer.md` carries the warning twice, in S7 and in the
+  end-to-end block ("Stop `pnpm dev` first"), and the stack was still poisoned
+  during that very sweep — because the sweep is run as one `typecheck && lint &&
+  test && build` chain against a stack that was deliberately left up for manual
+  checking. Any checklist ending in `pnpm build` is a loaded gun pointed at a dev
+  server that a previous step told you to start. **There is no scratch-directory
+  escape hatch on this version** — `next build --distDir .next-verify` fails with
+  `error: unknown option '--distDir'` (checked 2026-08-06; `distDir` is a
+  `next.config.mjs` key, not a CLI flag, and the config here does not set it). So
+  today the only options are: stop the stack, build, restart it; or skip the
+  build and lose the one check that catches the webpack `.js`→`.ts` vendor trap.
+  Do not rely on remembering — the reminder is already written down twice and was
+  still ignored. Making this safe would mean `distDir: process.env.NEXT_DIST_DIR
+  ?? '.next'` in `next.config.mjs` so a verification build can be redirected by
+  env var; that is untried, and `next.config.mjs` is in the reviewed
+  `package-config` group, so it belongs in its own change. (2026-08-06)
+
 ## Codebase Patterns
+
+- **A route-local test's path to `messages/` is EIGHT levels up, and getting it
+  wrong fails at import time with no hint of the right depth.** From
+  `src/app/repos/[repoId]/pulls/[number]/_components/<Name>/`, the correct import
+  is `"../../../../../../../../messages/en/<ns>.json"`. Seven `../` (the
+  intuitive count, stopping at `src/`) produces
+  `Failed to resolve import … Does the file exist?` and nothing suggests the
+  fix. Copy the specifier from a sibling — `RunTraceDrawer.test.tsx` has it
+  right — rather than counting. (2026-08-06)
+
+- **`@testing-library/user-event` is NOT a dependency of this package; every test
+  here uses `fireEvent`.** `package.json` carries only `@testing-library/react`
+  and `jest-dom`. The `react-testing-library` skill says "always `userEvent`,
+  never `fireEvent`", so following it literally produces
+  `Failed to resolve import "@testing-library/user-event"`. Either add the
+  package deliberately as its own change, or use `fireEvent` and say why in the
+  test — do not add it as a side effect of writing one test. (2026-08-06)
 
 - **A denormalized count is invalidated by the OTHER feature's mutation, and the
   hook that owns it usually lives in a different file.** `GET /agents` carries
@@ -270,6 +321,17 @@ _(no entries yet)_
   and `FindingsPanel` (toggle filter chips composing with hide-low-confidence).
   The predicted `common`-namespace fan-out from the 2026-07-28 entry landed
   exactly as warned — `RunHistory.test.tsx` had to add `common` to its messages.
+
+- **2026-08-06** — L03 Intent Layer UI. `IntentCard` at the top of
+  `?tab=findings` (the tab labelled "Agent runs"), `usePrIntent` /
+  `useDeriveIntent` joining `lib/hooks/reviews.ts`, and an "Intent" prompt block
+  in the trace drawer. `FindingsTab` owns the hooks and passes results down, so
+  the card stays presentational and the tab gains zero props — it already takes
+  14. The footer naming the model, the sources used and what could NOT be read is
+  entirely invented: the design bundle's INTENT mock is
+  `{intent, in_scope, out_of_scope}` only, and without that line a thin
+  derivation and a well-sourced one render identically. `pnpm build` after: the
+  shared First Load JS stayed at 102 kB, so the type-only contract import held.
 
 - **2026-08-05** — L02 mentor-feedback pass. Split the sidebar into WORKSPACE and
   SKILLS LAB in `src/vendor/ui/nav.ts` (the design had it that way all along, and

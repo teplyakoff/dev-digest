@@ -48,6 +48,16 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /**
+   * The derived PR intent block as it was rendered into the prompt (L03) —
+   * summary + scope lists + source refs, and NO fetched file content and no
+   * diff. Null when no intent was derived for this run.
+   *
+   * `.nullish()` is load-bearing, not stylistic: `run_traces.trace` is a
+   * schema-less historical document, and every trace persisted before L03 has
+   * no such key. Required here would fail every one of them on read.
+   */
+  intent: z.string().nullish(),
   user: z.string(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;

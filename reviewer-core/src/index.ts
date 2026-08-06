@@ -19,6 +19,9 @@ export {
   // path (the server's Conventions Extractor, which samples repo files without
   // going through assemblePrompt) so there stays exactly one of these.
   INJECTION_GUARD,
+  // The trusted scope instruction (L03). Appended only when an intent is
+  // present, and always BEFORE the guard so the guard stays last.
+  SCOPE_RULE,
   type PromptParts,
   type AssembledPrompt,
 } from './prompt.js';
@@ -40,7 +43,17 @@ export {
 } from './llm/structured.js';
 
 // Map-reduce helpers (reduce partials, slice a file's diff).
-export { reduceReviews, sliceDiff } from './review/reduce.js';
+export { reduceReviews, sliceDiff, type ReviewOf } from './review/reduce.js';
+
+// The deterministic scope gate (L03). Runs BESIDE grounding — after it, before
+// the score — and is disarmed unless the caller can show the intent was well
+// sourced. Its four bounds are in `review/scope.ts`.
+export {
+  applyScopeFilter,
+  type ScopedFinding,
+  type ScopeFilterOptions,
+  type ScopeFilterResult,
+} from './review/scope.js';
 
 // The engine entry point: given (diff + resolved agent inputs + LLM) → grounded Review.
 export {

@@ -6,9 +6,27 @@ import { z } from 'zod';
  */
 
 // ---- Intent ----
+/**
+ * What a PR is FOR, as a claim. This is the core shape — the part a model may
+ * propose and the part that is persisted as the answer.
+ *
+ * Everything about WHERE the claim came from (sources, what could not be read,
+ * how confident, which model, what it cost) lives on `PrIntentRecord` in
+ * `review-api.ts`, never here. That split is structural on purpose: the
+ * classifier's schema extends THIS object, so it has nowhere to put a
+ * hallucinated source — provenance is computed by the server from what it
+ * actually collected.
+ *
+ * `summary` used to be `intent`, which made the composed brief read
+ * `PrBrief.intent.intent`. Renamed in L03, while `pr_intent` still had zero
+ * rows and zero callers.
+ */
 export const Intent = z.object({
-  intent: z.string(),
+  summary: z.string(),
+  /** Short noun phrases: what this PR sets out to do. */
   in_scope: z.array(z.string()),
+  /** Short noun phrases: what this PR DELIBERATELY does not do — not "things
+      the classifier was not shown". */
   out_of_scope: z.array(z.string()),
 });
 export type Intent = z.infer<typeof Intent>;

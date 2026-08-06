@@ -6,10 +6,12 @@ import type {
   RunEventKind,
   UnifiedDiff,
 } from '@devdigest/shared';
-import { Review as ReviewSchema } from '@devdigest/shared';
+import { z } from 'zod';
+import { Finding as FindingSchema, Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
-import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
+import { reduceReviews, scoreFromFindings, sliceDiff, type ReviewOf } from './reduce.js';
+import { applyScopeFilter, type ScopedFinding } from './scope.js';
 
 /**
  * reviewPullRequest — the review engine entry point.
@@ -71,6 +73,22 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /**
+   * The derived PR intent (L03), already rendered by the caller. Untrusted;
+   * wrapped and slotted by `assemblePrompt`, which also appends `SCOPE_RULE` to
+   * the system message when this is set. Empty/undefined → the prompt is
+   * byte-identical to the pre-L03 one and no scope tagging is asked for.
+   */
+  intent?: string;
+  /**
+   * Arm the deterministic scope gate. Only ever true when the CALLER has
+   * established that the intent was well sourced — see `scope.ts` for the three
+   * conditions and why the default direction is off.
+   *
+   * Meaningless without `intent`: with no intent there is no scope rule, so
+   * nothing is tagged and nothing can be dropped.
+   */
+  scopeFilter?: boolean;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
   /** Override the structured-output retry budget. */
@@ -124,6 +142,24 @@ export interface ReviewOutcome {
   raw: string;
 }
 
+/**
+ * The scope tag, and where it does NOT go.
+ *
+ * `scope` is ENGINE-LOCAL: it is not on the shared `Finding` contract, has no
+ * `findings.scope` column, and never reaches the database. Persisting it would
+ * cascade through the contract, both vendored copies, a column, a fourth CHECK,
+ * a migration, `insertFindings`, the DTO and the client type — far more than the
+ * one badge it buys. `insertFindings` maps fields explicitly, so the extra
+ * property cannot reach a table by accident even if someone forgets.
+ *
+ * `.nullish()` matters for the fixtures: every existing canned review parses
+ * unchanged against the extended schema, so `MockLLMProvider` does not start
+ * throwing `fixture failed schema` across the suite.
+ */
+const ScopeTag = z.enum(['in_scope', 'out_of_scope']);
+const ScopedFindingSchema = FindingSchema.extend({ scope: ScopeTag.nullish() });
+const ScopedReviewSchema = ReviewSchema.extend({ findings: z.array(ScopedFindingSchema) });
+
 function selectMode(strategy: ReviewStrategy, diff: UnifiedDiff, threshold: number): ReviewMode {
   if (strategy === 'single-pass') return 'single-pass';
   if (strategy === 'map-reduce') return diff.files.length > 1 ? 'map-reduce' : 'single-pass';
@@ -147,8 +183,14 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    intent: input.intent,
     task: input.task,
   };
+
+  // Ask for the tag only when there is an intent to tag against; otherwise this
+  // is the untouched `ReviewSchema` and the call is identical to the pre-L03 one.
+  const hasIntent = Boolean(input.intent && input.intent.trim().length > 0);
+  const reviewSchema = hasIntent ? ScopedReviewSchema : ReviewSchema;
 
   // Whole-diff assembly is the trace default; overwritten below for single-pass.
   let assembly: PromptAssembly = assemblePrompt({ ...promptParts, diff: input.diff.raw }).assembly;
@@ -165,7 +207,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       : `Reviewing ${input.diff.files.length} changed file(s) in one pass`,
   );
 
-  const partials: Review[] = [];
+  const partials: ReviewOf<ScopedFinding>[] = [];
   let tokensIn = 0;
   let tokensOut = 0;
   let costUsd: number | null = 0;
@@ -183,9 +225,9 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     );
     const a = assemblePrompt({ ...promptParts, diff: chunk.diffText });
     if (mode === 'single-pass') assembly = a.assembly;
-    const res = await input.llm.completeStructured<Review>({
+    const res = await input.llm.completeStructured<ReviewOf<ScopedFinding>>({
       model: input.model,
-      schema: ReviewSchema,
+      schema: reviewSchema,
       schemaName: 'Review',
       messages: a.messages,
       maxRetries,
@@ -214,11 +256,34 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   }
   emit('result', `Citation grounding: ${grounding}`);
 
-  // Score is derived from the findings that SURVIVED grounding (not the model's
+  // L03 — the scope gate, AFTER grounding and BEFORE the score. Order is the
+  // invariant: grounding still drops every uncited finding, and the score below
+  // is still computed from whatever survived both gates. Disarmed unless the
+  // caller established the intent was well sourced (`scope.ts`).
+  const scopeArmed = input.scopeFilter === true;
+  const scoped = applyScopeFilter(ground.kept, { enabled: scopeArmed });
+  for (const d of scoped.dropped) {
+    emit('info', `scope filter dropped "${d.finding.title}": ${d.reason}`);
+  }
+  // Report whenever the gate was ARMED, not only when it dropped something —
+  // the same contract `Citation grounding: N/M passed` honours one line up.
+  // Silence on a clean pass is indistinguishable from a gate that never ran,
+  // and "did the filter actually engage?" is exactly the question a reader of
+  // this log has. The disarmed case is announced by the caller instead, because
+  // only the caller knows WHY it was disarmed.
+  if (scopeArmed) {
+    emit(
+      'result',
+      `Scope filter: ${scoped.kept.length}/${ground.kept.length} kept` +
+        (scoped.dropped.length === 0 ? ' — every finding was in scope' : ''),
+    );
+  }
+
+  // Score is derived from the findings that SURVIVED both gates (not the model's
   // self-reported number, and not the pre-grounding set) so the score, the
   // findings list, and the deterministic event always agree.
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: { ...merged, findings: scoped.kept, score: scoreFromFindings(scoped.kept) },
     grounding,
     dropped: ground.dropped,
     mode,

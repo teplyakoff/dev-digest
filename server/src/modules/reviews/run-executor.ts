@@ -1,5 +1,13 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, TraceSkill, UnifiedDiff } from '@devdigest/shared';
+import type {
+  PrIntentRecord,
+  Provider,
+  Review,
+  RunTrace,
+  ToolCall,
+  TraceSkill,
+  UnifiedDiff,
+} from '@devdigest/shared';
 import { reviewPullRequest, countBlockers, renderSkillBlock } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 // SANCTIONED — onion §15 names this file in its exemptions list: it imports
@@ -39,6 +47,47 @@ function isAbortError(err: unknown): boolean {
     e.name === 'APIUserAbortError' ||
     /aborted|abort(ed)? by/i.test(e.message ?? '')
   );
+}
+
+/**
+ * The shared pre-work every queued agent reads: one derivation, whether THIS
+ * trigger paid for it, and how long the call took.
+ */
+type SharedIntent = { intent?: PrIntentRecord; reused: boolean; deriveMs: number };
+
+/**
+ * The `derive_intent` entry for a run's trace, or nothing when no intent was
+ * derived.
+ *
+ * `meta` LEADS WITH "cheap classifier" for the same reason the Live Log lines
+ * carry their role: next to a `review_file` entry whose model is
+ * `deepseek-v4-flash`, the slug `deepseek-v4-flash-0731` alone does not tell a
+ * reader these were two different passes on two different models.
+ */
+function intentToolCalls(shared: SharedIntent): ToolCall[] {
+  const rec = shared.intent;
+  if (!rec) return [];
+  // A REUSED derivation cost this run nothing. The record still carries the
+  // tokens and dollars of whichever run first derived it, so printing them here
+  // would bill every later run for a model call it never made — and a reader
+  // summing `derive_intent` across a PR's traces would multiply one classifier
+  // call by the number of reviews. Say "reused" and print no figures.
+  const usage = shared.reused
+    ? 'reused — billed to an earlier run'
+    : [
+        rec.provider,
+        `${rec.tokens_in ?? 0} in / ${rec.tokens_out ?? 0} out`,
+        rec.cost_usd == null ? 'cost unknown' : `$${rec.cost_usd.toFixed(6)}`,
+      ].join(' · ');
+  return [
+    {
+      tool: 'derive_intent',
+      args: rec.model,
+      meta: ['cheap classifier', usage, `confidence=${rec.confidence}`].join(' · '),
+      // Reuse is a database read, not the original derivation's latency.
+      ms: shared.deriveMs,
+    },
+  ];
 }
 
 /** Minimal structured logger (pino-compatible: (obj, msg)) for runtime logs. */
@@ -131,6 +180,18 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // L03 — shared pre-work, derived ONCE and read by every agent queued in this
+    // trigger. It sits here, between the diff load and the agent loop, for the
+    // reason `run-logger.ts` gives for the fan-out existing at all: "shared
+    // pre-work (diff/intent)". A three-agent run pays for one derivation, and
+    // all three Live Logs and persisted traces carry it.
+    //
+    // BEST-EFFORT, and wrapped SEPARATELY from the diff load above on purpose:
+    // the diff's catch calls `failAll`, which fails every queued run. A review
+    // must never fail because intent derivation failed — the slot is simply
+    // omitted, exactly as `callers` and `repoMap` do below.
+    const shared = await this.deriveIntent(workspaceId, pull, repo, diff, runLog);
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -138,7 +199,16 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(
+          workspaceId,
+          pull,
+          repo,
+          diff,
+          agent,
+          runId,
+          runLog,
+          shared,
+        );
         logger?.info(
           {
             runId,
@@ -161,6 +231,60 @@ export class ReviewRunExecutor {
     }
   }
 
+  /**
+   * L03 — derive (or reuse) this PR's intent, once, for every queued agent.
+   *
+   * Reached through `container.intent`, never by importing `../intent/service.js`
+   * — that is a sibling module and onion §11 makes it private; the container is
+   * the sanctioned route.
+   *
+   * Returns `{intent: undefined}` on ANY failure, having said so in the log. The
+   * derivation carries its own 60 s timeout because the agent loop below is
+   * sequential, so a hung classifier would delay every queued run.
+   */
+  private async deriveIntent(
+    workspaceId: string,
+    pull: PullRow,
+    repo: typeof schema.repos.$inferSelect,
+    diff: UnifiedDiff,
+    runLog: RunLogger,
+  ): Promise<SharedIntent> {
+    const t0 = Date.now();
+    try {
+      const outcome = await runLog.step(
+        'Deriving PR intent',
+        () =>
+          this.container.intent.deriveIfStale(
+            {
+              workspaceId,
+              pull,
+              repo: {
+                owner: repo.owner,
+                name: repo.name,
+                fullName: repo.fullName,
+                clonePath: repo.clonePath,
+              },
+              diff,
+            },
+            runLog,
+          ),
+        { kind: 'tool' },
+      );
+      return {
+        intent: outcome.record,
+        reused: outcome.reused,
+        deriveMs: Date.now() - t0,
+      };
+    } catch (err) {
+      // `runLog.step` already emitted the error line; this says what it COSTS,
+      // which is the part a reader of the Live Log needs.
+      runLog.info(
+        `Intent unavailable — the review continues without it (${(err as Error).message})`,
+      );
+      return { reused: false, deriveMs: Date.now() - t0 };
+    }
+  }
+
   /** Execute a single agent's review against a PR, streaming progress. */
   private async runOneAgent(
     workspaceId: string,
@@ -170,6 +294,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    shared: SharedIntent,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -177,7 +302,14 @@ export class ReviewRunExecutor {
     // (built from the buffer) includes them too.
     const runLog = parentLog.forRun(runId, { agent: agent.name });
 
-    runLog.info(`Starting review with agent "${agent.name}" (${agent.provider}/${agent.model})`);
+    // "REVIEW model … (main pass)" is not decoration. The intent classifier's
+    // default (`deepseek/deepseek-v4-flash-0731`) differs from the seeded
+    // reviewer agents' model (`deepseek/deepseek-v4-flash`) by a suffix alone, so
+    // a log printing two near-identical slugs does not let a reader verify that
+    // the classifier ran on a separate cheap model. The ROLE labels are what make
+    // that checkable at a glance; drop them and the gap re-opens.
+    runLog.info(`Starting review with agent "${agent.name}"`);
+    runLog.tool(`REVIEW model: ${agent.provider}/${agent.model} (main pass)`);
 
     // Two things can end this run early, and both abort the SAME controller so
     // the provider request is actually torn down rather than merely un-awaited:
@@ -233,6 +365,21 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // Claim + provenance refs only — no fetched issue body, no plan-file
+      // content, no diff. This exact string is what lands in the trace's
+      // `prompt_assembly.intent`, so what is safe to log is what is sent.
+      const intentBlock = shared.intent
+        ? this.container.intent.renderIntentBlock(shared.intent)
+        : undefined;
+      const scopeFilter = shared.intent
+        ? this.container.intent.scopeFilterArmed(shared.intent)
+        : false;
+      if (shared.intent && !scopeFilter) {
+        runLog.info(
+          'Scope filter disarmed — the intent is not sourced well enough to suppress a finding',
+        );
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -256,6 +403,15 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // L03 — the derived intent, same omit-when-empty contract as every slot
+        // above: no intent ⇒ no `## PR intent` section, no SCOPE_RULE, and a
+        // prompt byte-identical to the pre-L03 one.
+        ...(intentBlock ? { intent: intentBlock } : {}),
+        // Armed only when the derivation had substantive sources, no missing
+        // context and was not self-reported low. The decision lives in the intent
+        // service (reached via the container, not a sibling import) because it is
+        // a judgement about provenance, which the engine cannot see.
+        ...(scopeFilter ? { scopeFilter: true } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -356,12 +512,21 @@ export class ReviewRunExecutor {
           grounding,
         },
         prompt_assembly: outcome.assembly,
-        tool_calls: outcome.chunks.map((c) => ({
-          tool: 'review_file',
-          args: c.label,
-          meta: outcome.mode,
-          ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
-        })),
+        tool_calls: [
+          // The classifier's call, ABOVE the review's, so the trace shows the
+          // two passes in the order they happened. This is what makes "the log
+          // shows two separate calls" checkable in the UI and not just in
+          // stdout. `ToolCall.meta` is a free-form string, so the model, the
+          // tokens and the cost of the cheap pass are all visible with NO
+          // contract change.
+          ...intentToolCalls(shared),
+          ...outcome.chunks.map((c) => ({
+            tool: 'review_file',
+            args: c.label,
+            meta: outcome.mode,
+            ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
+          })),
+        ],
         raw_output: outcome.raw,
         memory_pulled: [],
         specs_read: [],

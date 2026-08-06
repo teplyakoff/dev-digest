@@ -1,6 +1,6 @@
 import type { Db, DbTx } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
+import type { Finding, RunSummary, RunTrace } from '@devdigest/shared';
 
 /**
  * A2 — review data-access. The ONLY layer touching the DB for the review
@@ -134,14 +134,9 @@ export class ReviewRepository {
   }
 
   // ---- intent -------------------------------------------------------------
-
-  upsertIntent(prId: string, intent: Intent): Promise<void> {
-    return pullRepo.upsertIntent(this.db, prId, intent);
-  }
-
-  getIntent(prId: string): Promise<Intent | undefined> {
-    return pullRepo.getIntent(this.db, prId);
-  }
+  //
+  // MOVED (L03) to `modules/intent/repository.ts`, which owns `pr_intent`.
+  // Callers reach it through `container.intent`.
 
   // ---- observability: agent_runs + run_traces ----------------------------
 

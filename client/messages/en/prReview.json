@@ -107,5 +107,20 @@
     "goToReview": "Jump to this run’s findings below",
     "openTrace": "Open run trace & logs",
     "deleteRun": "Delete run"
+  },
+  "intent": {
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "none": "Intent has not been derived for this pull request yet.",
+    "derive": "Derive intent",
+    "rederive": "Re-derive",
+    "stale": "Derived against an older commit",
+    "lowConfidence": "low confidence",
+    "derivedBy": "Derived by {model} from {sources}.",
+    "noSources": "no sources",
+    "missing": "Could not be read: {items}",
+    "nothingInScope": "The classifier named nothing in scope.",
+    "nothingOutOfScope": "Nothing was named as deliberately out of scope.",
+    "heading": "Intent"
   }
 }

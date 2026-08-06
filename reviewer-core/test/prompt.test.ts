@@ -4,7 +4,7 @@
  * truncation, and ordering (before the diff).
  */
 import { describe, it, expect } from 'vitest';
-import { assemblePrompt, INJECTION_GUARD } from '../src/prompt.js';
+import { assemblePrompt, INJECTION_GUARD, SCOPE_RULE } from '../src/prompt.js';
 
 function userOf(parts: Parameters<typeof assemblePrompt>[0]): string {
   const { messages } = assemblePrompt(parts);
@@ -71,5 +71,63 @@ describe('assemblePrompt — ## PR description', () => {
       prDescription: 'x'.repeat(10_000),
     });
     expect((assembly.pr_description as string).length).toBe(4000);
+  });
+});
+
+describe('assemblePrompt — ## PR intent (derived) + SCOPE_RULE (L03)', () => {
+  const INTENT = 'Stated purpose: add rate limiting.\n\nIn scope:\n- rate limiting';
+
+  it('with NO intent, the prompt is byte-identical to the pre-L03 one', () => {
+    // The omit-when-empty contract every other slot honours, and the thing that
+    // makes this feature safe to ship: an agent that never derives an intent
+    // gets exactly the prompt it got before.
+    const sys = systemOf({ system: 'AGENT-SYS', diff: 'DIFF' });
+    expect(sys).toBe(`AGENT-SYS\n\n${INJECTION_GUARD}`);
+    expect(sys).not.toContain(SCOPE_RULE);
+
+    const { assembly, messages } = assemblePrompt({ system: 'AGENT-SYS', diff: 'DIFF' });
+    expect(messages[1]!.content).not.toContain('## PR intent');
+    expect(assembly.intent ?? null).toBeNull();
+
+    // Blank and whitespace-only are the same as absent.
+    expect(systemOf({ system: 'AGENT-SYS', diff: 'D', intent: '  ' })).toBe(
+      `AGENT-SYS\n\n${INJECTION_GUARD}`,
+    );
+  });
+
+  it('renders the block untrusted-wrapped, after the description and before the diff', () => {
+    const { messages, assembly } = assemblePrompt({
+      system: 'sys',
+      diff: 'DIFF',
+      prDescription: 'Adds rate limiting.',
+      intent: INTENT,
+    });
+    const user = messages[1]!.content;
+    expect(user).toContain('## PR intent (derived)');
+    expect(user).toContain('<untrusted source="derived-intent">');
+    expect(user).toContain('add rate limiting');
+    expect(user.indexOf('## PR description')).toBeLessThan(user.indexOf('## PR intent'));
+    expect(user.indexOf('## PR intent')).toBeLessThan(user.indexOf('## Diff to review'));
+    expect(assembly.intent).toBe(INTENT);
+  });
+
+  it('puts SCOPE_RULE BEFORE the guard, leaving the guard last', () => {
+    // Ordering is the assertion, not the presence: the guard has to be the final
+    // instruction the model reads, and SCOPE_RULE asks it to tag findings — a
+    // rule that landed after the guard would read as qualifying it.
+    const sys = systemOf({ system: 'AGENT-SYS', diff: 'D', intent: INTENT });
+    expect(sys).toBe(`AGENT-SYS\n\n${SCOPE_RULE}\n\n${INJECTION_GUARD}`);
+    expect(sys.indexOf(SCOPE_RULE)).toBeLessThan(sys.indexOf(INJECTION_GUARD));
+    expect(sys.endsWith(INJECTION_GUARD)).toBe(true);
+  });
+
+  it('SCOPE_RULE asks for a TAG and never for suppression', () => {
+    // The gate decides what a reader sees; the model is only asked to label.
+    // A rule that told the model to withhold findings would contradict the
+    // guard directly.
+    expect(SCOPE_RULE).toMatch(/in_scope/);
+    expect(SCOPE_RULE).toMatch(/out_of_scope/);
+    expect(SCOPE_RULE).toMatch(/Tagging is NOT filtering/i);
+    expect(SCOPE_RULE).toMatch(/ALWAYS reported/i);
   });
 });
