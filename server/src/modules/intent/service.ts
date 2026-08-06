@@ -5,8 +5,9 @@ import type {
   Provider,
   UnifiedDiff,
 } from '@devdigest/shared';
+import type { PromptSection } from '@devdigest/reviewer-core';
 import type { Container } from '../../platform/container.js';
-import type { RunLogger } from '../../platform/run-logger.js';
+import { RunLogger, type PinoLike } from '../../platform/run-logger.js';
 import type { PullRow } from '../../db/rows.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { IntentRepository } from './repository.js';
@@ -16,6 +17,12 @@ import {
   INTENT_MAX_TOKENS,
   INTENT_TIMEOUT_MS,
 } from './constants.js';
+import {
+  buildPromptRecord,
+  logPromptAssembly,
+  newCorrelationId,
+  redactUrlForLog,
+} from '../../platform/prompt-log.js';
 import { collectSources } from './pipeline/sources.js';
 import { buildIntentMessages } from './pipeline/prompt.js';
 import { INTENT_EXTRACTION_SCHEMA_NAME, IntentExtraction } from './pipeline/schema.js';
@@ -71,6 +78,12 @@ export interface DeriveContext {
   pull: Pick<PullRow, 'id' | 'number' | 'title' | 'body' | 'headSha'>;
   repo: { owner: string; name: string; fullName: string; clonePath: string | null };
   diff: UnifiedDiff;
+  /**
+   * Ties this classifier call to the review passes of the same trigger. Supplied
+   * by the executor; generated here for the standalone `POST /pulls/:id/intent`,
+   * which has no trigger to belong to.
+   */
+  correlationId?: string;
 }
 
 export class IntentService {
@@ -97,7 +110,7 @@ export class IntentService {
    * A repo with no clone still derives — it simply records every `repo_file` as
    * unavailable. That is a thinner answer, not a failure, so it is not a 409.
    */
-  async derive(workspaceId: string, prId: string): Promise<PrIntentView> {
+  async derive(workspaceId: string, prId: string, logger?: PinoLike): Promise<PrIntentView> {
     const pull = await this.requirePull(workspaceId, prId);
     const repoRow = await this.container.reviewRepo.getRepo(pull.repoId);
     if (!repoRow) throw new NotFoundError('Repo not found');
@@ -112,7 +125,7 @@ export class IntentService {
         clonePath: repoRow.clonePath,
       },
       diff,
-    });
+    }, this.detachedLog(logger, prId));
     return { intent: record };
   }
 
@@ -152,6 +165,20 @@ export class IntentService {
   /** The reviewer's prompt slot: claim + provenance, never fetched content. */
   renderIntentBlock(record: PrIntentRecord): string {
     return renderIntentBlock(record);
+  }
+
+  /**
+   * A logger for the standalone `POST /pulls/:id/intent`, which has no run.
+   *
+   * `RunLogger` with an EMPTY runId list publishes to nobody and still mirrors
+   * to stdout, so this path gets the same source accounting and the same prompt
+   * manifest as the review path without inventing a fake run to attach them to.
+   * Without it a billed model call reachable from HTTP logged nothing at all —
+   * which is the one endpoint where "what did we send?" is hardest to answer
+   * after the fact, because there is no trace row either.
+   */
+  private detachedLog(logger: PinoLike | undefined, prId: string): RunLogger | undefined {
+    return logger ? new RunLogger(this.container.runBus, [], logger, { prId }) : undefined;
   }
 
   // -------------------------------------------------------------------------
@@ -203,9 +230,15 @@ export class IntentService {
       const block = blocks.find((b) => b.label === label);
       return block ? `(${this.container.tokenizer.count(block.text)}t)` : '';
     };
+    // `pr_title`'s ref IS the title — content, not an identifier — so the log
+    // names the source and lets the size speak. Every other kind's ref is an
+    // identifier (a path, `#301`, a count) and is safe as-is once a URL has had
+    // its query string taken off it.
+    const logRef = (src: IntentSource): string =>
+      src.kind === 'pr_title' ? '' : ` ${redactUrlForLog(src.ref)}`;
     const usedRefs = sources
       .filter((s) => s.status === 'used')
-      .map((s) => `${s.kind} ${s.ref}${sizeOf(s.kind, s.ref)}`);
+      .map((s) => `${s.kind}${logRef(s)}${sizeOf(s.kind, s.ref)}`);
     runLog?.info(
       `Intent sources: ${usedRefs.join(' · ') || 'none'} — ` +
         `${estimate.toLocaleString('en-US')} tokens est.`,
@@ -214,11 +247,53 @@ export class IntentService {
     if (unavailable.length > 0) {
       runLog?.info(
         `Intent: ${unavailable.length} source(s) unavailable — ` +
-          unavailable.map((s) => `${s.kind} ${s.ref}${s.note ? ` (${s.note})` : ''}`).join('; '),
+          unavailable.map((s) => `${s.kind}${logRef(s)}${s.note ? ` (${s.note})` : ''}`).join('; '),
       );
     }
 
     const { provider, model } = await this.resolveModel(ctx.workspaceId);
+
+    // The same safe manifest the review pass emits, so one correlation id shows
+    // both prompts side by side: section names, trust, origin and size — never a
+    // byte of a body, an issue, a fetched plan or a hunk header block.
+    // Mirrors what `buildIntentMessages` composes, in the same order.
+    const promptSections: PromptSection[] = [
+      {
+        name: 'system',
+        trust: 'trusted',
+        source: 'classifier instructions + injection guard',
+        text: messages[0]?.content ?? '',
+      },
+      { name: 'pr-title', trust: 'untrusted', source: 'pr-title', text: ctx.pull.title },
+      ...blocks.map((b) => ({
+        name: b.label.split(':')[0]!,
+        trust: 'untrusted' as const,
+        source: b.label,
+        text: b.text,
+      })),
+    ];
+    if (missingContext.length > 0) {
+      promptSections.push({
+        name: 'missing-context',
+        trust: 'trusted',
+        source: `${missingContext.length} unreadable source(s)`,
+        text: missingContext.join('\n'),
+      });
+    }
+    const verbose = this.container.config.promptLogVerbose;
+    if (runLog) {
+      logPromptAssembly(
+        runLog,
+        buildPromptRecord(promptSections, this.container.tokenizer, verbose),
+        {
+          correlationId: ctx.correlationId ?? newCorrelationId(),
+          stage: 'intent',
+          provider,
+          model,
+        },
+        verbose,
+      );
+    }
     // LABEL THE ROLE, NOT JUST THE SLUG. The classifier default differs from the
     // seeded reviewer agents' model by the `-0731` suffix alone, so a log line
     // printing two near-identical slugs does not let a reader verify at a glance

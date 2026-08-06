@@ -133,9 +133,42 @@ export interface PromptParts {
   task?: string;
 }
 
+/**
+ * One slot of the assembled prompt, described rather than dumped.
+ *
+ * This is the input to safe prompt logging. The engine does NOT log — ring 0 has
+ * no I/O — so it hands the caller a structured account of what it built and lets
+ * the server decide what reaches a log line.
+ *
+ * `text` is here only so the caller can measure it (tokens need a tokenizer, and
+ * a digest needs `node:crypto` — neither belongs in this package). It is the
+ * same bytes already present in `assembly` and `messages`, so this adds no
+ * exposure. **Never log `text`.** `platform/prompt-log.ts` is the one consumer
+ * and it emits name, trust, source, sizes and an optional digest — never content.
+ */
+export interface PromptSection {
+  /** Stable machine name: `system`, `task`, `pr-description`, `diff`, … */
+  name: string;
+  /**
+   * `trusted` — configuration this workspace owns (the agent prompt, skills).
+   * `untrusted` — anything a PR author or the repo under review can influence;
+   * always `wrapUntrusted`-wrapped by the time it reaches the model.
+   */
+  trust: 'trusted' | 'untrusted';
+  /** Untrusted: the `wrapUntrusted` label. Trusted: where the bytes came from. */
+  source: string;
+  /** The slot's own content, BEFORE delimiter wrapping. Measure it; do not log it. */
+  text: string;
+}
+
 export interface AssembledPrompt {
   messages: ChatMessage[];
   assembly: PromptAssembly;
+  /**
+   * Per-slot manifest, in prompt order. Additive — nothing existing reads it.
+   * See `PromptSection`; the caller logs sizes, never content.
+   */
+  sections: PromptSection[];
 }
 
 /**
@@ -175,26 +208,88 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
       ? parts.prDescription.slice(0, MAX_PR_DESCRIPTION_CHARS)
       : undefined;
 
+  // The manifest is built alongside the sections, from the same values, so the
+  // two cannot drift: a slot that is pushed is recorded, and one that is omitted
+  // is absent from both. Building it afterwards by re-inspecting `parts` would
+  // reintroduce exactly the "the log says it was sent but it wasn't" bug this
+  // exists to prevent.
+  const sections: PromptSection[] = [
+    { name: 'system', trust: 'trusted', source: 'agent system prompt + guards', text: system },
+  ];
   const userSections: string[] = [];
-  if (parts.task) userSections.push(parts.task);
+  const push = (
+    rendered: string,
+    s: { name: string; trust: PromptSection['trust']; source: string; text: string },
+  ) => {
+    userSections.push(rendered);
+    sections.push(s);
+  };
+
+  if (parts.task) {
+    push(parts.task, { name: 'task', trust: 'trusted', source: 'task framing', text: parts.task });
+  }
   if (prDescription) {
-    userSections.push(`## PR description\n${wrapUntrusted('pr-description', prDescription)}`);
+    push(`## PR description\n${wrapUntrusted('pr-description', prDescription)}`, {
+      name: 'pr-description',
+      trust: 'untrusted',
+      source: 'pr-description',
+      text: prDescription,
+    });
   }
   if (hasIntent) {
-    userSections.push(`## PR intent (derived)\n${wrapUntrusted('derived-intent', parts.intent!)}`);
+    push(`## PR intent (derived)\n${wrapUntrusted('derived-intent', parts.intent!)}`, {
+      name: 'intent',
+      trust: 'untrusted',
+      source: 'derived-intent',
+      text: parts.intent!,
+    });
   }
-  if (skillsBlock) userSections.push(`## Skills / rules\n${skillsBlock}`);
-  if (memoryBlock) userSections.push(`## Relevant memory\n${memoryBlock}`);
+  if (skillsBlock) {
+    push(`## Skills / rules\n${skillsBlock}`, {
+      name: 'skills',
+      trust: 'trusted',
+      source: `${parts.skills!.length} skill block(s)`,
+      text: skillsBlock,
+    });
+  }
+  if (memoryBlock) {
+    push(`## Relevant memory\n${memoryBlock}`, {
+      name: 'memory',
+      trust: 'trusted',
+      source: `${parts.memory!.length} memory item(s)`,
+      text: memoryBlock,
+    });
+  }
   if (parts.repoMap && parts.repoMap.trim().length > 0) {
-    userSections.push(`## Repo skeleton\n${wrapUntrusted('repo-map', parts.repoMap)}`);
+    push(`## Repo skeleton\n${wrapUntrusted('repo-map', parts.repoMap)}`, {
+      name: 'repo-map',
+      trust: 'untrusted',
+      source: 'repo-map',
+      text: parts.repoMap,
+    });
   }
-  if (specsBlock) userSections.push(`## Project context\n${specsBlock}`);
+  if (specsBlock) {
+    push(`## Project context\n${specsBlock}`, {
+      name: 'specs',
+      trust: 'untrusted',
+      source: `${parts.specs!.length} spec chunk(s)`,
+      text: specsBlock,
+    });
+  }
   if (parts.callers && parts.callers.trim().length > 0) {
-    userSections.push(
-      `## Callers of changed symbols\n${wrapUntrusted('callers', parts.callers)}`,
-    );
+    push(`## Callers of changed symbols\n${wrapUntrusted('callers', parts.callers)}`, {
+      name: 'callers',
+      trust: 'untrusted',
+      source: 'callers',
+      text: parts.callers,
+    });
   }
-  userSections.push(`## Diff to review\n${wrapUntrusted('diff', parts.diff)}`);
+  push(`## Diff to review\n${wrapUntrusted('diff', parts.diff)}`, {
+    name: 'diff',
+    trust: 'untrusted',
+    source: 'diff',
+    text: parts.diff,
+  });
 
   const user = userSections.join('\n\n');
 
@@ -215,5 +310,5 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     user,
   };
 
-  return { messages, assembly };
+  return { messages, assembly, sections };
 }

@@ -45,7 +45,7 @@ export default async function intentRoutes(appBase: FastifyInstance) {
     },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
-      return service.derive(workspaceId, req.params.id);
+      return service.derive(workspaceId, req.params.id, req.log);
     },
   );
 }

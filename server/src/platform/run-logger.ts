@@ -67,6 +67,22 @@ export class RunLogger {
   }
 
   /**
+   * A structured record for OPS ONLY — stdout, at debug level, and nowhere else.
+   *
+   * Deliberately NOT an `event`: it never reaches the SSE bus, so it is absent
+   * from the Live Log and from the persisted `run_traces.log`. Those two are a
+   * UI a person reads while a review runs; a ten-line machine record per run
+   * would bury the six lines that actually describe progress.
+   *
+   * Use it for things an operator greps and a user never reads — the
+   * per-section prompt manifest is the first. The human-readable half of the
+   * same fact still goes through `info`.
+   */
+  detail(msg: string, data: Record<string, unknown>): void {
+    this.base?.debug({ ...this.ctx, runIds: this.runIds, ...data }, msg);
+  }
+
+  /**
    * Time an async operation: emits `"<label>…"` up front, then
    * `"<label> done (Nms)"` on success or `"<label> failed (Nms): <err>"` on
    * throw (re-throws). `kind` styles the start/done lines (default 'info';

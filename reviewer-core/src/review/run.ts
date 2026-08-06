@@ -8,7 +8,7 @@ import type {
 } from '@devdigest/shared';
 import { z } from 'zod';
 import { Finding as FindingSchema, Review as ReviewSchema } from '@devdigest/shared';
-import { assemblePrompt } from '../prompt.js';
+import { assemblePrompt, type PromptSection } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
 import { reduceReviews, scoreFromFindings, sliceDiff, type ReviewOf } from './reduce.js';
 import { applyScopeFilter, type ScopedFinding } from './scope.js';
@@ -133,6 +133,13 @@ export interface ReviewOutcome {
   mode: ReviewMode;
   /** Prompt assembly (for the run trace). Single-pass: the one call; map-reduce: the whole-diff assembly. */
   assembly: PromptAssembly;
+  /**
+   * Per-slot manifest of the same assembly, for SAFE logging — names, trust
+   * classes, origins and sizes. The engine builds it and logs nothing; the
+   * server measures and emits it (`platform/prompt-log.ts`). Same slots as
+   * `assembly`, described instead of dumped.
+   */
+  sections: PromptSection[];
   /** Per-chunk labels (for the run trace's tool_calls). */
   chunks: { label: string }[];
   tokensIn: number;
@@ -193,7 +200,13 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   const reviewSchema = hasIntent ? ScopedReviewSchema : ReviewSchema;
 
   // Whole-diff assembly is the trace default; overwritten below for single-pass.
-  let assembly: PromptAssembly = assemblePrompt({ ...promptParts, diff: input.diff.raw }).assembly;
+  const whole = assemblePrompt({ ...promptParts, diff: input.diff.raw });
+  let assembly: PromptAssembly = whole.assembly;
+  // The manifest describes the WHOLE-diff assembly in both modes, deliberately.
+  // In map-reduce the model sees one slice per call, so a per-chunk manifest
+  // would be N near-identical records differing only in the diff slot; the
+  // whole-diff one answers "what was this run built from" once.
+  let sections: PromptSection[] = whole.sections;
 
   const chunks =
     mode === 'map-reduce'
@@ -224,7 +237,10 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       { file: chunk.label },
     );
     const a = assemblePrompt({ ...promptParts, diff: chunk.diffText });
-    if (mode === 'single-pass') assembly = a.assembly;
+    if (mode === 'single-pass') {
+      assembly = a.assembly;
+      sections = a.sections;
+    }
     const res = await input.llm.completeStructured<ReviewOf<ScopedFinding>>({
       model: input.model,
       schema: reviewSchema,
@@ -288,6 +304,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     dropped: ground.dropped,
     mode,
     assembly,
+    sections,
     chunks: chunks.map((c) => ({ label: c.label })),
     tokensIn,
     tokensOut,

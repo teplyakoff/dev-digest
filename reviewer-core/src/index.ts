@@ -23,6 +23,7 @@ export {
   // present, and always BEFORE the guard so the guard stays last.
   SCOPE_RULE,
   type PromptParts,
+  type PromptSection,
   type AssembledPrompt,
 } from './prompt.js';
 

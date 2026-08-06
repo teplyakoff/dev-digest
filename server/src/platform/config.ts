@@ -36,6 +36,10 @@ const EnvSchema = z.object({
     (v) => (v === '' ? undefined : v),
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   ),
+  // Verbose prompt-assembly logging. Adds a per-section content DIGEST and exact
+  // token counts to the structured stdout record — never content. Ignored in
+  // production; see `promptLogVerbose` below for why that is a hard gate.
+  PROMPT_LOG_VERBOSE: z.string().optional(),
 });
 
 export type AppConfig = {
@@ -59,6 +63,23 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /**
+   * Verbose prompt-assembly logging — LOCAL ONLY, and that is enforced here
+   * rather than asked for in a comment.
+   *
+   * `PROMPT_LOG_VERBOSE=true` adds a per-section sha256 digest and exact token
+   * counts to the structured stdout record. It never adds content: not the diff,
+   * not a spec chunk, not a PR body, not a secret. The digest exists so two runs
+   * can be compared ("did the prompt actually change?") without anyone reading
+   * either one.
+   *
+   * It is forced OFF when `NODE_ENV=production`, whatever the env says, because
+   * verbosity flags are exactly the thing that gets exported in a deploy script
+   * and then forgotten. Even bounded to digests and counts, a per-section record
+   * on every production review is a volume and a retention question nobody has
+   * answered — so the answer is no, structurally.
+   */
+  promptLogVerbose: boolean;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -77,5 +98,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    // The `&&` is the gate, not the `===`. Production cannot opt in.
+    promptLogVerbose:
+      parsed.NODE_ENV !== 'production' && parsed.PROMPT_LOG_VERBOSE === 'true',
   };
 }

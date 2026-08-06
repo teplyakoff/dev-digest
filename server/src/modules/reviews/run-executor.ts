@@ -10,6 +10,11 @@ import type {
 } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers, renderSkillBlock } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
+import {
+  buildPromptRecord,
+  logPromptAssembly,
+  newCorrelationId,
+} from '../../platform/prompt-log.js';
 // SANCTIONED — onion §15 names this file in its exemptions list: it imports
 // db/schema in TYPE POSITION ONLY, to describe a repo row it passes straight
 // through. Marked here rather than silenced globally so the next person to
@@ -53,7 +58,12 @@ function isAbortError(err: unknown): boolean {
  * The shared pre-work every queued agent reads: one derivation, whether THIS
  * trigger paid for it, and how long the call took.
  */
-type SharedIntent = { intent?: PrIntentRecord; reused: boolean; deriveMs: number };
+type SharedIntent = {
+  intent?: PrIntentRecord;
+  reused: boolean;
+  deriveMs: number;
+  correlationId: string;
+};
 
 /**
  * The `derive_intent` entry for a run's trace, or nothing when no intent was
@@ -135,11 +145,15 @@ export class ReviewRunExecutor {
     // ONE logger fanned out over every queued run: shared pre-work (diff +
     // intent) is streamed into each target agent's Live Log and persisted into
     // each run's trace. Per-agent work below narrows it to a single run.
+    // ONE correlation id per trigger, carried by every log line the classifier
+    // pass and all N agent passes emit. `runId` cannot do this job: it is
+    // per-agent, and the intent derivation happens once, upstream of the loop.
+    const correlationId = newCorrelationId();
     const runLog = new RunLogger(
       this.container.runBus,
       jobs.map((j) => j.runId),
       logger,
-      { prId: pull.id },
+      { prId: pull.id, correlationId },
     );
 
     // Pre-work failure (e.g. diff load) fails EVERY queued run. The error was
@@ -190,7 +204,7 @@ export class ReviewRunExecutor {
     // the diff's catch calls `failAll`, which fails every queued run. A review
     // must never fail because intent derivation failed — the slot is simply
     // omitted, exactly as `callers` and `repoMap` do below.
-    const shared = await this.deriveIntent(workspaceId, pull, repo, diff, runLog);
+    const shared = await this.deriveIntent(workspaceId, pull, repo, diff, runLog, correlationId);
 
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
@@ -248,6 +262,7 @@ export class ReviewRunExecutor {
     repo: typeof schema.repos.$inferSelect,
     diff: UnifiedDiff,
     runLog: RunLogger,
+    correlationId: string,
   ): Promise<SharedIntent> {
     const t0 = Date.now();
     try {
@@ -265,6 +280,7 @@ export class ReviewRunExecutor {
                 clonePath: repo.clonePath,
               },
               diff,
+              correlationId,
             },
             runLog,
           ),
@@ -274,6 +290,7 @@ export class ReviewRunExecutor {
         intent: outcome.record,
         reused: outcome.reused,
         deriveMs: Date.now() - t0,
+        correlationId,
       };
     } catch (err) {
       // `runLog.step` already emitted the error line; this says what it COSTS,
@@ -281,7 +298,7 @@ export class ReviewRunExecutor {
       runLog.info(
         `Intent unavailable — the review continues without it (${(err as Error).message})`,
       );
-      return { reused: false, deriveMs: Date.now() - t0 };
+      return { reused: false, deriveMs: Date.now() - t0, correlationId };
     }
   }
 
@@ -301,6 +318,7 @@ export class ReviewRunExecutor {
     // events are already in this run's buffer, so the persisted trace below
     // (built from the buffer) includes them too.
     const runLog = parentLog.forRun(runId, { agent: agent.name });
+    const verbose = this.container.config.promptLogVerbose;
 
     // "REVIEW model … (main pass)" is not decoration. The intent classifier's
     // default (`deepseek/deepseek-v4-flash-0731`) differs from the seeded
@@ -422,6 +440,24 @@ export class ReviewRunExecutor {
         // of leaving the generation running (and billing) unobserved.
         signal: aborter.signal,
       });
+      // Safe, structured account of what the model was actually sent: section
+      // names, trust classes, origins and sizes — never content. The full text
+      // still goes to `run_traces.prompt_assembly`, which is a workspace-scoped
+      // API read rather than a log line.
+      logPromptAssembly(
+        runLog,
+        buildPromptRecord(outcome.sections, this.container.tokenizer, verbose),
+        {
+          correlationId: shared.correlationId,
+          stage: 'review',
+          provider: agent.provider,
+          model: agent.model,
+          runId,
+          agent: agent.name,
+        },
+        verbose,
+      );
+
       const { tokensIn, tokensOut, costUsd, grounding } = outcome;
 
       const keptFindings = outcome.review.findings;
