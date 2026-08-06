@@ -9,6 +9,7 @@ import type {
 import {
   ALLOWED_DOC_EXTENSIONS,
   DENIED_PATH_PATTERN,
+  SAFE_REPO_PATH_PATTERN,
   EXTERNAL_URL_PATTERN,
   LINKED_ISSUE_PATTERN,
   MAX_CHANGED_FILES,
@@ -103,6 +104,13 @@ export function renderChangedFiles(diff: UnifiedDiff): string {
  * `intent-sources.test.ts` asserts each branch directly.
  */
 export function classifyCandidatePath(relPath: string): 'ok' | 'ext' | 'denied' {
+  // FIRST, before anything else: a path that is not plain `[\w.-/]` is refused
+  // outright. A read path becomes a `wrapUntrusted` label, and labels are
+  // interpolated into `<untrusted source="…">` UNESCAPED — so a `"` or a
+  // newline in a path breaks the delimiter the injection defence is built on.
+  // See `SAFE_REPO_PATH_PATTERN`. Typed paths could never carry one; paths
+  // recovered from a GitHub URL can, via `decodeURIComponent`.
+  if (!SAFE_REPO_PATH_PATTERN.test(relPath)) return 'denied';
   const segments = relPath.split('/');
   // Any dot-segment: `.env`, `.github/…`, `.aws/credentials`. A leading dot is
   // the cheapest signal that a file is configuration rather than a plan.

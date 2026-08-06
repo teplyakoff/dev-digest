@@ -82,6 +82,35 @@ describe('candidate path safety', () => {
     expect(JSON.stringify(res.blocks)).not.toContain('sk_live');
   });
 
+  /**
+   * A read path becomes a `wrapUntrusted` LABEL, and `wrapUntrusted` escapes a
+   * block's CONTENT but interpolates the label straight into
+   * `<untrusted source="…">`. So a quote or a newline in a path breaks the
+   * delimiter the whole injection defence rests on.
+   *
+   * Typed paths never could: `REPO_PATH_PATTERN` matches `[\w.-]` only. Paths
+   * recovered from a self GitHub URL can, because they pass through
+   * `decodeURIComponent` — `.../blob/main/docs/a%22b%0Ax.md` decodes to
+   * `docs/a"b\nx.md`. Found reviewing this change set, not in the wild.
+   */
+  it('refuses a path that could break the untrusted delimiter', async () => {
+    expect(classifyCandidatePath('docs/a"b.md')).toBe('denied');
+    expect(classifyCandidatePath('docs/a\nb.md')).toBe('denied');
+    expect(classifyCandidatePath('docs/a>b.md')).toBe('denied');
+    expect(classifyCandidatePath('docs/plans/ok-file.md')).toBe('ok');
+
+    // End to end through the URL path that opened the hole: resolved, refused,
+    // and reported — never read, and never turned into a label.
+    const read = vi.fn(async () => '# pwned');
+    const res = await collect({
+      body: 'Plan: https://github.com/acme/payments-api/blob/main/docs/a%22b%0Ax.md',
+      sourceReader: { read },
+    });
+    expect(read).not.toHaveBeenCalled();
+    expect(res.blocks.some((b) => b.label.includes('"'))).toBe(false);
+    expect(res.sources.some((s) => s.kind === 'repo_file' && s.status === 'unavailable')).toBe(true);
+  });
+
   it('allows only document extensions', () => {
     expect(classifyCandidatePath('docs/plans/x.md')).toBe('ok');
     expect(classifyCandidatePath('docs/spec.mdx')).toBe('ok');

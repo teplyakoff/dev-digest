@@ -69,6 +69,29 @@ export const ALLOWED_DOC_EXTENSIONS = ['.md', '.mdx', '.txt', '.rst'] as const;
  */
 export const DENIED_PATH_PATTERN = /env|secret|credential|token|key|\.pem/i;
 
+/**
+ * The ONLY character shape a candidate path may have: word characters, dots,
+ * hyphens and slashes. Anything else is refused before the path can be read or
+ * named anywhere.
+ *
+ * This is a prompt-injection control, not tidiness. A read path becomes a
+ * `wrapUntrusted` LABEL (`repo-file:<path>`), and `wrapUntrusted` escapes the
+ * CONTENT of a block but interpolates the label straight into
+ * `<untrusted source="...">`. A path carrying `"` or a newline therefore breaks
+ * the delimiter itself — the one thing the whole untrusted-block scheme rests
+ * on — and lets a PR author forge the end of the untrusted region.
+ *
+ * Typed paths were always safe: `REPO_PATH_PATTERN` only matches `[\w.-]`
+ * segments, so a quote could never appear. The hole opened with paths recovered
+ * from this repo's own GitHub URLs, which pass through `decodeURIComponent` —
+ * `%22` becomes `"` and `%0A` becomes a newline. Checked, not theorised:
+ * `.../blob/main/docs/a%22b%0Ax.md` decodes to `docs/a"b\nx.md`.
+ *
+ * Enforced in `classifyCandidatePath`, so it covers every path source there is
+ * or will be — not only the one that exposed it.
+ */
+export const SAFE_REPO_PATH_PATTERN = /^[\w-][\w.\-/]*$/;
+
 /** Changed files shown to the classifier, as paths + hunk HEADERS only. */
 export const MAX_CHANGED_FILES = 60;
 export const MAX_HUNK_HEADERS_PER_FILE = 8;
