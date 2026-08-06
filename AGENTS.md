@@ -75,14 +75,16 @@ vendored into `client/src/vendor/shared`.
 - you need the API surface or DI wiring → `server/README.md`
 - you touch tests or CI → `TESTING.md`
 - you write or change an agent's system prompt → `docs/agent-prompts/README.md`
+- you write or change a Claude Code subagent → `.claude/agents/README.md`
 
 ## Session loop
 
 Before working in a package, read its `INSIGHTS.md`, name the top 3 entries
 relevant to the task, and treat them as high-confidence guidance unless told
-otherwise. At the end of the session run `/engineering-insights` to append what
-you learned to that same file — add entries, never overwrite existing ones.
-Do not skip this step.
+otherwise. Work that touches no package — `.claude/`, `docs/`, `scripts/` — uses
+the root `INSIGHTS.md` the same way. At the end of the session run
+`/engineering-insights` to append what you learned to that same file — add
+entries, never overwrite existing ones. Do not skip this step.
 
 Before the work becomes a pull request run `/pr-self-review`. It gates
 `gh pr create` and `git push` on the result, so a blocked verdict is not a
