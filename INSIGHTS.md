@@ -20,6 +20,18 @@ here. Here is for what has no package at all.
   were needed". A fresh agent pays the whole search cost again and can land on a
   different revision of the same page. (2026-08-06)
 
+- **Every review layer that cost money found something the layer before it
+  structurally could not — so cut input, never checks.** Measured over the L03
+  Intent Layer (1.21 M subagent tokens): `architecture-reviewer` +
+  `plan-verifier` (351 k, 32 %) returned an it-test making **live billed API
+  calls**, a cache invalidator with zero callers, and a signature that blinded
+  the repo's own ring-2 lint rule. `/pr-self-review` then found a BLOCKER
+  *neither could have seen* — a prompt-injection hole in code written after they
+  ran. The live `dev.sh` run then found two more that no agent and no test
+  caught: a linked plan never read, and a scope filter that never armed. Four
+  layers, four disjoint finding sets, 249 unit tests green throughout. When
+  trimming an agent budget, trim how input reaches the checkers. (2026-08-06)
+
 ## What Doesn't Work
 
 - **A subagent whose `tools` allowlist omits `Skill` cannot invoke any skill in
@@ -52,6 +64,44 @@ here. Here is for what has no package at all.
   Before adding an agent, grep the README for absolute claims — `only`, `never`,
   `all`, `both`, `neither` — and fix them in the same commit. (2026-08-06)
 
+- **Shortening the documents you pass between agents is the wrong lever, and the
+  numbers are not close.** Measured on the L03 Intent Layer, 1.21 M subagent
+  tokens total: the plan is 20 789 tokens, the four scratchpad briefs 5 212, the
+  six agent prompts ~8 k — **~34 k, or 2.8 % of spend**. Halving all of it saves
+  ~1.4 % and destroys the self-contained handoff this file's own *"handoff goes
+  through a written artifact"* entry depends on. The actual driver is **568 tool
+  calls at ~1 957 tokens each**, multiplied by context being re-sent every turn.
+  Optimise turn count and per-agent input scope; leave the artifacts alone.
+  (2026-08-06)
+
+- **`planner` carries `Agent(researcher)` and WILL spawn one even when you hand
+  it finished research — ~101 k tokens, 8 % of a feature's budget, pure
+  duplication.** It was given three pre-digested briefs (repo map, verified model
+  facts, external-practice survey) and spawned its own researcher anyway at
+  13:25, nested inside its own run so the cost never appears in a notification —
+  it is reported to the planner, not to you. Found only by counting subagent
+  transcripts (seven) against agents launched (six). When research is
+  pre-supplied, say so in the prompt: *"do not spawn a researcher; the briefs are
+  your research."* Cheapest single saving available. (2026-08-06)
+
+- **A read-only reviewer given the whole branch re-reviews what a prior verdict
+  already covered.** `architecture-reviewer` and `plan-verifier` were both
+  pointed at the change set versus the branch base, so they read 47 files — but
+  25 were byte-identical to files a `PASS_WITH_NOTES` verdict at an earlier HEAD
+  had already passed. Roughly half of ~351 k bought nothing. Point review agents
+  at `git diff <last-reviewed-head>..HEAD`, not at the branch base; the reviewed
+  head is in `.git/devdigest/verdict`. This is the same reduction
+  `/pr-self-review`'s group cache performs and the agents simply never got.
+  (2026-08-06)
+
+- **Polling a background agent with `sleep` is pure waste — completion
+  notifications re-invoke you automatically.** ~25 minutes of a 3 h 23 m session
+  went into `sleep` loops waiting for two researchers, plus several `TaskStop`
+  calls to clean up the timers afterwards. Costs little in tokens and a lot in
+  wall clock. End the turn instead; the notification brings you back. The one
+  legitimate use is a *long* fallback for work the harness cannot track.
+  (2026-08-06)
+
 ## Codebase Patterns
 
 - **A review subagent that needs two skills in one pass takes no `Skill` tool —
@@ -81,6 +131,39 @@ here. Here is for what has no package at all.
   mandatory report template, and why each keeps a section that may never be
   dropped (`Not established`, `Open decisions`, `Deviations from the plan`). An
   agent that "just answers" loses everything it did not write down. (2026-08-06)
+
+- **A check whose answer is a grep belongs in `gates.sh`, not in a review
+  agent** — it costs nothing, cannot be reasoned out of its answer, and fails
+  identically on every machine. Reviewing L03 by hand showed four BLOCKER-class
+  rows from `routing.md` §5 that are pure pattern matches and are currently paid
+  for in model tokens on every run: a sibling-module import out of
+  `modules/*` (onion §11); `INJECTION_GUARD` present on each new
+  model path; the `groundFindings → applyScopeFilter → scoreFromFindings`
+  ordering in `reviewer-core/src/review/run.ts`; and the count of
+  `eslint-disable no-restricted-imports` against a recorded baseline. Three are
+  on the closed BLOCKER list, so today a model decides them. The
+  machine-identical property is the real prize, not the ~20 k/run — it is what
+  the un-injected-`ANTHROPIC_API_KEY` bug taught: a check that passes only
+  because *this* machine lacks a key is not a check. (2026-08-06)
+
+- **Do NOT merge `architecture-reviewer` and `plan-verifier` to save tokens —
+  and merging would not save any.** Their independence is the product:
+  `plan-verifier.md` names "substituting review advice for the conformance
+  table" as the failure it exists to prevent, and on L03 their finding sets were
+  disjoint. Nor is there a saving: they run in isolated contexts, so sequential
+  and parallel cost the same tokens and parallel is faster in wall clock (17 min
+  against 28 min summed). Share their *input* — one prepared diff bundle,
+  scoped to the unreviewed delta — and keep two agents. (2026-08-06)
+
+- **Cheap models buy little here, because the mechanical work is already free.**
+  The instinct is to downgrade the review agents; the measurement says
+  `gates.sh` already does the 17 genuinely mechanical checks at zero model cost,
+  and what remains in the agents is judgement. The one defensible split is
+  `plan-verifier`, whose phase 1 is *extraction* (turn a 20 789-token plan into a
+  159-item checklist — haiku-tier) and phase 2 is *verdicts* (not). Guard it by
+  asserting the item count before the verdict phase runs: a silently short
+  enumeration reads exactly like a clean conformance table, which is the failure
+  that agent exists to prevent. (2026-08-06)
 
 - **Agent-to-agent handoff goes through a written artifact, not a message.**
   A plan produced by `planner` is written to `docs/plans/L<NN>-<slug>.md` — the
@@ -157,6 +240,34 @@ _(no entries yet)_
   put to the user and answered *prose deny-list*, matching the three existing
   agents; `docs/plans/L03-agents.md` records that as a decision so the next
   session does not re-derive it.
+
+- **2026-08-06** — Built the L03 Intent Layer end to end through the seven-agent
+  pipeline, and measured the pipeline while using it. Wall clock **3 h 23 m**, of
+  which **2 h 01 m** was subagent compute; **1.21 M subagent tokens**, of which
+  1 111 674 measured and ~101 k estimated for a nested researcher whose cost is
+  reported to its parent, not to the caller.
+
+  | agent | tokens | tool calls | duration |
+  |---|---:|---:|---|
+  | implementer | 381 885 | 232 | 46m26s |
+  | planner | 204 504 | 70 | 17m46s |
+  | plan-verifier | 194 680 | 77 | 16m13s |
+  | architecture-reviewer | 156 289 | 76 | 12m03s |
+  | researcher — external practice | 100 599 | 67 | 17m39s |
+  | researcher — OpenRouter models | 73 717 | 46 | 10m51s |
+  | researcher — nested in planner | ~101 000 | — | 4m52s |
+
+  Split: implementer 34 %, verification 32 %, research 23 %, planning 18 %. The
+  main thread's own usage is not exposed to the model, so this is subagents only.
+  Two researchers in parallel and two reviewers in parallel saved ~24 min of wall
+  clock and nothing in tokens. Real DevDigest spend for the feature's own model
+  calls was ~$0.006 persisted (4 intent derivations + 3 review runs), higher in
+  fact because `pr_intent` upserts and earlier derivations were overwritten.
+
+  The waste, itemised in *What Doesn't Work* above: ~101 k duplicated research
+  and roughly 200 k of badly-scoped reviewer input — about 30 % recoverable with
+  no check removed. Not the checking: four layers each found what the previous
+  could not, and 249 unit tests were green through all of it.
 
 ## Open Questions
 
