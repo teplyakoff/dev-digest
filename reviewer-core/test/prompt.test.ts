@@ -131,3 +131,91 @@ describe('assemblePrompt — ## PR intent (derived) + SCOPE_RULE (L03)', () => {
     expect(SCOPE_RULE).toMatch(/ALWAYS reported/i);
   });
 });
+
+/**
+ * The section manifest — the input to safe prompt logging.
+ *
+ * Two properties are worth pinning, and they are not the arithmetic:
+ *
+ * 1. The manifest cannot claim a slot the prompt does not contain, or omit one
+ *    it does. It is built alongside the sections from the same values, so this
+ *    test guards the construction, not a mapping table.
+ * 2. `trust` is honest. That column is the reason the record exists: an operator
+ *    greps it to answer "which parts of this prompt did a PR author write?".
+ *    A slot labelled `trusted` that carries author text is worse than no record.
+ */
+describe('assemblePrompt — section manifest', () => {
+  const parts = {
+    system: 'AGENT-SYS',
+    task: 'Review pull request #7 "a title" by someone.',
+    prDescription: 'the body',
+    intent: 'summary: add rate limiting',
+    skills: ['SKILL-A'],
+    repoMap: 'MAP',
+    specs: ['SPEC'],
+    callers: 'CALLERS',
+    diff: 'DIFF',
+  };
+
+  it('lists every rendered slot, in prompt order, and nothing else', () => {
+    const { sections, messages } = assemblePrompt(parts);
+    expect(sections.map((s) => s.name)).toEqual([
+      'system',
+      'task',
+      'pr-description',
+      'intent',
+      'skills',
+      'repo-map',
+      'specs',
+      'callers',
+      'diff',
+    ]);
+
+    // Prompt order, verified against the message rather than assumed: each
+    // slot's own text appears after the previous slot's.
+    const user = messages[1]!.content;
+    const positions = sections.slice(1).map((s) => user.indexOf(s.text));
+    expect(positions.every((p) => p > -1)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
+  it('omits a slot that was not rendered', () => {
+    const { sections } = assemblePrompt({ system: 'S', diff: 'D' });
+    expect(sections.map((s) => s.name)).toEqual(['system', 'diff']);
+  });
+
+  it('marks the task framing UNTRUSTED — it interpolates the PR title and author', () => {
+    const { sections } = assemblePrompt(parts);
+    expect(sections.find((s) => s.name === 'task')?.trust).toBe('untrusted');
+  });
+
+  it('marks trusted exactly the slots this workspace wrote', () => {
+    const { sections } = assemblePrompt(parts);
+    const trusted = sections.filter((s) => s.trust === 'trusted').map((s) => s.name);
+    // The agent prompt, the skills it adopted, and curated memory. Nothing that
+    // a PR author, a repo under review or a model produced.
+    expect(trusted).toEqual(['system', 'skills']);
+  });
+
+  it('every untrusted slot reaches the model inside a delimiter — except the task', () => {
+    const { sections, messages } = assemblePrompt(parts);
+    const user = messages[1]!.content;
+    const wrapped = [...user.matchAll(/<untrusted source="([^"]+)">/g)].map((m) => m[1]!);
+
+    expect(wrapped).toEqual([
+      'pr-description',
+      'derived-intent',
+      'repo-map',
+      'spec-0',
+      'callers',
+      'diff',
+    ]);
+
+    // One untrusted slot per wrapped region, and `task` is the single deliberate
+    // exception: it is framing that interpolates the title, rendered unwrapped
+    // since before L03. The manifest says `untrusted` so the exception is
+    // visible in the record rather than only in a comment.
+    const untrusted = sections.filter((s) => s.trust === 'untrusted');
+    expect(untrusted.map((s) => s.name).filter((n) => n !== 'task')).toHaveLength(wrapped.length);
+  });
+});

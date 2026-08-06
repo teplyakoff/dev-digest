@@ -9,6 +9,7 @@ import type {
 import {
   ALLOWED_DOC_EXTENSIONS,
   DENIED_PATH_PATTERN,
+  SAFE_CONTEXT_REF_PATTERN,
   SAFE_REPO_PATH_PATTERN,
   EXTERNAL_URL_PATTERN,
   LINKED_ISSUE_PATTERN,
@@ -119,6 +120,32 @@ export function classifyCandidatePath(relPath: string): 'ok' | 'ext' | 'denied' 
   const lower = relPath.toLowerCase();
   if (!ALLOWED_DOC_EXTENSIONS.some((ext) => lower.endsWith(ext))) return 'ext';
   return 'ok';
+}
+
+/**
+ * A ref as it may appear in `missing_context` — i.e. in the classifier's prompt.
+ *
+ * `missing_context` is PROSE, and `pipeline/prompt.ts` renders it as the model's
+ * own framing. The ref is the one part of that sentence a PR author controls, so
+ * it is the one part that must not be able to carry a delimiter. Paths recovered
+ * from a GitHub URL go through `decodeURIComponent` (`selfRepoPathFromUrl`), so
+ * `%0A`, `%3C` and `%22` arrive as real newlines, angle brackets and quotes:
+ * enough to forge a `</untrusted>` close or a fake SYSTEM line.
+ *
+ * `classifyCandidatePath` already REFUSES such a path. This stops the refusal
+ * itself from carrying the bytes — the failure mode that made the earlier fix
+ * incomplete: the file stopped being read, and the message reporting that fact
+ * became the new courier.
+ *
+ * The bar is `SAFE_CONTEXT_REF_PATTERN`, NOT the read pattern: a dotfile is
+ * refused as a read and still named back to the author, because "we refused to
+ * read your .env" is the message. Only a ref carrying quotes, angle brackets,
+ * newlines or spaces collapses to a placeholder — nothing is lost, since a path
+ * that cannot be read is not worth quoting exactly, and the card keeps the
+ * unredacted `ref`, which is a workspace-scoped read rather than a model prompt.
+ */
+export function safeContextRef(ref: string): string {
+  return SAFE_CONTEXT_REF_PATTERN.test(ref) ? ref : 'a path containing unsafe characters';
 }
 
 /** Distinct candidate document paths named anywhere in the body, in order. */
@@ -315,7 +342,11 @@ export async function collectSources(input: CollectInput): Promise<CollectedSour
         status: 'unavailable',
         note: 'not an allowed document path',
       });
-      missingContext.push(`the file ${relPath} was not read (not an allowed document path)`);
+      // `safeContextRef`, NOT `relPath`: this is the branch a delimiter-breaking
+      // path lands in, and the sentence goes straight into the model's framing.
+      missingContext.push(
+        `the file ${safeContextRef(relPath)} was not read (not an allowed document path)`,
+      );
       continue;
     }
 
@@ -326,7 +357,9 @@ export async function collectSources(input: CollectInput): Promise<CollectedSour
         status: 'unavailable',
         note: 'this repo has not been cloned',
       });
-      missingContext.push(`the file ${relPath} could not be read (the repo has no local clone)`);
+      missingContext.push(
+        `the file ${safeContextRef(relPath)} could not be read (the repo has no local clone)`,
+      );
       continue;
     }
 
@@ -339,7 +372,13 @@ export async function collectSources(input: CollectInput): Promise<CollectedSour
         status: 'unavailable',
         note: 'not found in the repository',
       });
-      missingContext.push(`the file ${relPath} was named but does not exist in the repo`);
+      // Reached only for a path `classifyCandidatePath` already called `ok`, so
+      // it is safe by construction. Guarded anyway, so "no ref in
+      // `missing_context` can carry a delimiter" holds without a reachability
+      // argument — the argument is what was wrong last time.
+      missingContext.push(
+        `the file ${safeContextRef(relPath)} was named but does not exist in the repo`,
+      );
       continue;
     }
     blocks.push({ label: `repo-file:${relPath}`, text: content.slice(0, MAX_REPO_FILE_BYTES) });

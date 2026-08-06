@@ -273,11 +273,15 @@ export class IntentService {
       })),
     ];
     if (missingContext.length > 0) {
+      // UNTRUSTED: every item names something the PR author wrote — a URL, an
+      // issue ref, a path — even though the instruction above the list is ours.
+      // The block is `wrapUntrusted`-wrapped in `buildIntentMessages` for the
+      // same reason, and the two must not disagree about which it is.
       promptSections.push({
         name: 'missing-context',
-        trust: 'trusted',
-        source: `${missingContext.length} unreadable source(s)`,
-        text: missingContext.join('\n'),
+        trust: 'untrusted',
+        source: `${missingContext.length} unreadable source(s), refs from the PR body`,
+        text: missingContext.map((m) => `- ${m}`).join('\n'),
       });
     }
     const verbose = this.container.config.promptLogVerbose;

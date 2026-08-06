@@ -85,6 +85,12 @@ export function buildIntentMessages(input: IntentPromptInput): ChatMessage[] {
   // them. It is also this design's own reasoning rather than borrowed practice:
   // none of the surveyed AI review products documents what it does when a linked
   // ticket is unreachable.
+  //
+  // THE INSTRUCTION IS TRUSTED; THE LIST IS NOT. Each item names something a PR
+  // author wrote — a URL, an issue ref, a path — so the items go inside the
+  // delimiter and only the framing above them stays outside it. This block used
+  // to be pushed whole and unwrapped, which made a refusal message the one place
+  // author-controlled text reached the model's own voice.
   parts.push(
     '',
     input.missingContext.length > 0
@@ -92,7 +98,7 @@ export function buildIntentMessages(input: IntentPromptInput): ChatMessage[] {
           'COULD NOT BE READ — these were named but never fetched. Reason from',
           'their absence; do not reconstruct them and do not list them as',
           'out-of-scope:',
-          ...input.missingContext.map((m) => `- ${m}`),
+          wrapUntrusted('missing-context', input.missingContext.map((m) => `- ${m}`).join('\n')),
         ].join('\n')
       : 'Everything this PR named was fetched successfully.',
   );

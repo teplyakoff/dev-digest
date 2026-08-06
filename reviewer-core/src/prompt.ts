@@ -129,7 +129,15 @@ export interface PromptParts {
   intent?: string;
   /** The unified diff / user task (untrusted content). */
   diff: string;
-  /** Optional task framing line, e.g. "Review PR #482 '…'". */
+  /**
+   * Optional task framing line, e.g. "Review PR #482 '…'".
+   *
+   * Treated as UNTRUSTED in the section manifest: every caller builds it by
+   * interpolating the PR title and author, so it is the one slot of the framing
+   * a PR author can write into. It is still rendered unwrapped, as it always
+   * was — wrapping it would change the main review prompt for every agent, which
+   * is a deliberate decision and not a labelling one.
+   */
   task?: string;
 }
 
@@ -155,7 +163,11 @@ export interface PromptSection {
    * always `wrapUntrusted`-wrapped by the time it reaches the model.
    */
   trust: 'trusted' | 'untrusted';
-  /** Untrusted: the `wrapUntrusted` label. Trusted: where the bytes came from. */
+  /**
+   * Untrusted: the `wrapUntrusted` label — except `specs`, which wraps each
+   * chunk under its own `spec-N` label and so reports a count instead.
+   * Trusted: where the bytes came from.
+   */
   source: string;
   /** The slot's own content, BEFORE delimiter wrapping. Measure it; do not log it. */
   text: string;
@@ -226,7 +238,17 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
   };
 
   if (parts.task) {
-    push(parts.task, { name: 'task', trust: 'trusted', source: 'task framing', text: parts.task });
+    // UNTRUSTED, and the engine cannot know otherwise. Every caller today builds
+    // this line by interpolating the PR title and author (`taskLine` in the
+    // server's `modules/reviews/helpers.ts`), so the slot carries text a PR
+    // author wrote. `trusted` here would put the one attacker-influenced slot of
+    // the framing under the label a reader greps to rule that out.
+    push(parts.task, {
+      name: 'task',
+      trust: 'untrusted',
+      source: 'task framing (interpolates pr title + author)',
+      text: parts.task,
+    });
   }
   if (prDescription) {
     push(`## PR description\n${wrapUntrusted('pr-description', prDescription)}`, {

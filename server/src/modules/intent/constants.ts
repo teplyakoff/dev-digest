@@ -92,6 +92,22 @@ export const DENIED_PATH_PATTERN = /env|secret|credential|token|key|\.pem/i;
  */
 export const SAFE_REPO_PATH_PATTERN = /^[\w-][\w.\-/]*$/;
 
+/**
+ * What a ref may look like to be QUOTED BACK in `missing_context` — a different
+ * question from `SAFE_REPO_PATH_PATTERN`, which decides what may be READ.
+ *
+ * Same character class, no leading-character rule. `.env` and
+ * `.github/workflows/ci.yml` are refused reads and always will be, but naming
+ * them back to the author is the entire point of the missing-context design:
+ * "we refused to read your .env" is the message. Reusing the read pattern here
+ * collapsed every dotfile to a placeholder and made refusal indistinguishable
+ * from silence again — the failure `sources.ts`'s own comment warns about.
+ *
+ * What this rejects is the thing that matters: quotes, angle brackets, newlines
+ * and spaces, i.e. everything needed to forge a delimiter in a prompt.
+ */
+export const SAFE_CONTEXT_REF_PATTERN = /^[\w.\-/]+$/;
+
 /** Changed files shown to the classifier, as paths + hunk HEADERS only. */
 export const MAX_CHANGED_FILES = 60;
 export const MAX_HUNK_HEADERS_PER_FILE = 8;
