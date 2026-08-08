@@ -1,6 +1,6 @@
 # `@devdigest/demo` — screencast recorders
 
-Four recorders, each producing a captioned video plus one PNG per scene:
+Five recorders, each producing a captioned video plus one PNG per scene:
 
 | Script | Records | Cost |
 |---|---|---|
@@ -8,6 +8,7 @@ Four recorders, each producing a captioned video plus one PNG per scene:
 | `npm run record:skills` | the L02 Skills feature: the grid and preview drawer → authoring and versioning → the import preview's ignored-entries list → the agent Skills tab → the run trace's skills block and token count | free |
 | `npm run record:conventions` | the L02 homework: the Conventions Extractor's candidate queue, evidence links and skill merge → the API Contract Reviewer control experiment, with and without skills | **real money** (one extraction) |
 | `npm run record:intent` | the L03 Intent Layer: the empty card → a real review deriving the intent, with both model calls labelled by role in the Live Log → the reuse on a second trigger → `derive_intent` beside `review_file` in the trace → the model registry → stale and re-derive | **real money** (two reviews + two classifier calls) |
+| `npm run record:smart-diff` | the L03 homework Smart Diff: original order → one toggle to grouped-by-role → the summary strip and large-PR banner → Core logic first, the lock-file last and collapsed → a finding's badge, gutter rail and severity tag on its own line → click it and land on that finding's card in Agent runs → Back, still in Smart order | free |
 
 These are **demo recorders, not tests.** They exist to produce shareable evidence
 that the app works against a real stack; `../e2e` is what actually asserts
@@ -25,6 +26,12 @@ in `e2e` stay cheap and CI-safe.
 authors a skill, imports one and re-links an agent, so it needs a stack it is
 allowed to mutate. That is why it lives here and not in `e2e`, whose flows are
 strictly read-only.
+
+`record:smart-diff` is the odd one out: free **and** strictly read-only — it
+reads five endpoints and there is no `POST` anywhere in the file, so no code path
+can start a billed run. It lives here only because its output is a video. What it
+*does* need is a target that already carries findings anchored to rendered lines,
+since it creates none; its preflight refuses to launch the browser otherwise.
 
 ## Setup (once)
 
