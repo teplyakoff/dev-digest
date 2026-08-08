@@ -78,7 +78,24 @@ vi.mock("../PrDetailHeader", () => ({
 }));
 vi.mock("../OverviewTab", () => ({ OverviewTab: () => <div>overview tab</div> }));
 vi.mock("../FindingsTab", () => ({ FindingsTab: () => <div>findings tab</div> }));
-vi.mock("../DiffTab", () => ({ DiffTab: () => <div>diff tab</div> }));
+// The Files tab renders its own toggle and its own finding tags, both covered
+// by its own tests. What PrDetailView owns is what each of those handlers does
+// to the URL and to the back stack, so the stub exposes exactly those two.
+vi.mock("../DiffTab", () => ({
+  DiffTab: ({
+    onSetView,
+    onOpenFinding,
+  }: {
+    onSetView: (v: "smart" | "original") => void;
+    onOpenFinding: (id: string) => void;
+  }) => (
+    <div>
+      diff tab
+      <button onClick={() => onSetView("original")}>toggle to original</button>
+      <button onClick={() => onOpenFinding("fd-7")}>open finding</button>
+    </div>
+  ),
+}));
 vi.mock("../RunTraceDrawer", () => ({
   default: ({ runId }: { runId: string }) => <div>trace drawer {runId}</div>,
 }));
@@ -88,6 +105,7 @@ import { PrDetailView } from "./PrDetailView";
 describe("PrDetailView", () => {
   beforeEach(() => {
     nav.replace.mockClear();
+    nav.push.mockClear();
     state.search = "";
     state.pullsLoading = false;
     state.detailLoading = false;
@@ -122,6 +140,28 @@ describe("PrDetailView", () => {
     state.search = "tab=findings&trace=run-9";
     render(<PrDetailView />);
     expect(screen.getByText(/trace drawer run-9/)).toBeInTheDocument();
+  });
+
+  // The two URL writes on the Files tab are not the same kind of navigation.
+  // The toggle is a view preference on the screen the reviewer is already on;
+  // the finding click leaves for another tab. Replacing on the click overwrites
+  // the entry they came from, so Back skips the Files tab instead of returning
+  // to `?tab=diff&view=smart` — verified in a live browser before this test.
+  it("pushes a history entry for the finding click and replaces for the view toggle", () => {
+    state.search = "tab=diff&view=smart";
+    render(<PrDetailView />);
+
+    fireEvent.click(screen.getByRole("button", { name: /toggle to original/i }));
+    expect(nav.replace).toHaveBeenCalledWith("/repos/r1/pulls/42?tab=diff&view=original");
+    expect(nav.push).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /open finding/i }));
+    // ONE navigation carrying BOTH keys: two one-key calls read `search` from
+    // the same closure and race, landing a URL with `finding` but no `tab`.
+    expect(nav.push).toHaveBeenCalledTimes(1);
+    expect(nav.push).toHaveBeenCalledWith("/repos/r1/pulls/42?tab=findings&view=smart&finding=fd-7");
+    // …and the click did NOT also replace: the `view=smart` entry survives.
+    expect(nav.replace).toHaveBeenCalledTimes(1);
   });
 
   it("shows a skeleton, not a broken page, while the PR is loading", () => {

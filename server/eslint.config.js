@@ -124,6 +124,15 @@ export default tseslint.config(
       'src/modules/*/run-executor.ts',
       'src/modules/*/diff-loader.ts',
       'src/modules/*/pipeline/**/*.ts',
+      // A feature's pure decision logic (`smart-diff/classify.ts`: path → role).
+      // These globs are literal filenames, so a module file named anything else
+      // is covered by NOTHING — which made the one file holding Smart Diff's
+      // entire classification the only file in that module free to import
+      // `db/schema` or a sibling. It is listed HERE and not with helpers.ts
+      // below because that block's own comment reads "SQL is expected here", and
+      // in a pure classifier it is not: this is a §3 ring-0-style calculation
+      // sitting beside its caller, so the strictest module rule set is its floor.
+      'src/modules/*/classify.ts',
     ],
     rules: {
       'no-restricted-imports': ['error', { patterns: [...RING_2_FORBIDDEN, SIBLING_MODULE] }],

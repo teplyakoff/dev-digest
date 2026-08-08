@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity } from './findings.js';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
@@ -99,12 +100,48 @@ export type PrHistory = z.infer<typeof PrHistory>;
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
+/**
+ * A persisted finding, reduced to what a Smart Diff line needs: the `id` a
+ * click-through navigates to, the line it anchors on, and enough to render the
+ * tag. `severity` reuses the `Severity` enum from `findings.ts` rather than
+ * restating its three members — the DB CHECK constraint in migration `0011`
+ * pins the same list, and a second copy here would drift from both.
+ */
+export const SmartDiffFinding = z.object({
+  id: z.string(),
+  line: z.number().int(),
+  severity: Severity,
+  title: z.string(),
+});
+export type SmartDiffFinding = z.infer<typeof SmartDiffFinding>;
+
 export const SmartDiffFile = z.object({
   path: z.string(),
   pseudocode_summary: z.string().nullish(),
   additions: z.number().int(),
   deletions: z.number().int(),
+  /**
+   * DERIVED from `findings`: `findings.map(f => f.line)`, sorted and
+   * de-duplicated. Kept because it is part of the committed contract, but it is
+   * NOT a second source — anything needing a finding's id, severity or title
+   * reads `findings`. Producers must compute one from the other, never both.
+   */
   finding_lines: z.array(z.number().int()),
+  /**
+   * This file's findings, unioned over EVERY stored review of the PR — one
+   * `kind: 'review'` row is one AGENT, not one review pass, so taking only the
+   * newest row reports whichever agent happened to finish last. A re-run agent's
+   * superseded findings therefore stay visible until its older review is
+   * deleted; that cost is chosen, and `smart-diff/service.ts` records why.
+   *
+   * REQUIRED, never optional: an optional field would make
+   * `{ finding_lines: [28, 52], findings: undefined }` a legal payload — the
+   * exact drift `finding_lines` being derived exists to prevent. A PR with no
+   * review yet sends `[]`.
+   */
+  findings: z.array(SmartDiffFinding),
+  /** `additions + deletions > LARGE_FILE_LINES`. Required for the same reason. */
+  is_large: z.boolean(),
 });
 export type SmartDiffFile = z.infer<typeof SmartDiffFile>;
 

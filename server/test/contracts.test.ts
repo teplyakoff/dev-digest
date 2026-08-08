@@ -110,16 +110,36 @@ describe('AI contracts parse fixtures', () => {
   });
 
   it('SmartDiff (data.jsx DIFF)', () => {
-    const d = SmartDiff.parse({
-      groups: [
-        {
-          role: 'core',
-          files: [{ path: 'a.ts', additions: 84, deletions: 0, finding_lines: [28, 52] }],
-        },
+    const file = {
+      path: 'a.ts',
+      additions: 84,
+      deletions: 0,
+      // `finding_lines` is derived: findings.map(f => f.line).
+      finding_lines: [28, 52],
+      findings: [
+        { id: 'f1', line: 28, severity: 'CRITICAL', title: 'Hardcoded Stripe secret key' },
+        { id: 'f2', line: 52, severity: 'WARNING', title: 'Unbounded query on the hot path' },
       ],
+      is_large: false,
+    };
+    const d = SmartDiff.parse({
+      groups: [{ role: 'core', files: [file] }],
       split_suggestion: { too_big: false, total_lines: 285, proposed_splits: [] },
     });
     expect(d.groups[0]!.role).toBe('core');
+    expect(d.groups[0]!.files[0]!.findings.map((f) => f.line)).toEqual(
+      d.groups[0]!.files[0]!.finding_lines,
+    );
+    // `findings` and `is_large` are REQUIRED. Making either optional would admit
+    // a payload carrying only the derived `finding_lines`, which is the drift
+    // the single-source join exists to prevent — pin it here, where it is cheap.
+    const { findings: _f, is_large: _l, ...legacy } = file;
+    expect(() =>
+      SmartDiff.parse({
+        groups: [{ role: 'core', files: [legacy] }],
+        split_suggestion: { too_big: false, total_lines: 285, proposed_splits: [] },
+      }),
+    ).toThrow();
   });
 
   it('Conformance / Onboarding / EvalRun / MemoryItem', () => {

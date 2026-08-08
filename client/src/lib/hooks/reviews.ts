@@ -14,6 +14,7 @@ import type {
   ReviewRunResponse,
   RunEvent,
   RunSummary,
+  SmartDiff,
 } from "@devdigest/shared";
 
 /**
@@ -36,6 +37,7 @@ const keys = {
   reviews: (prId: PrId) => ["reviews", prId] as const,
   comments: (prId: PrId) => ["pr-comments", prId] as const,
   intent: (prId: PrId) => ["pr-intent", prId] as const,
+  smartDiff: (prId: PrId) => ["pr-smart-diff", prId] as const,
 };
 
 /**
@@ -78,6 +80,8 @@ export function useInvalidatePrRuns(prId: PrId) {
       history: () => invalidateRunHistory(qc, prId),
       /** A run settled, so it may have derived or re-derived the intent. */
       intent: () => invalidatePrIntent(qc, prId),
+      /** A run settled, so the Smart Diff's findings/badges are now stale. */
+      smartDiff: () => invalidateSmartDiff(qc, prId),
     }),
     [qc, prId],
   );
@@ -161,6 +165,39 @@ export function useDeriveIntent(prId: PrId) {
  */
 export function invalidatePrIntent(qc: QueryClient, prId: PrId): void {
   if (prId) qc.invalidateQueries({ queryKey: keys.intent(prId) });
+}
+
+// ---- Smart Diff (L03) ----
+/**
+ * The PR's files grouped by role (core / wiring / boilerplate), with each file's
+ * findings joined on. Computed on read from data the server already has — no
+ * model call — so it is safe to fetch as soon as the Files tab mounts.
+ *
+ * No schema is passed to `api.get`: no call site in this codebase validates at
+ * runtime, deliberately. Importing a Zod schema here would drag the whole
+ * `@devdigest/shared` barrel plus `zod` into the shared chunk (~15 kB First Load
+ * JS on every route, measured — `client/INSIGHTS.md` 2026-08-03), which is why
+ * `SmartDiff` above is a TYPE-only import.
+ */
+export function useSmartDiff(prId: PrId) {
+  return useQuery({
+    queryKey: keys.smartDiff(prId),
+    queryFn: () => api.get<SmartDiff>(`/pulls/${prId}/smart-diff`),
+    enabled: !!prId,
+  });
+}
+
+/**
+ * "A review run finished, so this PR's findings changed" — Smart Diff joins
+ * EVERY stored review's findings onto the file list (one review row is one
+ * agent), so a settled run invalidates it even though nothing about the files
+ * themselves moved. Without this the badges
+ * and line rails keep showing the pre-run state until a manual reload: a stale
+ * number that looks right, which a demo surfaces and a test does not
+ * (`client/INSIGHTS.md` 2026-08-05).
+ */
+export function invalidateSmartDiff(qc: QueryClient, prId: PrId): void {
+  if (prId) qc.invalidateQueries({ queryKey: keys.smartDiff(prId) });
 }
 
 /** Delete one run from the PR's run history (+ its trace). */

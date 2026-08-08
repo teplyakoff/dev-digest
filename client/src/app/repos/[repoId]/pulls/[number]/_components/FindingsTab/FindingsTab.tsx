@@ -26,6 +26,10 @@ interface FindingsTabProps {
   /** owner/repo + head sha — used to deep-link a finding's file:line to GitHub. */
   repoFullName?: string | null;
   headSha?: string | null;
+  /** `?finding=<id>` — the finding a Smart Diff click asked us to open. */
+  focusFindingId?: string | null;
+  /** The run that owns it, resolved upstream from the reviews already fetched. */
+  focusRunId?: string | null;
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
@@ -42,6 +46,8 @@ export function FindingsTab({
   cancelMutation,
   repoFullName,
   headSha,
+  focusFindingId,
+  focusRunId,
   onOpenTrace,
   onDelete,
   onRunDone,
@@ -85,6 +91,15 @@ export function FindingsTab({
   const handleGoToReview = useCallback((runId: string) => {
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
+
+  // An incoming `?finding=<id>` drives the SAME mechanism the Timeline drives:
+  // open + scroll the owning run's accordion. Synchronising this component with
+  // an external system (the URL) is what an Effect is for; the scroll and the
+  // un-filtering below it are not derivable from props.
+  React.useEffect(() => {
+    if (!focusFindingId || !focusRunId) return;
+    setTarget((p) => ({ runId: focusRunId, n: (p?.n ?? 0) + 1 }));
+  }, [focusFindingId, focusRunId]);
 
   // Reviews carry no cost/token usage — that lives on the agent_runs row. Index
   // the runs we already fetched so each accordion can show what its run cost.
@@ -212,6 +227,7 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            focusFindingId={focusFindingId}
             run={review.run_id ? runById.get(review.run_id) : undefined}
           />
         ))
