@@ -107,6 +107,43 @@ would be obvious to anyone reading the code, don't write it.
   because the wait *succeeded*. Wrap it: wait, scroll, settle, shoot.
   (2026-08-06)
 
+- **Extends the two entries above with a third way a still lies: `box.y >= 0` is
+  not "visible".** `record-smart-diff.ts` had an `onScreen()` gate that checked
+  the bounding box was inside the viewport and above the caption band, and it
+  shipped a frame captioned "the badge, the rail and `blocker` on line 74"
+  containing none of the three. The PR page keeps its breadcrumb, title and tab
+  bar in a **sticky region ~350 px tall**, so an element scrolled underneath
+  reports a positive `y`, passes any arithmetic check, and is completely hidden.
+  Two consequences: ask the DOM instead of the geometry —
+  `document.elementFromPoint(centre)` and require the hit to be the element or
+  inside it, which also catches the caption band and any overlay added later; and
+  **never `scrollIntoView({block: "start"})` on this app**, because "start" parks
+  the element exactly where the sticky header is. `"center"` clears both.
+  (2026-08-08)
+
+- **A recorder for feature X must film X, not the machinery that produces X's
+  inputs.** The first `record-smart-diff.ts` triggered a review and spent ~10 of
+  its 11 minutes filming five agents run — which is L01's feature. Smart Diff is
+  the grouping, the risk order and the click-through, and every one of those is
+  already true of a PR reviewed at any point in the past. Retargeting to a PR
+  that ALREADY carries findings made the take **86 seconds and free**, and it is
+  strictly better evidence: the first take filmed a PR with no findings, so the
+  feature's headline interaction — click a finding on a diff line, land on its
+  card — was never on screen at all. Before writing a scene list, ask which
+  scenes are the feature and which are its preconditions; the preconditions can
+  usually be found rather than created. (2026-08-08)
+
+- **A wrong rationale in a comment outlives the bug it explains.** After the
+  sticky-header fix above, the mis-framed still was misdiagnosed a second time —
+  as the badge and the tag being further apart than the viewport is tall — and
+  scene 8 was split into two frames with that reason written into the code. It
+  was false: the hunk starts at line 71, directly under the file header, and once
+  the occlusion was fixed one frame carried both. Nothing would have caught it,
+  because the split *worked*. When a fix follows a diagnosis, re-check the
+  diagnosis against the fixed behaviour before the reasoning goes into a comment
+  — a reader can verify code against the app, but a stated cause is taken on
+  trust. (2026-08-08)
+
 ## Codebase Patterns
 
 - This package is deliberately **not** part of `../e2e`. `e2e` is deterministic,
@@ -220,7 +257,17 @@ would be obvious to anyone reading the code, don't write it.
 
 ## Recurring Errors & Fixes
 
-_(no entries yet)_
+- `OpenRouter returned no choices for Review: Input too long: N input tokens,
+  limit is 1048576 for this model` on every agent of a run → the target PR's diff
+  is past the model's context, and **`pr_files` will not warn you**. `loadDiff`
+  reads a fresh `git diff` from the CLONE, while `pr_files.patch` is GitHub's
+  copy, and GitHub truncates the patch of a large file. `dev-digest#3` stores
+  477 KB of patch — ordinary next to #5's 463 KB — and produces a 3.6 MB diff
+  ≈ 937k tokens. Check the real thing before choosing a recording target:
+  `git -C server/clones/<repo> diff --no-color <base>...<head> | wc -c`. Costs
+  nothing to be wrong here — the request is rejected before processing, so
+  `tokens_in`, `tokens_out` and `cost_usd` all come back zero or null — but it
+  costs the whole take. (2026-08-08)
 
 ## Session Notes
 
@@ -262,6 +309,18 @@ _(no entries yet)_
   tokens, **$0.002714** against the ~$0.0003 the plan budgeted — which is a real
   demonstration of why `attempts` is logged, and is written up in
   `docs/results/l03/README.md` rather than hidden.
+
+- **2026-08-08** — L03 homework, the Smart Diff take. Three attempts, and only
+  the third is worth keeping. Take 1 targeted `dev-digest#3` for its lock-file,
+  triggered a review, and lost all five agents to `Input too long` — $0.00, but
+  eleven minutes and no findings to film. Take 2 dropped the review entirely and
+  retargeted to `#1`, which carries a lock-file *and* two findings already
+  anchored to lines: 86 seconds, free, and it films the click-through the first
+  take could not. Take 3 existed only because take 2's most important still was
+  blank — see the sticky-header entry under *What Doesn't Work*. The lesson that
+  generalises past this package: the user caught the scope error, not the tests
+  and not the recorder's own assertions, because every assertion passed. A
+  recorder can only check the claims it was told to make.
 
 ## Open Questions
 

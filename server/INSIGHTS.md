@@ -430,6 +430,21 @@ would be obvious to anyone reading the code, don't write it.
   instead of letting a stale shape flow into the test. Fix the fixture (or the
   `structuredBySchema` entry for that `schemaName`), not the mock. (2026-08-03)
 
+- `OpenRouter returned no choices for Review: Input too long: N input tokens,
+  limit is 1048576 for this model`, on every agent of a run → the PR's diff is
+  past the model's context window, and **the size you can see in the database is
+  not the size that gets sent.** `loadDiff` calls `container.git.diff(...)`
+  against the CLONE, whereas `pr_files.patch` is GitHub's copy — and GitHub
+  truncates the patch of a large file while `git` does not. `dev-digest#3` stores
+  477 KB of patch, next to #5's 463 KB, and produces a **3.6 MB** diff ≈ 937k
+  tokens; #5's fits and reviews at 142k. So an estimate built from
+  `sum(length(pr_files.patch))` is wrong by an order of magnitude, and the
+  failure lands on all N agents at once, minutes apart, with no partial result.
+  Measure `git -C server/clones/<repo> diff --no-color <base>...<head> | wc -c`
+  instead. Nothing is billed — the request is rejected before processing, so
+  `tokens_in`, `tokens_out` and `cost_usd` come back zero or null — but a lock-file
+  in the diff is enough to push a PR over on its own. (2026-08-08)
+
 ## Session Notes
 
 - **2026-08-03** — Architecture pass driven by the `onion-architecture` skill.
