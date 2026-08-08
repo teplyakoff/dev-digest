@@ -1,134 +1,131 @@
 {
-  "recorded_at": "2026-08-08T11:34:43.359Z",
+  "recorded_at": "2026-08-08T13:30:13.688Z",
   "repo": "teplyakoff/dev-digest",
-  "pr": 3,
-  "pr_id": "9c5a3904-3e27-499d-ab52-e3281aab7bc3",
-  "pr_title": "feat(l02): Skills, the Conventions Extractor, and the API Contract Reviewer experiment",
+  "pr": 1,
+  "pr_id": "d4cdfac0-5733-45e1-9822-e44d27976a10",
+  "pr_title": "Homework l01",
   "pr_status": "merged",
+  "review_triggered": false,
   "files": {
-    "count": 291,
-    "with_patch": 100
+    "count": 92,
+    "with_patch": 83
   },
-  "smart_diff_before": {
+  "smart_diff": {
     "groups": [
       {
         "role": "core",
-        "files": 65
+        "files": 44
       },
       {
         "role": "wiring",
-        "files": 34
+        "files": 36
       },
       {
         "role": "boilerplate",
-        "files": 1
+        "files": 12
       }
     ],
-    "findings": 0,
-    "changed_lines": 10518,
+    "findings": 2,
+    "changed_lines": 7885,
     "too_big": true,
     "lock_file": {
-      "path": "client/pnpm-lock.yaml",
-      "additions": 827,
-      "deletions": 2
+      "path": "demo/package-lock.json",
+      "additions": 614,
+      "deletions": 0
     },
     "large_file": {
-      "path": "client/eslint-suppressions.json",
+      "path": "demo/record.ts",
       "role": "core",
-      "additions": 312,
+      "additions": 405,
       "deletions": 0
     }
   },
-  "smart_diff_after": {
-    "groups": [
-      {
-        "role": "core",
-        "files": 65
-      },
-      {
-        "role": "wiring",
-        "files": 34
-      },
-      {
-        "role": "boilerplate",
-        "files": 1
-      }
-    ],
-    "findings": 0
+  "anchored_findings": [
+    {
+      "path": "client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx",
+      "role": "core",
+      "line": 74,
+      "severity": "CRITICAL",
+      "id": "943b3d94-f642-4776-9031-a5a57eb58c90"
+    },
+    {
+      "path": "server/src/modules/pulls/routes.ts",
+      "role": "wiring",
+      "line": 144,
+      "severity": "WARNING",
+      "id": "85637bcf-a99d-448f-bdb9-dc72f881bab0"
+    }
+  ],
+  "hero_finding": {
+    "id": "943b3d94-f642-4776-9031-a5a57eb58c90",
+    "path": "client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx",
+    "role": "core",
+    "line": 74,
+    "severity": "CRITICAL",
+    "tag": "blocker",
+    "badge": "1 finding",
+    "title": "runById map uses wrong key (run_id instead of id)"
   },
-  "no_reload_proof": {
-    "marker_survived": true,
-    "marker_still_alive_after_scene_11": true,
-    "smart_diff_refetched_on_tab_click": true,
-    "caveat": "No reload occurred (marker intact). Whether S6's invalidator or the 30s staleTime triggered the refetch is not distinguished by this take."
+  "finding_clicked": {
+    "id": "943b3d94-f642-4776-9031-a5a57eb58c90",
+    "url": "http://localhost:3000/repos/574318a8-1866-4391-9829-0504a84e85e1/pulls/1?tab=findings&view=smart&finding=943b3d94-f642-4776-9031-a5a57eb58c90",
+    "run_id": "33cf84f0-9800-4235-89f3-549a06da64c1",
+    "agent": "General Reviewer"
   },
-  "finding_clicked": null,
-  "original_mode_finding_tags_after_review": 0,
+  "original_mode_finding_tags": 0,
   "scenes": [
     {
       "n": 1,
       "name": "Files changed in original order",
-      "filmed": true,
-      "note": "Filmed BEFORE any review, so this frame alone does not prove findings are hidden in original mode — scene 11 is the frame that does."
+      "note": "asserted: 0 finding tags on screen while 2 exist"
     },
     {
       "n": 2,
-      "name": "Toggle to Smart order, section label flips",
-      "filmed": true
+      "name": "Toggle to Smart order, section label flips"
     },
     {
       "n": 3,
-      "name": "Summary strip + large-PR banner",
-      "filmed": true
+      "name": "Summary strip: files, +/−, findings, changed lines",
+      "note": "strip reads \"2 findings\""
     },
     {
       "n": 4,
-      "name": "Core logic group on top, swatch + description",
-      "filmed": true
+      "name": "Large-PR banner",
+      "note": "7885 changed lines"
     },
     {
       "n": 5,
-      "name": "Lock-file inside a collapsed Boilerplate group",
-      "filmed": true,
-      "note": "asserted: card has exactly one child, so no body"
+      "name": "Core logic group on top, swatch + description"
     },
     {
       "n": 6,
-      "name": "A large file's `large file` chip",
-      "filmed": true
+      "name": "Lock-file inside a collapsed Boilerplate group",
+      "note": "asserted: card has exactly one child, so no body"
     },
     {
       "n": 7,
-      "name": "Run Review → every enabled agent",
-      "filmed": true,
-      "note": "5 run(s)"
+      "name": "A large file's `large file` chip"
     },
     {
       "n": 8,
-      "name": "Badges/rails appear with no reload",
-      "filmed": false,
-      "note": "no line-anchored finding; only file badges are visible"
+      "name": "The file header's findings badge",
+      "note": "core · client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx · badge \"1 finding\""
     },
     {
       "n": 9,
-      "name": "Finding click-through to its card",
-      "filmed": false,
-      "note": "no line-anchored finding to click"
+      "name": "Severity rail and tag on the finding's own line",
+      "note": "client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx:74 · blocker · rail asserted"
     },
     {
       "n": 10,
-      "name": "Back returns to ?tab=diff&view=smart",
-      "filmed": false,
-      "note": "scene 9 did not run"
+      "name": "Finding click-through to its card",
+      "note": "owned by General Reviewer (run 33cf84f0)"
     },
     {
       "n": 11,
-      "name": "Original order after the review still shows no findings",
-      "filmed": true,
-      "note": "ADDED beyond the plan's list, and free: scene 1 is filmed before any review exists, so on its own it cannot carry this criterion"
+      "name": "Back returns to ?tab=diff&view=smart"
     }
   ],
-  "failures": [],
   "not_filmable": [
     {
       "plan_scene": "the API log pane showing the `SMART DIFF:` line with no model line beside it",
@@ -141,74 +138,8 @@
       "capture_instead": "Text evidence: `bash scripts/verify-l03.sh` output, pasted verbatim."
     }
   ],
-  "agents": [
-    {
-      "name": "General Reviewer",
-      "model": "deepseek/deepseek-v4-flash"
-    },
-    {
-      "name": "Security Reviewer",
-      "model": "deepseek/deepseek-v4-flash"
-    },
-    {
-      "name": "Performance Reviewer",
-      "model": "deepseek/deepseek-v4-flash"
-    },
-    {
-      "name": "Test Quality Reviewer",
-      "model": "deepseek/deepseek-v4-flash"
-    },
-    {
-      "name": "API Contract Reviewer",
-      "model": "deepseek/deepseek-v4-flash"
-    }
-  ],
-  "runs": [
-    {
-      "run_id": "4cee8dab-87b8-4296-bf79-922b2bebd5a0",
-      "agent": "API Contract Reviewer",
-      "status": "failed",
-      "model": "deepseek/deepseek-v4-flash",
-      "cost_usd": null,
-      "findings": 0,
-      "score": null
-    },
-    {
-      "run_id": "9757745d-fe60-4905-8907-23cc7d35dd90",
-      "agent": "Test Quality Reviewer",
-      "status": "failed",
-      "model": "deepseek/deepseek-v4-flash",
-      "cost_usd": null,
-      "findings": 0,
-      "score": null
-    },
-    {
-      "run_id": "11ff70ae-ebd9-426d-8143-4f039d604960",
-      "agent": "Performance Reviewer",
-      "status": "failed",
-      "model": "deepseek/deepseek-v4-flash",
-      "cost_usd": null,
-      "findings": 0,
-      "score": null
-    },
-    {
-      "run_id": "7b5e8019-8cb4-41e3-b1ad-1b33667e7d92",
-      "agent": "Security Reviewer",
-      "status": "failed",
-      "model": "deepseek/deepseek-v4-flash",
-      "cost_usd": null,
-      "findings": 0,
-      "score": null
-    },
-    {
-      "run_id": "6eab48f3-1ef2-4fb3-be49-2d863d1f7aa4",
-      "agent": "General Reviewer",
-      "status": "failed",
-      "model": "deepseek/deepseek-v4-flash",
-      "cost_usd": null,
-      "findings": 0,
-      "score": null
-    }
-  ],
-  "total_cost_usd": null
+  "out_of_scope": {
+    "scene": "badges and rails APPEARING after a review, with no reload",
+    "why": "Running a review is not the Smart Diff feature — it is L01's. Filming it here cost the first take ~10 of its 11 minutes and real money, and taught a viewer nothing about grouping, risk order or the click-through. This recorder therefore triggers no review at all and films a PR whose findings already exist. The no-reload invalidation is S6's claim; it belongs to a test, not to this camera."
+  }
 }

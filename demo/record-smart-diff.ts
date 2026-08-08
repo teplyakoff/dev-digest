@@ -1,76 +1,75 @@
 /**
  * DevDigest screencast recorder — L03 homework: the Smart Diff.
  *
- * Ten scenes, one per acceptance criterion, in one unedited take:
+ * Eleven scenes, in one unedited take:
  *
- *   1.  Files changed in ORIGINAL order — the ordering the API returns, with no
- *       finding visible on any line (structural: `DiffViewer` has no way to
- *       receive findings at all).
+ *   1.  Files changed in ORIGINAL order — findings EXIST on this PR and not one
+ *       of them is on screen (structural: `DiffViewer` has no way to receive
+ *       findings at all). Asserted, not eyeballed: zero `Open finding:` buttons.
  *   2.  Toggle to SMART order — the section label flips to
  *       "Smart Diff · grouped by role".
- *   3.  The summary strip (files, +/−, findings, changed lines) and the
- *       large-PR banner.
- *   4.  Core logic on top, with its role swatch and description.
- *   5.  The lock-file inside a COLLAPSED Boilerplate group — present, body not
+ *   3.  The summary strip: file count, +/−, findings, changed lines.
+ *   4.  The large-PR banner.
+ *   5.  Core logic on top, with its role swatch and description.
+ *   6.  The lock-file inside a COLLAPSED Boilerplate group — present, body not
  *       rendered.
- *   6.  A large file's `large file` chip.
- *   7.  Run Review → every enabled agent, sequentially. THIS IS THE MONEY.
- *   8.  Badges and line rails appear with NO RELOAD — the whole point of S6's
- *       invalidator. Proved, not asserted by eye: a marker is written into
- *       `window` before the run and read back after the badges are on screen,
- *       so a reload anywhere in between would have wiped it.
- *   9.  Click a finding's severity tag → `?tab=findings&finding=<id>`, the Agent
- *       runs tab, the owning accordion open, that finding's card expanded and
- *       highlighted.
- *   10. Browser Back → `?tab=diff&view=smart`, still in Smart mode.
- *   11. (free, added) Original order again — now that findings EXIST, the
- *       absence of every badge, rail and tag is evidence rather than a tautology.
- *       Scene 1 is filmed before any review, so on its own it proves nothing.
+ *   7.  A large file's `large file` chip.
+ *   8.  A CORE file's header showing its `N finding(s)` badge — the file carries
+ *       findings, before anyone opens anything.
+ *   9.  The severity rail in the gutter and the severity tag ON the finding's own
+ *       line. Together with 8 this is what the whole feature is for.
+ *   10. Click that tag → `?tab=findings&…&finding=<id>`: the Agent runs tab, the
+ *       owning accordion open, that finding's card expanded.
+ *   11. Browser Back → `?tab=diff&view=smart`, still in Smart order.
  *
- * TWO SCENES OF THE PLAN'S LIST ARE NOT FILMABLE HERE, and are not faked:
+ * 8 AND 9 ARE TWO FRAMES BY CHOICE, NOT BY NECESSITY. An earlier cut demanded
+ * both in one still and shipped a frame containing neither — but the cause was
+ * occlusion, not distance: `onScreen()` checked only `y >= 0`, so an element
+ * parked under the page's ~350 px sticky header passed while being invisible.
+ * With that fixed, scene 8 does in fact carry the badge and the line tag
+ * together (and the summary strip, the banner and the group header besides).
+ * The split survives because the two stills answer different questions — "this
+ * FILE carries findings" in wide context, "this LINE is one" up close — not
+ * because one frame was impossible. Do not re-derive the old reason from the
+ * shape of the code.
  *
- *   - "the API log pane showing the `SMART DIFF:` line with no model line beside
- *     it" — that line goes to the API process's stdout
- *     (`server/src/modules/smart-diff/service.ts:255`), not to any pane in the
- *     web UI. A browser recorder cannot see it.
- *   - "the terminal running `verify:l03` with both lanes green" — a browser
- *     recorder cannot film a terminal.
+ * THIS RECORDER TRIGGERS NO REVIEW, AND SPENDS NOTHING. That is deliberate, and
+ * it is the correction the first take needed: it spent ~10 of its 11 minutes
+ * filming agents run, which is the L01 feature, not this one. Smart Diff is the
+ * grouping, the risk order and the click-through — all of which are already true
+ * of a PR that has been reviewed at some point in the past. So the target must
+ * be a PR that ALREADY carries findings, and the preflight below insists on it.
  *
- * Both are said out loud in this script's own output and recorded in
- * `summary.json` under `not_filmable`, and both are captured separately as text
- * evidence. `demo/INSIGHTS.md` (2026-08-06) is emphatic that a state the
- * recorder cannot manufacture gets named rather than staged.
- *
- * COSTS REAL MONEY. One `POST /pulls/:id/review` with `all: true`, so every
- * enabled agent runs sequentially over a 100-file diff. Budget accordingly and
- * run it ONCE — a take abandoned on timeout still pays for the runs it started
- * (`demo/INSIGHTS.md`, 2026-07-28).
- *
- * DO NOT run any package's test suite while this is in flight. `buildApp` awaits
- * the orphan-run reaper on every construction and `server/test/routes-smoke.test.ts`
- * builds against the ambient `DATABASE_URL`, so `vitest run` in another terminal
- * marks the live `running` rows `failed` — it has already cost one billed run.
+ * TWO SCENES OF THE PLAN'S LIST ARE NOT FILMABLE HERE, and are not faked — see
+ * `NOT_FILMABLE`. A third thing the earlier take filmed, "badges appearing after
+ * a review", is not attempted at all; `OUT_OF_SCOPE` says why in the same place.
  *
  * Prereqs: the dev stack is up (`../scripts/dev.sh`), `npm run setup` has
  * fetched Chromium, and DEMO_PR points at a GENUINELY IMPORTED PR whose files
- * carry real `patch` text. A seeded PR has `patch: null`, so no diff body
+ * carry real `patch` text AND which already has at least one finding anchored to
+ * a line that patch renders. A seeded PR has `patch: null`, so no diff body
  * renders, no finding can anchor to a line, and the per-line rail — half of what
- * this feature is — has nothing to draw on. The preflight below refuses to
- * launch the browser (and so refuses to spend anything) when that is the case.
+ * this feature is — has nothing to draw on. The preflight refuses to launch the
+ * browser when any of that is missing.
  *
- * WHY #3 AND NOT #4/#5, which the earlier L03 recorders used: 100 changed files
- * all carrying a real patch; a `client/pnpm-lock.yaml` (+827 −2) for the
- * lock-file criterion; 10 518 changed lines so the large-PR banner fires; and no
- * findings yet, which is what makes scene 8 real rather than staged.
+ * WHY #1: 92 changed files with all three groups populated (core 44, wiring 36,
+ * boilerplate 12); `demo/package-lock.json` in Boilerplate for the lock-file
+ * criterion; 7 885 changed lines so the large-PR banner fires; and 2 findings
+ * already anchored to rendered lines — one on a core file, one on a wiring file
+ * — which is what makes scenes 8-10 real rather than staged.
+ *
+ * A broken claim THROWS. Nothing here costs money, so a take is free to redo and
+ * a loud failure is strictly better than a video with a caption that lies. (The
+ * earlier version recorded post-money failures instead of throwing; with the
+ * review gone, that trade no longer has anything to buy.)
  *
  * Env (all optional):
- *   DEMO_BASE_URL     web origin       default http://localhost:3000
- *   DEMO_API_URL      API origin       default http://localhost:3001
- *   DEMO_OUT          output dir       default ./recordings/l03-smart-diff
- *   DEMO_REPO         repo full_name   default teplyakoff/dev-digest
- *   DEMO_PR           PR number        default 3
- *   DEMO_HEADED       "1" to watch     default headless
- *   DEMO_RUN_TIMEOUT  ms for ALL runs  default 2400000 (40 min)
+ *   DEMO_BASE_URL  web origin       default http://localhost:3000
+ *   DEMO_API_URL   API origin       default http://localhost:3001
+ *   DEMO_OUT       output dir       default ./recordings/l03-smart-diff
+ *   DEMO_REPO      repo full_name   default teplyakoff/dev-digest
+ *   DEMO_PR        PR number        default 1
+ *   DEMO_HEADED    "1" to watch     default headless
  *
  * Usage:
  *   npm run record:smart-diff
@@ -87,34 +86,32 @@ const BASE = process.env.DEMO_BASE_URL ?? "http://localhost:3000";
 const API = process.env.DEMO_API_URL ?? "http://localhost:3001";
 const OUT = process.env.DEMO_OUT ?? join(HERE, "recordings", "l03-smart-diff");
 const REPO_NAME = process.env.DEMO_REPO ?? "teplyakoff/dev-digest";
-const PR_NUMBER = Number(process.env.DEMO_PR ?? 3);
+const PR_NUMBER = Number(process.env.DEMO_PR ?? 1);
 const HEADED = process.env.DEMO_HEADED === "1";
-/**
- * The ceiling for EVERY agent, not one.
- *
- * `all: true` runs the enabled agents SEQUENTIALLY, and observed per-run times
- * on a PR this size are 30-290 s with one measured outlier at 945 s
- * (`demo/INSIGHTS.md`, 2026-07-28). Five agents plus one outlier does not fit in
- * the 900 s the single-agent recorders use. Since a take abandoned on timeout
- * still bills for the runs it started, a too-generous ceiling costs nothing and
- * a too-tight one costs the whole take.
- */
-const RUN_TIMEOUT = Number(process.env.DEMO_RUN_TIMEOUT ?? 2_400_000);
 
 const VIEWPORT = { width: 1280, height: 720 };
 const CAPTION_ID = "__devdigest_caption";
-/** Written into `window` before the run, read back after scene 8. A reload — or
-    any full navigation — drops it, which is exactly the claim under test. */
-const RELOAD_MARKER = "__devdigest_smart_diff_marker";
+/** How much of the viewport bottom the caption bar covers. Anything below this
+    line is *in the DOM* but behind the caption, which is not "on screen". */
+const CAPTION_BAND = 64;
 
 /** Lock-files, by the same rule the classifier uses (`smart-diff/constants.ts`). */
 const LOCK_FILE = /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|bun\.lockb)$|\.lock$/;
+
+/** Hunk header, copied from `client/src/components/diff-viewer/constants.ts`. */
+const HUNK_HEADER_RE = /@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+
+/** Roles whose files start COLLAPSED — mirrors `SmartDiffViewer/constants.ts:21`.
+    A finding inside one of these renders no line tag until someone opens the
+    card, so it cannot carry scene 8. */
+const COLLAPSED_ROLES = new Set(["boilerplate"]);
+
+const ROLE_ORDER = ["core", "wiring", "boilerplate"] as const;
 
 interface Repo { id: string; full_name: string }
 interface Pull { id: string; number: number; title: string }
 interface PrFile { path: string; additions: number | null; deletions: number | null; patch: string | null }
 interface PrDetail { number: number; title: string; status: string; files_count: number; files: PrFile[] }
-interface Agent { id: string; name: string; model: string; enabled: boolean }
 interface SmartDiffFinding { id: string; line: number; severity: string; title: string }
 interface SmartDiffFile {
   path: string;
@@ -129,18 +126,18 @@ interface SmartDiff {
   groups: SmartDiffGroup[];
   split_suggestion: { too_big: boolean; total_lines: number; proposed_splits: unknown[] };
 }
-interface RunSummary {
-  run_id: string;
-  agent_name: string | null;
-  status: string | null;
-  model: string | null;
-  cost_usd: number | null;
-  findings_count: number | null;
-  score: number | null;
-}
 interface ReviewRecord { run_id: string | null; agent_name: string | null; findings: { id: string }[] }
 
-const TERMINAL = new Set(["done", "failed", "cancelled"]);
+/** A finding that is provably filmable: it lands on a line its file's patch
+    renders, in a group that is open by default. */
+interface AnchoredFinding {
+  path: string;
+  role: SmartDiffGroup["role"];
+  finding: SmartDiffFinding;
+  /** How many findings the file has — the number its header badge must show. */
+  fileFindings: number;
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let shotNo = 0;
 
@@ -189,12 +186,28 @@ const NOT_FILMABLE = [
   },
 ];
 
+/**
+ * Not "cannot", but "will not" — and the difference matters enough to say it in
+ * the same breath as the two above, so nobody reads its absence as an oversight.
+ */
+const OUT_OF_SCOPE = {
+  scene: "badges and rails APPEARING after a review, with no reload",
+  why:
+    "Running a review is not the Smart Diff feature — it is L01's. Filming it here cost the " +
+    "first take ~10 of its 11 minutes and real money, and taught a viewer nothing about " +
+    "grouping, risk order or the click-through. This recorder therefore triggers no review at " +
+    "all and films a PR whose findings already exist. The no-reload invalidation is S6's claim; " +
+    "it belongs to a test, not to this camera.",
+};
+
 function announceNotFilmable() {
   for (const item of NOT_FILMABLE) {
     note(`NOT FILMED — ${item.plan_scene}`);
     console.log(`    why: ${item.why}`);
     console.log(`    instead: ${item.capture_instead}`);
   }
+  note(`OUT OF SCOPE — ${OUT_OF_SCOPE.scene}`);
+  console.log(`    why: ${OUT_OF_SCOPE.why}`);
 }
 
 async function caption(page: Page, step: number | string, text: string) {
@@ -272,11 +285,40 @@ async function frame(loc: Locator, block: ScrollLogicalPosition = "center", time
 }
 
 /**
+ * Is this element actually VISIBLE to the viewer — not merely inside the
+ * viewport's coordinate range?
+ *
+ * `box.y >= 0` is not the same question, and the difference shipped a broken
+ * still. The PR page keeps its breadcrumb, title and tab bar in a sticky region
+ * ~350 px tall, so a diff line scrolled under it reports a positive `y`, passes
+ * an arithmetic check, and is completely hidden. The first take of scene 8 was
+ * framed that way: the gate said badge and tag were both on screen, and the
+ * frame showed lines 76-96 with neither.
+ *
+ * So ask the DOM instead of the geometry: hit-test the element's own centre and
+ * require that what comes back is the element or something inside it. That
+ * catches the sticky header, the caption band, and any overlay added later —
+ * none of which arithmetic knows about. The caption band is still subtracted
+ * explicitly, because it is injected into the page and would otherwise win the
+ * hit-test on its own terms.
+ */
+async function onScreen(loc: Locator): Promise<boolean> {
+  const box = await loc.boundingBox();
+  if (!box) return false;
+  if (box.y < 0 || box.y + box.height > VIEWPORT.height - CAPTION_BAND) return false;
+  return loc.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!hit && (hit === el || el.contains(hit) || hit.contains(el));
+  });
+}
+
+/**
  * The card wrapping a file's header — `span.filePath → div.fileHeader → div.fileCard`.
  *
  * NOT `getByText(path).first()`: every non-boilerplate file is expanded in smart
- * mode, so ~10 000 diff lines are in the DOM, and a workflow or a doc that
- * merely MENTIONS `client/pnpm-lock.yaml` puts that exact string on a code line
+ * mode, so thousands of diff lines are in the DOM, and a workflow or a doc that
+ * merely MENTIONS `demo/package-lock.json` puts that exact string on a code line
  * earlier in the page than the lock-file's own header. `.first()` would then
  * frame a random line of someone else's diff and the collapsed-body assertion
  * below would read a code row's child count.
@@ -323,50 +365,43 @@ function toMp4(webm: string): string | null {
 }
 
 /**
- * Poll the API, never the DOM: it reports WHY a run failed, where a DOM wait can
- * only time out. Stuck runs are cancelled before bailing so the next take does
- * not start against a wedged stack — though a cancel only marks the row, and a
- * slow provider call still bills for whatever it eventually returns.
+ * The NEW-side line numbers a patch actually renders, mirroring
+ * `parsePatch` + `renderedLineNumbers`
+ * (`client/src/components/diff-viewer/helpers.ts:12`, `findings.ts:53`).
  *
- * This recorder needs no trace, so there is deliberately nothing trace-shaped
- * here: terminal status on `GET /pulls/:id/runs` is the whole finish line.
+ * This is the only way to know, before the browser opens, whether a finding will
+ * get a rail and a clickable tag: the payload's `finding_lines` is just the
+ * distinct `line` values (`smart-diff/service.ts:218`) and says nothing about
+ * whether any rendered row carries that number. Deletions are excluded because
+ * the parser never gives them a new-side number.
  */
-async function waitForRuns(
-  prId: string,
-  runIds: string[],
-  onTick?: (settled: number, total: number, elapsedMs: number) => Promise<void>,
-): Promise<RunSummary[]> {
-  const started = Date.now();
-  const deadline = started + RUN_TIMEOUT;
-  for (;;) {
-    const runs = (await api<RunSummary[]>(`/pulls/${prId}/runs`)).filter((r) => runIds.includes(r.run_id));
-    const settled = runs.filter((r) => TERMINAL.has(r.status ?? "")).length;
-    if (runs.length === runIds.length && settled === runIds.length) return runs;
-    if (Date.now() > deadline) {
-      const stuck = runs.filter((r) => !TERMINAL.has(r.status ?? ""));
-      for (const r of stuck) await api(`/runs/${r.run_id}/cancel`, { method: "POST" }).catch(() => {});
-      throw new Error(
-        `Runs did not settle within ${RUN_TIMEOUT}ms (cancelled) — stuck on: ` +
-          stuck.map((r) => r.agent_name).join(", "),
-      );
+function renderedNewLines(patch: string | null | undefined): Set<number> {
+  const out = new Set<number>();
+  if (!patch) return out;
+  let newNo = 0;
+  for (const raw of patch.split("\n")) {
+    if (raw.startsWith("@@")) {
+      const m = raw.match(HUNK_HEADER_RE);
+      if (m) newNo = parseInt(m[2]!, 10);
+    } else if (raw.startsWith("+")) {
+      out.add(newNo++);
+    } else if (raw.startsWith("-")) {
+      /* no new-side number */
+    } else {
+      out.add(newNo++);
     }
-    if (onTick) await onTick(settled, runIds.length, Date.now() - started);
-    await sleep(4000);
   }
+  return out;
 }
 
-/** Open the Run Review dropdown and start EVERY enabled agent, returning run ids. */
-async function triggerAllAgents(page: Page): Promise<string[]> {
-  await page.getByRole("button", { name: /Run Review/i }).click();
-  const runAll = page.getByRole("button", { name: "Run all enabled agents" });
-  await runAll.waitFor({ timeout: 10_000 });
-  const started = page.waitForResponse(
-    (r) => r.url().includes("/review") && r.request().method() === "POST",
-    { timeout: 120_000 },
-  );
-  await runAll.click();
-  const res = await started;
-  return ((await res.json()) as { runs: { run_id: string }[] }).runs.map((r) => r.run_id);
+/** The word the tag shows — `findings.ts:131 severityTagLabel`. */
+function severityTagLabel(severity: string): string {
+  return severity === "CRITICAL" ? "blocker" : severity.toLowerCase();
+}
+
+/** The badge/strip label — the ICU plural in `messages/en/shell.json:44`. */
+function findingsLabel(count: number): string {
+  return `${count} ${count === 1 ? "finding" : "findings"}`;
 }
 
 function totalsOf(sd: SmartDiff) {
@@ -384,13 +419,19 @@ function totalsOf(sd: SmartDiff) {
 }
 
 /**
- * Everything that can make a scene unfilmable, checked BEFORE the browser opens
- * and therefore before a cent is spent.
+ * Everything that can make a scene unfilmable, checked BEFORE the browser opens.
  *
- * The alternative — discovering at scene 5 that this PR has no lock-file — costs
- * the whole take, because scenes 7-10 have already been paid for by then. A free
- * probe ahead of a paid take is the cheap habit in this package
+ * Nothing here costs money any more, so the argument for the preflight has
+ * changed shape but not strength: discovering at scene 8 that this PR's only
+ * finding is unanchored means a wasted take and a video whose last three scenes
+ * are missing. A free probe ahead of the take is the cheap habit in this package
  * (`demo/INSIGHTS.md`, 2026-08-06).
+ *
+ * Note the INVERSION against the earlier version of this file: findings on the
+ * target used to be a warning ("scene 1's claim gets weaker"). They are now a
+ * hard requirement, because with no review to trigger, a PR with no findings can
+ * film neither the tag, nor the rail, nor the click-through — and scene 1's
+ * claim is only worth making when there are findings to be missing.
  */
 async function preflight(pull: Pull) {
   const detail = await api<PrDetail>(`/pulls/${pull.id}`);
@@ -412,7 +453,7 @@ async function preflight(pull: Pull) {
   const first = sd.groups[0];
   if (!first || first.role !== "core") {
     throw new Error(
-      `Scene 4 needs Core logic on top; the payload's first group is \`${first?.role ?? "(none)"}\`. ` +
+      `Scene 5 needs Core logic on top; the payload's first group is \`${first?.role ?? "(none)"}\`. ` +
         "Either this PR changed no core file, or the server's ROLE_ORDER regressed.",
     );
   }
@@ -426,42 +467,82 @@ async function preflight(pull: Pull) {
     throw new Error(
       strays.length
         ? `A lock-file is always Boilerplate, and this payload disagrees: ${strays.join(", ")}. That is the acceptance criterion failing, not a recording problem.`
-        : `PR #${pull.number} changes no lock-file, so scene 5 has nothing to film. PR #5 has none either — pick a PR that touches one.`,
+        : `PR #${pull.number} changes no lock-file, so scene 6 has nothing to film — pick a PR that touches one.`,
     );
   }
 
-  const large =
-    sd.groups.flatMap((g) => g.files.filter((f) => f.is_large).map((f) => ({ ...f, role: g.role }))).at(0) ?? null;
+  // Preferably not the lock-file itself: scenes 6 and 7 want different cards, and
+  // a lock-file is large often enough that `.at(0)` could collapse them into one.
+  const largeFiles = sd.groups.flatMap((g) => g.files.filter((f) => f.is_large).map((f) => ({ ...f, role: g.role })));
+  const large = largeFiles.find((f) => f.path !== lockFile.path) ?? largeFiles.at(0) ?? null;
   if (!large) {
-    throw new Error(`No file on PR #${pull.number} is flagged \`is_large\`, so scene 6 has no chip to film.`);
+    throw new Error(`No file on PR #${pull.number} is flagged \`is_large\`, so scene 7 has no chip to film.`);
   }
 
   if (!sd.split_suggestion.too_big) {
-    warn(
-      `split_suggestion.too_big is false (${sd.split_suggestion.total_lines} changed lines) — ` +
-        "scene 3 will film the summary strip WITHOUT the large-PR banner.",
-    );
-  }
-  if (totals.findings > 0) {
-    warn(
-      `This PR already carries ${totals.findings} finding(s). Scene 1's "no findings in original order" is then ` +
-        "a weaker claim, and scene 8 shows badges CHANGING rather than APPEARING. Scene 11 still holds.",
+    throw new Error(
+      `split_suggestion.too_big is false (${sd.split_suggestion.total_lines} changed lines), so scene 4 has no ` +
+        "large-PR banner to film. Pick a PR above the split threshold.",
     );
   }
 
-  const agents = await api<Agent[]>("/agents");
-  const enabled = agents.filter((a) => a.enabled);
-  if (enabled.length === 0) {
-    throw new Error("No agent is enabled — `Run all enabled agents` would start nothing and scene 7 would film an idle page.");
+  // The findings that can actually be filmed: on a rendered new-side line, in a
+  // group that is open by default.
+  const patches = new Map(detail.files.map((f) => [f.path, f.patch]));
+  const anchored: AnchoredFinding[] = [];
+  const unfilmable: string[] = [];
+  for (const role of ROLE_ORDER) {
+    const group = sd.groups.find((g) => g.role === role);
+    if (!group) continue;
+    for (const file of group.files) {
+      if (file.findings.length === 0) continue;
+      const rendered = renderedNewLines(patches.get(file.path));
+      for (const finding of file.findings) {
+        const entry = {
+          path: file.path,
+          role,
+          finding,
+          fileFindings: file.findings.length,
+        };
+        if (!rendered.has(finding.line)) {
+          unfilmable.push(`${file.path}:${finding.line} (no rendered line ${finding.line})`);
+        } else if (COLLAPSED_ROLES.has(role)) {
+          unfilmable.push(`${file.path}:${finding.line} (${role} starts collapsed, so no tag renders)`);
+        } else {
+          anchored.push(entry);
+        }
+      }
+    }
+  }
+  if (totals.findings === 0) {
+    throw new Error(
+      `PR #${pull.number} carries no findings, and this recorder triggers no review. Scenes 8-10 — the badge, ` +
+        "the rail, the tag and the click-through — are the feature, so a PR with no findings cannot film it. " +
+        "Point DEMO_PR at a PR that has already been reviewed.",
+    );
+  }
+  if (anchored.length === 0) {
+    throw new Error(
+      `PR #${pull.number} has ${totals.findings} finding(s) but none of them is filmable: ` +
+        `${unfilmable.join("; ")}. Scene 8 needs a finding on a line the patch renders, in an expanded group.`,
+    );
+  }
+  if (unfilmable.length) {
+    warn(`${unfilmable.length} finding(s) on this PR cannot be filmed: ${unfilmable.join("; ")}`);
+  }
+  // Core first — that is where a reviewer's eye is meant to go, and ROLE_ORDER
+  // already put the list in that order.
+  const hero = anchored.find((a) => a.role === "core") ?? anchored[0]!;
+  if (hero.role !== "core") {
+    warn(`No anchored finding on a CORE file; scene 8 will film the one on ${hero.path} (${hero.role}) instead.`);
   }
 
-  return { detail, smartDiff: sd, totals, lockFile, large, enabled };
+  return { detail, smartDiff: sd, totals, lockFile, large, anchored, hero };
 }
 
 async function main() {
   console.log("");
-  warn("THIS RECORDING SPENDS REAL MONEY: one review trigger, every enabled agent, sequentially.");
-  warn("Do NOT run any package's test suite while it is in flight — the orphan-run reaper will kill the live run.");
+  log("This recording triggers NO review and spends NOTHING — it films a PR whose findings already exist.");
   console.log("");
   announceNotFilmable();
   console.log("");
@@ -480,36 +561,27 @@ async function main() {
   if (!pull) throw new Error(`PR #${PR_NUMBER} is not imported into ${REPO_NAME}.`);
 
   const pre = await preflight(pull);
+  const hero = pre.hero;
+  const heroTagWord = severityTagLabel(hero.finding.severity);
+  const heroBadge = findingsLabel(hero.fileFindings);
+
   log(`target: ${repo.full_name} #${pull.number} — ${pull.title}`);
   log(
-    `${pre.totals.files} files · ${pre.totals.lines} changed lines · ${pre.totals.findings} finding(s) today · ` +
+    `${pre.totals.files} files · ${pre.totals.lines} changed lines · ${pre.totals.findings} finding(s) · ` +
       `groups: ${pre.smartDiff.groups.map((g) => `${g.role}(${g.files.length})`).join(" → ")}`,
   );
   log(`lock-file: ${pre.lockFile.path} (+${pre.lockFile.additions} −${pre.lockFile.deletions}) → boilerplate ✓`);
   log(`large file: ${pre.large.path} (+${pre.large.additions} −${pre.large.deletions}) in ${pre.large.role}`);
-  log(`agents to run: ${pre.enabled.map((a) => `${a.name} (${a.model})`).join(", ")}`);
+  log(
+    `hero finding: ${hero.path}:${hero.finding.line} [${hero.role}] ${heroTagWord} — ${hero.finding.title} ` +
+      `(badge should read "${heroBadge}")`,
+  );
 
   let browser: Browser | undefined;
   let ctx: BrowserContext | undefined;
-  const scenes: { n: number; name: string; filmed: boolean; note?: string }[] = [];
-  const record = (n: number, name: string, filmed: boolean, sceneNote?: string) => {
-    scenes.push({ n, name, filmed, ...(sceneNote ? { note: sceneNote } : {}) });
-  };
-
-  /**
-   * A broken claim AFTER the money has been spent.
-   *
-   * Before the trigger, a failed precondition throws: the take is free to redo.
-   * After it, throwing would discard the footage the runs were paid for AND the
-   * summary that says what went wrong — so from scene 7 onward a failure is
-   * recorded loudly, carried into `summary.json`, and the process still exits
-   * non-zero. A quietly short video is the failure mode this package's
-   * conventions already forbid; a loudly annotated one is the alternative.
-   */
-  const failures: string[] = [];
-  const fail = (msg: string) => {
-    warn(msg);
-    failures.push(msg);
+  const scenes: { n: number; name: string; note?: string }[] = [];
+  const record = (n: number, name: string, sceneNote?: string) => {
+    scenes.push({ n, name, ...(sceneNote ? { note: sceneNote } : {}) });
   };
 
   try {
@@ -523,28 +595,36 @@ async function main() {
     const page = await ctx.newPage();
 
     const prUrl = `${BASE}/repos/${repo.id}/pulls/${PR_NUMBER}`;
+    /** Every `Open finding:` button on screen — the anchored line tags and the
+        unanchored chips alike (`shell.json:46` gives both the same label). */
+    const findingButtons = page.getByRole("button", { name: /^Open finding: / });
 
-    // ---- Scene 1: original order, no findings on any line ------------------
+    // ---- Scene 1: original order, no findings anywhere on it ---------------
 
     await page.goto(`${prUrl}?tab=diff&view=original`, { waitUntil: "networkidle" });
-    // 100 files with real patches is a lot of DOM; give React room to land it.
+    // 92 files with real patches is a lot of DOM; give React room to land it.
     await sleep(2500);
     await ensureVisible(page.getByText(`Files changed · ${pre.detail.files_count} files`, { exact: false }));
+    // The claim, asserted rather than eyeballed — and it is a real claim on THIS
+    // PR precisely because the findings exist: `DiffViewer` has no prop that can
+    // receive them (`components/diff-viewer/findings.ts:9-12`), so original mode
+    // shows none of the ones the very next scene will show.
+    const strayTags = await findingButtons.count();
+    if (strayTags > 0) {
+      throw new Error(
+        `Original order is showing ${strayTags} finding tag(s) — with ${pre.totals.findings} finding(s) on this PR, ` +
+          "the criterion is that not one of them is reachable in that mode.",
+      );
+    }
     await beat(
       page,
       1,
-      `Original order — the order the API returns. ${pre.detail.files_count} files, no roles, no findings on any line`,
-      4200,
+      `Original order — the order the API returns. ${pre.detail.files_count} files, no roles, and none of this PR's ` +
+        `${pre.totals.findings} findings on any line`,
+      4600,
     );
     await shot(page, "original-order");
-    record(
-      1,
-      "Files changed in original order",
-      true,
-      pre.totals.findings === 0
-        ? "Filmed BEFORE any review, so this frame alone does not prove findings are hidden in original mode — scene 11 is the frame that does."
-        : undefined,
-    );
+    record(1, "Files changed in original order", `asserted: 0 finding tags on screen while ${pre.totals.findings} exist`);
 
     // ---- Scene 2: toggle to smart order ------------------------------------
 
@@ -553,42 +633,55 @@ async function main() {
     await sleep(2000);
     await beat(page, 2, "One toggle — the same files, grouped by the role each one plays in the change", 4200);
     await shot(page, "smart-order");
-    record(2, "Toggle to Smart order, section label flips", true);
+    record(2, "Toggle to Smart order, section label flips");
 
-    // ---- Scene 3: the summary strip and the large-PR banner ----------------
+    // ---- Scene 3: the summary strip ----------------------------------------
 
-    await ensureVisible(page.getByText(/changed lines?$/).first());
+    // The strip is the parent of its "N changed lines" span, and reading the
+    // findings count OUT of that parent is what keeps this from matching a file
+    // header's own badge further down the page.
+    const changedLines = await ensureVisible(page.getByText(/changed lines?$/).first());
+    const strip = changedLines.locator("xpath=..");
+    const stripFindings = strip.getByText(/^\d+ findings?$/).first();
+    await stripFindings.waitFor({ timeout: 15_000 });
+    const stripText = (await stripFindings.textContent())?.trim();
+    if (stripText !== findingsLabel(pre.totals.findings)) {
+      throw new Error(
+        `The summary strip reads "${stripText}" where the payload has ${pre.totals.findings} finding(s) ` +
+          `(expected "${findingsLabel(pre.totals.findings)}").`,
+      );
+    }
     await beat(
       page,
       3,
-      `${pre.totals.files} files · ${pre.totals.lines} changed lines · ${pre.totals.findings} findings — ` +
-        (pre.smartDiff.split_suggestion.too_big ? "big enough that the app says so" : "under the split threshold"),
+      `${pre.totals.files} files · ${pre.totals.lines} changed lines · ${stripText} — the whole PR in one line`,
       4600,
     );
     await shot(page, "summary-strip");
-    let bannerShown = false;
-    if (pre.smartDiff.split_suggestion.too_big) {
-      const banner = page.getByText(/This PR is large \(/).first();
-      bannerShown = await banner
-        .isVisible()
-        .catch(() => false);
-      if (bannerShown) {
-        await ensureVisible(banner);
-        await beat(page, "3b", `"This PR is large" — ${pre.smartDiff.split_suggestion.total_lines} changed lines`, 3800);
-        await shot(page, "large-pr-banner");
-      } else {
-        warn("the payload says too_big but the banner is not on screen — filming the strip only");
-      }
-    }
-    record(3, "Summary strip + large-PR banner", true, bannerShown ? undefined : "banner not rendered");
+    record(3, "Summary strip: files, +/−, findings, changed lines", `strip reads "${stripText}"`);
 
-    // ---- Scene 4: core logic on top ----------------------------------------
+    // ---- Scene 4: the large-PR banner --------------------------------------
+
+    // Preflight already refused a PR under the threshold, so a missing banner
+    // here is the client half of the criterion failing, not a soft landing.
+    const banner = page.getByText(/This PR is large \(/).first();
+    await ensureVisible(banner);
+    await beat(
+      page,
+      4,
+      `"This PR is large" — ${pre.smartDiff.split_suggestion.total_lines} changed lines, said before anyone starts reading`,
+      4200,
+    );
+    await shot(page, "large-pr-banner");
+    record(4, "Large-PR banner", `${pre.smartDiff.split_suggestion.total_lines} changed lines`);
+
+    // ---- Scene 5: core logic on top ----------------------------------------
 
     // Framed on the DESCRIPTION, not the label: the group header holds swatch,
     // label, description and count in one div, and "Core logic" on its own is a
     // string a diff line in this very PR could contain verbatim (the label lives
     // in `messages/en/prReview.json`). The description is both more specific and
-    // the thing scene 4 is supposed to show.
+    // the thing this scene is supposed to show.
     const coreHeader = page
       .getByText("The substance of the change — review closely", { exact: true })
       .first()
@@ -597,14 +690,14 @@ async function main() {
     await coreHeader.getByText("Core logic", { exact: true }).waitFor({ timeout: 15_000 });
     await beat(
       page,
-      4,
+      5,
       "Core logic first, with its swatch and what it means: the substance of the change — review closely",
       4600,
     );
     await shot(page, "core-on-top");
-    record(4, "Core logic group on top, swatch + description", true);
+    record(5, "Core logic group on top, swatch + description");
 
-    // ---- Scene 5: the lock-file in a collapsed Boilerplate group -----------
+    // ---- Scene 6: the lock-file in a collapsed Boilerplate group -----------
 
     const boilerplateHeader = page
       .getByText("Generated / mechanical — skim", { exact: true })
@@ -612,7 +705,7 @@ async function main() {
       .locator("xpath=..");
     await frame(boilerplateHeader, "start");
     await boilerplateHeader.getByText("Boilerplate", { exact: true }).waitFor({ timeout: 15_000 });
-    await beat(page, 5, "Boilerplate last — generated / mechanical, skim", 3400);
+    await beat(page, 6, "Boilerplate last — generated / mechanical, skim", 3400);
     await shot(page, "boilerplate-group");
 
     const lockCard = await requireFileCard(page, pre.lockFile.path);
@@ -630,303 +723,156 @@ async function main() {
     }
     await beat(
       page,
-      "5b",
+      "6b",
       `${pre.lockFile.path} — +${pre.lockFile.additions} −${pre.lockFile.deletions}, always Boilerplate, and closed until you ask`,
       5000,
     );
     await shot(page, "lockfile-collapsed");
-    record(5, "Lock-file inside a collapsed Boilerplate group", true, "asserted: card has exactly one child, so no body");
+    record(6, "Lock-file inside a collapsed Boilerplate group", "asserted: card has exactly one child, so no body");
 
-    // ---- Scene 6: a large file's chip --------------------------------------
+    // ---- Scene 7: a large file's chip --------------------------------------
 
     const largeCard = await requireFileCard(page, pre.large.path);
     await frame(largeCard, "center");
     await largeCard.getByText("large file", { exact: true }).waitFor({ timeout: 15_000 });
     await beat(
       page,
-      6,
+      7,
       `${pre.large.path} — +${pre.large.additions} −${pre.large.deletions}: flagged \`large file\` before anyone opens it`,
       4800,
     );
     await shot(page, "large-file-chip");
-    record(6, "A large file's `large file` chip", true);
+    record(7, "A large file's `large file` chip");
 
-    // ---- Scene 7: THE MONEY ------------------------------------------------
+    // ---- Scene 8: badge + rail + tag, in ONE frame -------------------------
+    //
+    // The frame the whole feature is for. All three are the same claim seen at
+    // three zoom levels: the file carries findings (header badge), THIS line
+    // does (the gutter rail), and it is this severity and clickable (the tag).
 
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await sleep(600);
+    const heroCard = await requireFileCard(page, hero.path);
+    const heroBadgeBtn = heroCard.getByRole("button", { name: heroBadge, exact: true });
+    // The anchored tag, not the unanchored chip: both carry `Open finding: …`
+    // (`shell.json:46`), but a LINE tag's whole text is the severity word while
+    // the chip below the diff reads `blocker · <title>`.
+    const heroTag = heroCard
+      .getByRole("button", { name: `Open finding: ${hero.finding.title}`, exact: true })
+      .filter({ hasText: new RegExp(`^${heroTagWord}$`) })
+      .first();
+    await frame(heroCard, "start");
+    await heroBadgeBtn.waitFor({ timeout: 15_000 });
+    await heroTag.waitFor({ timeout: 15_000 });
+
+    // The rail is a bare `<span>` with no text — `findingRailFor` in
+    // `components/diff-viewer/styles.ts:117` gives it `position: absolute` and a
+    // 3px width, and `CodeLine` renders it as the row's FIRST child, before the
+    // gutter. So: from the tag, up to its row, and read that first child.
+    const railOk = await heroTag.evaluate((el) => {
+      const first = el.parentElement?.firstElementChild;
+      if (!first || first.tagName.toLowerCase() !== "span") return false;
+      const cs = getComputedStyle(first);
+      return cs.position === "absolute" && cs.width === "3px";
+    });
+    if (!railOk) {
+      throw new Error(
+        `${hero.path}:${hero.finding.line} has a severity tag but no severity rail on its row — ` +
+          "the gutter half of the criterion is missing.",
+      );
+    }
+
+    // Two frames, and the reason is NOT that one was impossible — see the
+    // header. Scene 8 lands wide (summary strip, banner, group header, file
+    // header with its badge, and the tagged line all at once); scene 9 is the
+    // close-up on the line itself. Each is gated by `onScreen()`, which
+    // hit-tests rather than trusting coordinates, because the page's sticky
+    // header silently swallowed an earlier take's stills.
+    // "center", never "start": the PR page's breadcrumb/title/tab region is
+    // sticky and ~350 px tall, so scrolling an element to the top of the
+    // scroller parks it UNDER that region — present in the DOM, invisible in
+    // the frame. Centring clears the sticky header and the caption band both.
+    await frame(heroBadgeBtn, "center");
+    if (!(await onScreen(heroBadgeBtn))) {
+      throw new Error(`Could not frame ${hero.path}'s "${heroBadge}" badge.`);
+    }
+    await beat(page, 8, `${hero.path}: the header says "${heroBadge}" before you open anything`, 4200);
+    await shot(page, "finding-badge-on-header");
+    record(8, "The file header's findings badge", `${hero.role} · ${hero.path} · badge "${heroBadge}"`);
+
+    await frame(heroTag, "center");
+    if (!(await onScreen(heroTag))) {
+      throw new Error(
+        `Could not frame ${hero.path}'s line-${hero.finding.line} tag — it is occluded or off-screen.`,
+      );
+    }
     await beat(
       page,
-      7,
-      `Run Review → all ${pre.enabled.length} enabled agents, one after another. This is the only step that costs anything`,
-      3600,
+      9,
+      `line ${hero.finding.line}: the rail in the gutter and \`${heroTagWord}\` on the line itself`,
+      5400,
     );
-    const runIds = await triggerAllAgents(page);
-    log(`started ${runIds.length} run(s): ${runIds.map((i) => i.slice(0, 8)).join(", ")}`);
-    record(7, "Run Review → every enabled agent", true, `${runIds.length} run(s)`);
+    await shot(page, "finding-rail-and-tag-on-line");
+    record(
+      9,
+      "Severity rail and tag on the finding's own line",
+      `${hero.path}:${hero.finding.line} · ${heroTagWord} · rail asserted`,
+    );
 
-    // Triggering switches the app to `?tab=findings` on its own (`onRunStart`),
-    // which is a client-side route change — and a route change wipes the
-    // injected caption node, so it is re-created rather than assumed.
-    await page
-      .waitForURL(/tab=findings/, { timeout: 30_000 })
-      .catch(() => fail("the app did not switch to the Agent runs tab after the trigger — the Live Log is not on screen"));
+    // ---- Scene 9: click the tag, land on the finding's card ----------------
+
+    await beat(page, 10, "Click the tag on the line — the finding is one click from the code it is about", 3000);
+    await heroTag.click();
+    await page.waitForURL(/finding=/, { timeout: 30_000 });
+    const url = page.url();
+    const findingId = new URL(url).searchParams.get("finding");
+    if (findingId !== hero.finding.id) {
+      throw new Error(`Clicked ${hero.finding.id}'s tag and the URL carries \`finding=${findingId}\`: ${url}`);
+    }
+    if (!/tab=findings/.test(url)) throw new Error(`The click did not land on the Agent runs tab: ${url}`);
+
+    const reviews = await api<ReviewRecord[]>(`/pulls/${pull.id}/reviews`);
+    const owning = reviews.find((rv) => rv.findings.some((f) => f.id === findingId)) ?? null;
+
+    const card = page.locator(`[data-finding-id="${findingId}"]`);
+    await card.waitFor({ timeout: 30_000 });
     await sleep(1500);
-
-    // The marker goes in AFTER the navigation the app performs and BEFORE the
-    // wait: everything from here to scene 8's screenshot must happen without a
-    // reload, and this is what proves it did.
-    await page.evaluate((k) => {
-      (window as unknown as Record<string, number>)[k] = Date.now();
-    }, RELOAD_MARKER);
-
-    await caption(page, 8, `${runIds.length} agents, sequentially — the Live Log streams each one`);
-    const logTail = page
-      .getByPlaceholder("Filter log…")
-      .locator("xpath=../../..")
-      .locator("div.mono")
-      .last();
-
-    const runs = await waitForRuns(pull.id, runIds, async (settled, total, elapsed) => {
-      const mins = Math.floor(elapsed / 60_000);
-      const secs = Math.floor((elapsed % 60_000) / 1000);
-      await caption(
-        page,
-        8,
-        `${settled} of ${total} agents finished · ${mins}m ${String(secs).padStart(2, "0")}s — ` +
-          "no model is involved in the grouping itself; these are the reviews",
-      );
-      // `LiveLogStream` is a fixed-height pane that does NOT follow its own tail,
-      // so the newest line sits below the fold unless something scrolls it. Not a
-      // scene, so a failure here is a warning, never a lost take.
-      // Short timeout on purpose: this runs inside the poll loop, and the
-      // default 30 s would stall the caption heartbeat every tick on a page
-      // where the pane has not mounted.
-      await logTail.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-    });
-
-    const failed = runs.filter((r) => r.status === "failed");
-    for (const r of failed) warn(`${r.agent_name} failed`);
-    console.table(
-      runs.map((r) => ({ agent: r.agent_name, status: r.status, findings: r.findings_count, score: r.score, cost: r.cost_usd })),
-    );
-
-    // ---- Scene 8: badges and rails, with no reload -------------------------
-
-    // The client has to NOTICE the runs finished before the tab is switched:
-    // `RunStatus.onDone` is what fires `invalidateRuns.smartDiff()`, and it lives
-    // inside the Live-review section that unmounts once no run is active. Switch
-    // tabs too early and the invalidation never happens.
-    await page
-      .getByText("Review in progress…", { exact: false })
-      .waitFor({ state: "hidden", timeout: 180_000 })
-      .catch(() => warn("the in-progress banner never cleared — the client may not have seen the runs settle"));
-    await sleep(4000);
-
-    const after = await api<SmartDiff>(`/pulls/${pull.id}/smart-diff`);
-    const afterTotals = totalsOf(after);
-    log(`after the run: ${afterTotals.findings} finding(s) across ${afterTotals.files} files`);
-    if (afterTotals.findings === 0) {
-      warn("The review produced NO findings — there are no badges or rails to film, and scenes 8-11 will be empty.");
+    // Expanded, not merely present: the body — and with it the Accept action —
+    // renders only when the card is open, which is what the deep link promises.
+    // Presence alone would pass on a card the reader still has to click.
+    if ((await card.getByRole("button", { name: /^Accept/ }).count()) === 0) {
+      throw new Error("The finding's card is on screen but NOT expanded — `expandNonce` did not reach it.");
     }
+    if (!owning?.run_id) {
+      throw new Error(`No review run on this PR owns finding ${findingId} — the accordion claim cannot be checked.`);
+    }
+    const accordion = page.locator(`#review-run-${owning.run_id}`);
+    if ((await accordion.locator(`[data-finding-id="${findingId}"]`).count()) === 0) {
+      throw new Error(`The owning accordion (#review-run-${owning.run_id}) did not open around the card.`);
+    }
+    await frame(card, "center");
+    await beat(
+      page,
+      9,
+      `?tab=findings&finding=… — the Agent runs tab, ${owning.agent_name ?? "the owning run"}'s accordion open, that card expanded`,
+      5400,
+    );
+    await shot(page, "finding-deep-link");
+    record(10, "Finding click-through to its card", `owned by ${owning.agent_name ?? "?"} (run ${owning.run_id.slice(0, 8)})`);
 
-    await beat(page, 8, "The runs are done. Back to Files changed — a tab click, not a reload", 3200);
-    // A TAB CLICK, never `page.goto` and never `reload()`. The whole criterion is
-    // that the badges arrive in the session that is already open.
-    const smartDiffRefetch = page
-      .waitForResponse((r) => r.url().includes("/smart-diff") && r.request().method() === "GET", { timeout: 60_000 })
-      .then(() => true)
-      .catch(() => false);
-    await page.getByRole("button", { name: /^Files changed/ }).click();
-    const refetched = await smartDiffRefetch;
+    // ---- Scene 10: Back, still in Smart mode -------------------------------
+
+    await beat(page, 11, "Back — and the Files tab is exactly where it was, still in Smart order", 3000);
+    await page.goBack();
+    await page.waitForURL(/tab=diff/, { timeout: 30_000 });
+    const backUrl = page.url();
+    const backView = new URL(backUrl).searchParams.get("view");
+    if (backView !== "smart") {
+      throw new Error(`Back landed on view=${backView ?? "(absent)"}, not smart: ${backUrl}`);
+    }
     await page.getByText("Smart Diff · grouped by role", { exact: true }).waitFor({ timeout: 30_000 });
-    await sleep(2500);
-
-    const markerAlive = await page.evaluate(
-      (k) => (window as unknown as Record<string, number | undefined>)[k] ?? null,
-      RELOAD_MARKER,
-    );
-    if (markerAlive == null) {
-      fail(
-        "The no-reload marker is GONE: the page reloaded between starting the run and the badge shot, " +
-          "so this footage does not support the claim scene 8 exists to make. Do not present it as if it did.",
-      );
-    } else {
-      log(`no-reload marker survived (set ${Math.round((Date.now() - markerAlive) / 1000)}s ago) ✓`);
-    }
-
-    // Find a file whose findings anchor to rendered lines — that is the only
-    // place both the rail and the clickable severity tag exist. Core first: its
-    // group is expanded, so nothing has to be opened first.
-    const ranked = [...after.groups].sort(
-      (a, b) => ["core", "wiring", "boilerplate"].indexOf(a.role) - ["core", "wiring", "boilerplate"].indexOf(b.role),
-    );
-    const candidates = ranked.flatMap((g) => g.files.filter((f) => f.findings.length > 0).map((f) => ({ ...f, role: g.role })));
-    log(`files carrying findings: ${candidates.map((c) => `${c.path}(${c.findings.length})`).join(", ") || "(none)"}`);
-
-    let tag: Locator | null = null;
-    let tagFile: (typeof candidates)[number] | null = null;
-    for (const cand of candidates) {
-      const card = await fileCardFor(page, cand.path);
-      if (!card) continue;
-      await frame(card, "center").catch(() => {});
-      // A LINE tag's whole text is the severity word (`blocker` / `warning` /
-      // `suggestion`, `findings.ts:severityTagLabel`). The unanchored chip below
-      // the diff uses the same aria-label but reads `blocker · <title>`, so the
-      // anchored one is the one whose text is nothing but the word.
-      const lineTag = card
-        .getByRole("button", { name: /^Open finding: / })
-        .filter({ hasText: /^(blocker|warning|suggestion)$/ })
-        .first();
-      if ((await lineTag.count()) > 0) {
-        tag = lineTag;
-        tagFile = cand;
-        break;
-      }
-    }
-
-    if (!tag || !tagFile) {
-      warn("No finding anchored to a rendered line — no rail and no clickable line tag to film (scenes 8-10 degraded).");
-      await beat(page, 8, "Findings from the run, joined onto the same files — no page reload", 4600);
-      await shot(page, "badges-no-reload");
-      record(8, "Badges/rails appear with no reload", false, "no line-anchored finding; only file badges are visible");
-    } else {
-      await frame(tag, "center");
-      await beat(
-        page,
-        8,
-        `${afterTotals.findings} findings, on the same screen and with no reload — badges on the files, rails on the lines`,
-        5200,
-      );
-      await shot(page, "badges-no-reload");
-      record(8, "Badges/rails appear with no reload", true, `marker survived; smart-diff refetched on tab click: ${refetched}`);
-    }
-
-    // ---- Scene 9: click a finding's severity tag ---------------------------
-
-    let clicked: { id: string; url: string; run_id: string | null; expanded: boolean } | null = null;
-    if (tag && tagFile) {
-      // Everything from here is post-money, so a broken claim is RECORDED, not
-      // thrown: throwing would take the footage down with it.
-      try {
-        await beat(page, 9, "Click the tag on the line — the finding is one click from the code it is about", 3000);
-        await tag.click();
-        await page.waitForURL(/finding=/, { timeout: 30_000 });
-        const url = page.url();
-        const findingId = new URL(url).searchParams.get("finding");
-        if (!findingId) throw new Error(`Clicked a finding tag and the URL carries no \`finding\` param: ${url}`);
-        if (!/tab=findings/.test(url)) throw new Error(`The click did not land on the Agent runs tab: ${url}`);
-
-        const reviews = await api<ReviewRecord[]>(`/pulls/${pull.id}/reviews`);
-        const owning = reviews.find((rv) => rv.findings.some((f) => f.id === findingId)) ?? null;
-
-        const card = page.locator(`[data-finding-id="${findingId}"]`);
-        await card.waitFor({ timeout: 30_000 });
-        await sleep(1500);
-        // Expanded, not merely present: the body — and with it the Accept action
-        // — renders only when the card is open, which is what the deep link
-        // promises. Presence alone would pass on a card the reader still has to
-        // click.
-        const expanded = (await card.getByRole("button", { name: /^Accept/ }).count()) > 0;
-        if (!expanded) fail("the finding's card is on screen but NOT expanded — `expandNonce` did not reach it");
-        if (owning?.run_id) {
-          const accordion = page.locator(`#review-run-${owning.run_id}`);
-          const inside = await accordion.locator(`[data-finding-id="${findingId}"]`).count();
-          if (inside === 0) fail(`the owning accordion (#review-run-${owning.run_id}) did not open around the card`);
-        }
-        await frame(card, "center");
-        await beat(
-          page,
-          9,
-          `?tab=findings&finding=… — the Agent runs tab, ${owning?.agent_name ?? "the owning run"}'s accordion open, that card expanded`,
-          5400,
-        );
-        await shot(page, "finding-deep-link");
-        clicked = { id: findingId, url, run_id: owning?.run_id ?? null, expanded };
-        record(9, "Finding click-through to its card", true, expanded ? undefined : "card not expanded");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        fail(`scene 9 (finding click-through) failed: ${msg}`);
-        record(9, "Finding click-through to its card", false, msg);
-      }
-
-      // ---- Scene 10: Back, still in Smart mode -----------------------------
-
-      if (clicked) {
-        try {
-          await beat(page, 10, "Back — and the Files tab is exactly where it was, still in Smart order", 3000);
-          await page.goBack();
-          await page.waitForURL(/tab=diff/, { timeout: 30_000 });
-          const backUrl = page.url();
-          const backView = new URL(backUrl).searchParams.get("view");
-          if (backView !== "smart") {
-            throw new Error(`Back landed on view=${backView ?? "(absent)"}, not smart: ${backUrl}`);
-          }
-          await page.getByText("Smart Diff · grouped by role", { exact: true }).waitFor({ timeout: 30_000 });
-          await sleep(2200);
-          await beat(page, 10, `${backUrl.replace(BASE, "")} — the ordering survived the round trip`, 4600);
-          await shot(page, "back-to-smart");
-          record(10, "Back returns to ?tab=diff&view=smart", true);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          fail(`scene 10 (Back → smart) failed: ${msg}`);
-          record(10, "Back returns to ?tab=diff&view=smart", false, msg);
-        }
-      } else {
-        record(10, "Back returns to ?tab=diff&view=smart", false, "scene 9 did not complete");
-      }
-    } else {
-      record(9, "Finding click-through to its card", false, "no line-anchored finding to click");
-      record(10, "Back returns to ?tab=diff&view=smart", false, "scene 9 did not run");
-    }
-
-    // ---- Scene 11 (free): original order, now that findings EXIST ----------
-    //
-    // Scene 1 films original mode before any review, where "no findings" is
-    // true by arithmetic rather than by design. This is the frame that carries
-    // the criterion: the same PR, the same session, findings in the database,
-    // and original mode still showing none — because `DiffViewer` has no prop to
-    // receive them (`components/diff-viewer/findings.ts:9-12`).
-
-    let strayTags = -1;
-    let stillNoReload: number | null = null;
-    try {
-      // Scene 9 may have left the browser on the Agent runs tab. Get back with a
-      // TAB CLICK, never a `goto` — the marker has to survive to the end.
-      if (!/tab=diff/.test(page.url())) {
-        await page.getByRole("button", { name: /^Files changed/ }).click();
-        await page.waitForURL(/tab=diff/, { timeout: 30_000 });
-        await sleep(1500);
-      }
-      await page.getByRole("button", { name: "Original order", exact: true }).click();
-      await page.getByText(/^Files changed · /).first().waitFor({ timeout: 30_000 });
-      await sleep(2500);
-      strayTags = await page.getByRole("button", { name: /^Open finding: / }).count();
-      stillNoReload = await page.evaluate(
-        (k) => (window as unknown as Record<string, number | undefined>)[k] ?? null,
-        RELOAD_MARKER,
-      );
-      if (strayTags > 0) {
-        fail(`Original order is showing ${strayTags} finding tag(s) — findings are supposed to be unreachable in that mode.`);
-      }
-      await beat(
-        page,
-        11,
-        `Original order again — ${afterTotals.findings} findings exist now, and not one of them is on this screen`,
-        5200,
-      );
-      await shot(page, "original-order-after-review");
-      record(
-        11,
-        "Original order after the review still shows no findings",
-        strayTags === 0,
-        "ADDED beyond the plan's list, and free: scene 1 is filmed before any review exists, so on its own it cannot carry this criterion",
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      fail(`scene 11 (original order after the review) failed: ${msg}`);
-      record(11, "Original order after the review still shows no findings", false, msg);
-    }
+    await sleep(2200);
+    await beat(page, 10, `${backUrl.replace(BASE, "")} — the ordering survived the round trip`, 4600);
+    await shot(page, "back-to-smart");
+    record(11, "Back returns to ?tab=diff&view=smart");
 
     const summary = {
       recorded_at: new Date().toISOString(),
@@ -935,11 +881,13 @@ async function main() {
       pr_id: pull.id,
       pr_title: pull.title,
       pr_status: pre.detail.status,
+      /** No review is triggered by this recorder — see `out_of_scope`. */
+      review_triggered: false,
       files: {
         count: pre.detail.files_count,
         with_patch: pre.detail.files.filter((f) => f.patch != null && f.patch.length > 0).length,
       },
-      smart_diff_before: {
+      smart_diff: {
         groups: pre.smartDiff.groups.map((g) => ({ role: g.role, files: g.files.length })),
         findings: pre.totals.findings,
         changed_lines: pre.totals.lines,
@@ -947,43 +895,28 @@ async function main() {
         lock_file: { path: pre.lockFile.path, additions: pre.lockFile.additions, deletions: pre.lockFile.deletions },
         large_file: { path: pre.large.path, role: pre.large.role, additions: pre.large.additions, deletions: pre.large.deletions },
       },
-      smart_diff_after: {
-        groups: after.groups.map((g) => ({ role: g.role, files: g.files.length })),
-        findings: afterTotals.findings,
-      },
-      no_reload_proof: {
-        marker_survived: markerAlive != null,
-        marker_still_alive_after_scene_11: stillNoReload != null,
-        smart_diff_refetched_on_tab_click: refetched,
-        /* What the footage does and does not settle. The badges arrive with no
-           reload — that is filmed and the marker proves it. WHICH mechanism
-           delivered them is NOT settled here: the global `staleTime` is 30 s
-           (`client/src/lib/providers.tsx:28`) and these runs take minutes, so the
-           query was stale by the time the tab was clicked whether or not S6's
-           invalidator fired. Distinguishing the two needs a run shorter than the
-           stale window, which is not something this recorder can arrange. */
-        caveat:
-          "No reload occurred (marker intact). Whether S6's invalidator or the 30s staleTime triggered the refetch is not distinguished by this take.",
-      },
-      finding_clicked: clicked,
-      original_mode_finding_tags_after_review: strayTags,
-      scenes,
-      /** Claims that did not hold, verbatim. Empty is the only good value. */
-      failures,
-      not_filmable: NOT_FILMABLE,
-      agents: pre.enabled.map((a) => ({ name: a.name, model: a.model })),
-      runs: runs.map((r) => ({
-        run_id: r.run_id,
-        agent: r.agent_name,
-        status: r.status,
-        model: r.model,
-        cost_usd: r.cost_usd,
-        findings: r.findings_count,
-        score: r.score,
+      anchored_findings: pre.anchored.map((a) => ({
+        path: a.path,
+        role: a.role,
+        line: a.finding.line,
+        severity: a.finding.severity,
+        id: a.finding.id,
       })),
-      total_cost_usd: runs.every((r) => r.cost_usd != null)
-        ? runs.reduce((n, r) => n + (r.cost_usd ?? 0), 0)
-        : null,
+      hero_finding: {
+        id: hero.finding.id,
+        path: hero.path,
+        role: hero.role,
+        line: hero.finding.line,
+        severity: hero.finding.severity,
+        tag: heroTagWord,
+        badge: heroBadge,
+        title: hero.finding.title,
+      },
+      finding_clicked: { id: findingId, url, run_id: owning.run_id, agent: owning.agent_name },
+      original_mode_finding_tags: strayTags,
+      scenes,
+      not_filmable: NOT_FILMABLE,
+      out_of_scope: OUT_OF_SCOPE,
     };
     writeFileSync(join(OUT, "summary.json"), JSON.stringify(summary, null, 2));
 
@@ -1000,17 +933,10 @@ async function main() {
     console.log("");
     log(`\x1b[32m✓ video:\x1b[0m ${mp4 ?? (raw ? final : "(not recorded)")}`);
     log(`\x1b[32m✓ frames + summary.json:\x1b[0m ${OUT}`);
-    const skipped = scenes.filter((sc) => !sc.filmed);
-    if (skipped.length) warn(`scenes not filmed: ${skipped.map((sc) => `${sc.n} (${sc.note ?? "?"})`).join("; ")}`);
-    if (failures.length) {
-      console.log("");
-      warn(`${failures.length} claim(s) did not hold — the video is NOT clean evidence for them:`);
-      for (const f of failures) console.warn(`    - ${f}`);
-    }
+    log(`\x1b[32m✓ ${scenes.length} scenes, no review triggered, nothing spent\x1b[0m`);
     console.log("");
     note("Still to capture as TEXT evidence — this recorder cannot film either:");
     announceNotFilmable();
-    if (failed.length || failures.length) process.exitCode = 1;
   } finally {
     await ctx?.close();
     await browser?.close();

@@ -19,7 +19,7 @@ Companion to [`L03-intent-layer.md`](L03-intent-layer.md) and
 |---|---|---|
 | `server/` (`@devdigest/api`) | **pnpm** | new `modules/smart-diff/`, the contract (source of truth), four test files |
 | `client/` (`@devdigest/web`) | **pnpm** | `useSmartDiff`, one optional capability prop on the shared diff-viewer, `SmartDiffViewer`, the click chain |
-| `demo/` (`@devdigest/demo`) | **npm** | `record-smart-diff.ts` — **spends real money** |
+| `demo/` (`@devdigest/demo`) | **npm** | `record-smart-diff.ts` — **free**; triggers no review (corrected, see S11) |
 | repo root | — | `scripts/verify-l03.sh` |
 | `reviewer-core/`, `e2e/` | — | untouched (see *Out of scope*) |
 
@@ -719,24 +719,43 @@ echo "verify:l03 PASSED"
   Vitest exits 1 with "No test files found" on an unmatched filter, so it fails
   loudly rather than silently passing — but only if you actually run it. Run it.
 
-### S11 — The demo recording (**THIS STEP SPENDS REAL MONEY**)
+### S11 — The demo recording (**FREE — corrected after the first take**)
+
+> **This step was planned wrong, and the heading above is the correction.** It
+> originally read *THIS STEP SPENDS REAL MONEY* and put `Run Review` in the
+> middle of the scene list. Running a review is L01's feature, not this one:
+> Smart Diff is the grouping, the risk order and the click-through, and every one
+> of those is already true of a PR reviewed at any point in the past. Filming the
+> review cost the first take ~10 of its 11 minutes and taught a viewer nothing.
+> **The recorder now triggers no review and spends nothing**, and the take is 86
+> seconds. What follows is what shipped.
 
 - **Files:** `demo/record-smart-diff.ts` (new) · `demo/package.json`
   (`"record:smart-diff": "tsx record-smart-diff.ts"` — no lesson number, matching
   `record:intent` / `record:conventions` / `record:skills`) · output to
   `demo/recordings/l03-smart-diff` · curated frames promoted to
   `docs/results/l03-homework/`
-- Model it on `demo/record-intent.ts` (16 scenes). Scene list, matching the
-  acceptance criteria one to one: Files changed tab in original order → toggle to
-  Smart order → summary strip with the file count → Core logic on top →
-  lock-file inside a collapsed Boilerplate group → Run Review → badges appear
-  with no reload → click a finding → land on that finding's card in Agent runs →
-  the API log pane showing the `SMART DIFF:` line with **no** `REVIEW model:` or
-  `INTENT CLASSIFIER model:` line beside it → the terminal running `verify:l03`
-  with both lanes green.
-- **Target a genuinely imported repo, not the seed.** Seeded PR files carry
-  `patch: null`, so no diff lines render and the line-rail overlay cannot be
-  filmed on seed data.
+- Model it on `demo/record-intent.ts`. Scene list: Files changed in original
+  order (findings exist and none is on screen) → toggle to Smart order → summary
+  strip → large-PR banner → Core logic on top → lock-file inside a collapsed
+  Boilerplate group → a `large file` chip → the file header's findings badge with
+  the severity rail and tag on the line → click the tag → land on that finding's
+  card in Agent runs → Back returns to `?tab=diff&view=smart`.
+- **The `SMART DIFF:` log line and the `verify:l03` terminal are NOT filmable**
+  and must not be staged. The first goes to the API process's stdout and no pane
+  in the UI renders it; the second is a terminal. Both ship as text beside the
+  frames.
+- **Target a genuinely imported repo, not the seed** — and it must **already
+  carry findings anchored to rendered lines**, because the recorder no longer
+  creates any. Seeded PR files carry `patch: null`, so no diff lines render and
+  the rail cannot be filmed. Put this in a preflight that runs *before* the
+  browser launches.
+- **A PR can be too large to review, and `pr_files` will not tell you.** The
+  first target, `dev-digest#3`, failed every agent with `Input too long:
+  1829704 input tokens, limit is 1048576`: its `git diff` is 3.6 MB ≈ 937k
+  tokens while its stored patch (477 KB) looks ordinary, because `loadDiff` reads
+  the clone and GitHub truncates the patch of a large file. Estimating review
+  cost from `pr_files` is wrong by an order of magnitude.
 - **Do not run any package's test suite while the recording is in flight** —
   `buildApp`'s orphan-run reaper will mark the live `running` row `failed` in the
   dev DB and cost a billed run.
@@ -827,7 +846,7 @@ evidence.
 | 27 | Files equal on every key sort by `path` ascending | **AT RISK** — every other assertion, and the demo's reproducibility, rest on this tie-break existing |
 | 28 | `additions + deletions === LARGE_FILE_LINES` → `is_large === false`; `+1` → `true` | **AT RISK, off-by-one.** Import the constant; never hardcode |
 | 29 | `is_large` counts `additions + deletions`, not `additions` alone | |
-| 30 | On first render, a Core file's diff body is in the document and the Boilerplate group's file bodies are **not** | |
+| 30 | On first render, a Core file's diff body is in the document and the Boilerplate group's file bodies are **not**. **The group ORDER half of this row moved to the server** (assertion 22): the client's `ROLE_ORDER` re-sort was removed as a second source of truth, and `SmartDiffViewer.test.tsx` now pins that the payload's order is rendered faithfully | |
 | 31 | A **boilerplate file that has findings** is still collapsed | **AT RISK** — `AUTO_EXPAND_MAX_LINES` and the design's `useState(finding_lines.length > 0)` both pull the other way; `smart.defaultOpen` must win |
 
 Assertions 1-21 live in `smart-diff-classify.test.ts`, 22-29 in

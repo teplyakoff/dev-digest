@@ -3,80 +3,50 @@
 Smart Diff: a PR's changed files grouped into Core logic / Wiring / Boilerplate
 and ordered by risk, computed with no model call.
 
-Recorded with `cd demo && DEMO_REPO=teplyakoff/dev-digest DEMO_PR=3 npm run record:smart-diff`;
-`summary.json` is written by that run and holds the exact PR, run ids and
-per-scene outcomes the frames show.
+Recorded with `cd demo && npm run record:smart-diff`; `summary.json` is written
+by that run and holds the exact PR, the hero finding and the per-scene claims the
+frames show.
 
 Plan: [`docs/plans/L03-smart-diff.md`](../../plans/L03-smart-diff.md).
 
-## Read this before the frames: the evidence comes from two PRs
-
-No single PR in this workspace can show all of it, and the reason is worth more
-than the video.
-
-| | `dev-digest#3` | `dev-digest#5` |
-|---|---|---|
-| lock-file | **yes** — `client/pnpm-lock.yaml` +827 −2 | no |
-| findings today | 0 | **13**, anchored to rendered lines |
-| review possible | **no** — see below | yes, already run |
-
-Acceptance criterion 3 needs a lock-file; criterion 4 needs findings on real
-diff lines. So frames **01-08 are `#3`** and frames **09-11 are `#5`**, and each
-caption below says which.
-
-**Why `#3` cannot be reviewed at all.** Every one of the five agents failed with
-
-```
-OpenRouter returned no choices for Review:
-Input too long: 1829704 input tokens, limit is 1048576 for this model
-```
-
-Its `git diff` is **3.6 MB ≈ 937k tokens** before prompt overhead. Note this is
-not visible from the stored PR files: `pr_files.patch` for `#3` totals 477 KB
-against `#5`'s 463 KB — nearly identical — because GitHub truncates the patch of
-a large file and `git diff` does not. `loadDiff` reads the clone, not the stored
-patch, so **`pr_files` is the wrong place to estimate what a review will cost.**
-
-The run cost **$0.00**: `tokens_in`, `tokens_out` and `cost_usd` are all zero or
-null on the five failed rows, because the request was rejected before it was
-processed. The eleven minutes were spent; the money was not.
+**This recording triggers no review and spends nothing.** 86 seconds, twelve
+frames, one unedited take against `teplyakoff/dev-digest#1` — a PR that already
+carried findings from a review run months ago.
 
 ## Frames
 
-| # | What it shows | PR |
-|---|---|---|
-| 01 | Files changed in **Original order** — no findings on any line | #3 |
-| 02 | Toggled to **Smart order**; the section label becomes *Smart Diff · grouped by role* | #3 |
-| 03 | Summary strip: file count, `+/−`, findings, changed lines — all derived in render | #3 |
-| 04 | **Large-PR banner**, from `split_suggestion.too_big` | #3 |
-| 05 | **Core logic on top**, with its role swatch and description | #3 |
-| 06 | The **Boilerplate** group and its description | #3 |
-| 07 | **`client/pnpm-lock.yaml` inside Boilerplate, collapsed** — the recorder asserted the card has exactly one child element, so no body is rendered | #3 |
-| 08 | A large file's **`large file`** chip | #3 |
-| 09 | **Findings on real lines**: the per-file `5 findings` badge, the severity rail in the gutter, and the `blocker` tag — `CRITICAL` renders as the word *blocker* | #5 |
-| 10 | Clicking that tag lands on **the finding's card in Agent runs**, expanded and ring-highlighted, at `?tab=findings&view=smart&finding=ca300577…` | #5 |
-| 11 | Browser **Back** returns to `?tab=diff&view=smart` — still in Smart order | #5 |
+| # | What it shows |
+|---|---|
+| 01 | Files changed in **Original order** — the order the API returns. This PR has 2 findings and **not one of them is on screen**: `DiffViewer` has no way to receive findings at all, so it is structural, not a flag. The recorder asserts zero `Open finding:` buttons here |
+| 02 | One toggle → **Smart order**; the label becomes *Smart Diff · grouped by role* |
+| 03 | Summary strip — `92 files · +7830 −55 · 2 findings · 7,885 changed lines` |
+| 04 | **Large-PR banner**, from `split_suggestion.too_big` |
+| 05 | **Core logic first**, with its swatch and description |
+| 06 | **Boilerplate last** — *generated / mechanical, skim* |
+| 07 | **`demo/package-lock.json` inside Boilerplate, collapsed** — asserted: the card has exactly one child element, so no body is rendered |
+| 08 | `demo/record.ts` flagged **`large file`** before anyone opens it |
+| 09 | The whole feature in one frame: summary strip, banner, Core logic, the file header's **`1 finding`** badge, and the severity rail with its `blocker` tag on line 74 |
+| 10 | Close-up: the **rail in the gutter** and **`blocker` on line 74** itself |
+| 11 | Clicking that tag lands on **the finding's card in Agent runs** — expanded, ring-highlighted, at `?tab=findings&view=smart&finding=…`, showing the rationale and *Suggested fix* |
+| 12 | Browser **Back** → `?tab=diff&view=smart`, still in Smart order |
 
-`devdigest-smart-diff.mp4` is the `#3` take end to end.
+The hero finding is a real one, found by the General Reviewer on this repo:
+*"runById map uses wrong key (run_id instead of id)"* on
+`client/…/FindingsTab/FindingsTab.tsx:74`.
 
-## What is NOT here, and why
+## What is deliberately NOT here
 
-- **"Badges appear after Run Review, with no reload" is not filmed as one
-  continuous shot.** It needs a PR that has no findings, gets reviewed, and then
-  shows them. `#3` has no findings but cannot be reviewed; `#5` can be reviewed
-  but already has them. Frames 09-11 prove the badges, the rail and the
-  click-through are real; they do not prove the moment of arrival. The
-  invalidator itself is wired at `PrDetailView.tsx` inside the existing
-  `onRunDone` handler.
-- **The recorder's own scene 8 frame was deleted rather than shipped.** It was
-  captured after a review that produced nothing, so it showed Smart Diff with no
-  badges — an empty frame in the badge scene's slot. Its sibling, "original order
-  after the review", was dropped for the same reason: with 0 findings in the
-  database, "no findings on screen" is arithmetic, not evidence.
-- **The deep-link scroll is unverified.** jsdom implements neither layout nor
-  `scrollIntoView`, and the browser pane used here does not paint, so nothing
-  available could observe it. Frame 10 shows the card expanded and highlighted;
-  whether the page scrolled to it is not claimed.
+- **A review running.** The first take filmed one and spent ~10 of its 11 minutes
+  on it. Running a review is L01's feature, not this one — Smart Diff is the
+  grouping, the risk order and the click-through, all of which are already true
+  of a PR reviewed at any point in the past. So this recorder triggers no review,
+  and the take is 86 seconds instead of 11 minutes.
+- **The moment badges arrive after a review**, therefore. That is S6's
+  invalidator, and it belongs to a test rather than to a camera.
+- **The deep-link scroll.** Frame 11 shows the card expanded and highlighted;
+  whether the page scrolled to it is not claimed. jsdom implements neither layout
+  nor `scrollIntoView`, and the browser pane used in development does not paint,
+  so nothing available could observe it.
 
 ## Text evidence a browser recorder cannot film
 
@@ -88,25 +58,41 @@ processed. The eleven minutes were spent; the money was not.
   call becomes visible in the log. `unmatched: 0` also answers the plan's open
   question: `pr_files.path` and a grounded finding's `file` agree on real data.
 - [`verify-l03.txt`](verify-l03.txt) — `bash scripts/verify-l03.sh`, both lanes
-  green, 33 server + 3 client tests, exit 0, with Docker irrelevant to either
-  lane.
+  green, 33 server + 3 client tests, exit 0.
 
-Neither could be filmed: the `SMART DIFF:` line goes to the API process's
-stdout and no pane in the web UI renders it, and Playwright cannot point a
-camera at a terminal.
+Neither could be filmed: the `SMART DIFF:` line goes to the API process's stdout
+and no pane in the web UI renders it, and Playwright cannot point a camera at a
+terminal.
+
+## Two things the first take cost, worth keeping
+
+**A PR can be unreviewable, and `pr_files` will not tell you.** The first target
+was `dev-digest#3`, chosen because it carries a lock-file. All five agents failed
+with `Input too long: 1829704 input tokens, limit is 1048576`. Its `git diff` is
+3.6 MB ≈ 937k tokens — but from the database it looks ordinary: 477 KB of stored
+patch against #5's 463 KB. `loadDiff` reads the clone, and GitHub truncates the
+patch of a large file while `git` does not. **Estimating what a review will cost
+from `pr_files` is wrong by an order of magnitude.** The run itself cost $0.00 —
+`tokens_in`, `tokens_out` and `cost_usd` are all zero or null, because OpenRouter
+rejected the request before processing it.
+
+**A frame can pass its own visibility check and still be blank.** Scene 8's first
+version asserted the badge and the tag were on screen, and shipped a still with
+neither. The gate tested `box.y >= 0`; the PR page keeps its breadcrumb, title and
+tabs in a sticky region ~350 px tall, so an element parked underneath reports a
+positive `y` and is invisible. `onScreen()` now hit-tests with
+`document.elementFromPoint` instead of trusting coordinates — which catches the
+sticky header, the caption band, and any overlay added later.
 
 ## Reproducing
 
 ```bash
-./scripts/dev.sh                                   # stack up
-cd demo && DEMO_REPO=teplyakoff/dev-digest DEMO_PR=3 npm run record:smart-diff
-bash scripts/verify-l03.sh                         # the text half
+./scripts/dev.sh                    # stack up
+cd demo && npm run record:smart-diff
+bash scripts/verify-l03.sh          # the text half
 ```
 
-Frames 09-11 were captured separately against `#5` with a one-off Playwright
-script that triggers no review; the main recorder could not produce them because
-its preflight requires a lock-file in the boilerplate group, which `#5` has not.
-
-**Do not run any package's test suite while a recording is in flight** —
-`buildApp`'s orphan-run reaper marks live `running` rows `failed` in the dev
-database, and it has already cost one billed run in this repo.
+The recorder's preflight refuses to launch the browser unless the target PR has
+real patch text, all the group structure the scenes need, and at least one
+finding anchored to a rendered line in a group that is open by default. A PR that
+cannot carry the scenes fails before Chromium starts rather than halfway through.

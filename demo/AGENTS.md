@@ -16,13 +16,16 @@ how to put one in a PR: `README.md`.
   extraction); the two experiment runs are found, not triggered.
 - `npm run record:intent` — the L03 Intent Layer. **Spends real money**: two
   review triggers plus the classifier calls behind them.
+- `npm run record:smart-diff` — the L03 homework Smart Diff. **Free** — it
+  triggers no review at all. It films a PR that ALREADY carries findings anchored
+  to rendered lines, and its preflight refuses to launch the browser otherwise.
 - `npm run typecheck`
 
 ## Map
 
 - `record.ts` — the review loop: one step per scene, each captioned.
-- `record-skills.ts` · `record-conventions.ts` · `record-intent.ts` — one lab's
-  feature each, same shape.
+- `record-skills.ts` · `record-conventions.ts` · `record-intent.ts` ·
+  `record-smart-diff.ts` — one lab's feature each, same shape.
 - `lib/zip.ts` · `lib/skills-fixture.ts` — the import fixture archive, built in
   memory rather than checked in, so a reader can diff its entries against the
   "ignored" list the preview renders.
