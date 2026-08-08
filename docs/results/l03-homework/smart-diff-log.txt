@@ -1,0 +1,13 @@
+$ # API stdout while the Files-changed tab loads Smart Diff (PR #5, 13 findings)
+
+SMART DIFF: computed from stored PR files + every stored review (no model call)
+    reqId: "req-gl"
+    pr_id: "d139cd8b-b01a-48cd-97b8-4d2df4ba7b61"
+    files: 100
+    reviews_joined: 5
+    findings: 13
+    unmatched: 0
+
+$ # and the negative half of the claim, over the whole session's API log:
+$ grep -c 'REVIEW model:\|INTENT CLASSIFIER model:' <api-stdout>
+0

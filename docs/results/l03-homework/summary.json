@@ -1,0 +1,214 @@
+{
+  "recorded_at": "2026-08-08T11:34:43.359Z",
+  "repo": "teplyakoff/dev-digest",
+  "pr": 3,
+  "pr_id": "9c5a3904-3e27-499d-ab52-e3281aab7bc3",
+  "pr_title": "feat(l02): Skills, the Conventions Extractor, and the API Contract Reviewer experiment",
+  "pr_status": "merged",
+  "files": {
+    "count": 291,
+    "with_patch": 100
+  },
+  "smart_diff_before": {
+    "groups": [
+      {
+        "role": "core",
+        "files": 65
+      },
+      {
+        "role": "wiring",
+        "files": 34
+      },
+      {
+        "role": "boilerplate",
+        "files": 1
+      }
+    ],
+    "findings": 0,
+    "changed_lines": 10518,
+    "too_big": true,
+    "lock_file": {
+      "path": "client/pnpm-lock.yaml",
+      "additions": 827,
+      "deletions": 2
+    },
+    "large_file": {
+      "path": "client/eslint-suppressions.json",
+      "role": "core",
+      "additions": 312,
+      "deletions": 0
+    }
+  },
+  "smart_diff_after": {
+    "groups": [
+      {
+        "role": "core",
+        "files": 65
+      },
+      {
+        "role": "wiring",
+        "files": 34
+      },
+      {
+        "role": "boilerplate",
+        "files": 1
+      }
+    ],
+    "findings": 0
+  },
+  "no_reload_proof": {
+    "marker_survived": true,
+    "marker_still_alive_after_scene_11": true,
+    "smart_diff_refetched_on_tab_click": true,
+    "caveat": "No reload occurred (marker intact). Whether S6's invalidator or the 30s staleTime triggered the refetch is not distinguished by this take."
+  },
+  "finding_clicked": null,
+  "original_mode_finding_tags_after_review": 0,
+  "scenes": [
+    {
+      "n": 1,
+      "name": "Files changed in original order",
+      "filmed": true,
+      "note": "Filmed BEFORE any review, so this frame alone does not prove findings are hidden in original mode — scene 11 is the frame that does."
+    },
+    {
+      "n": 2,
+      "name": "Toggle to Smart order, section label flips",
+      "filmed": true
+    },
+    {
+      "n": 3,
+      "name": "Summary strip + large-PR banner",
+      "filmed": true
+    },
+    {
+      "n": 4,
+      "name": "Core logic group on top, swatch + description",
+      "filmed": true
+    },
+    {
+      "n": 5,
+      "name": "Lock-file inside a collapsed Boilerplate group",
+      "filmed": true,
+      "note": "asserted: card has exactly one child, so no body"
+    },
+    {
+      "n": 6,
+      "name": "A large file's `large file` chip",
+      "filmed": true
+    },
+    {
+      "n": 7,
+      "name": "Run Review → every enabled agent",
+      "filmed": true,
+      "note": "5 run(s)"
+    },
+    {
+      "n": 8,
+      "name": "Badges/rails appear with no reload",
+      "filmed": false,
+      "note": "no line-anchored finding; only file badges are visible"
+    },
+    {
+      "n": 9,
+      "name": "Finding click-through to its card",
+      "filmed": false,
+      "note": "no line-anchored finding to click"
+    },
+    {
+      "n": 10,
+      "name": "Back returns to ?tab=diff&view=smart",
+      "filmed": false,
+      "note": "scene 9 did not run"
+    },
+    {
+      "n": 11,
+      "name": "Original order after the review still shows no findings",
+      "filmed": true,
+      "note": "ADDED beyond the plan's list, and free: scene 1 is filmed before any review exists, so on its own it cannot carry this criterion"
+    }
+  ],
+  "failures": [],
+  "not_filmable": [
+    {
+      "plan_scene": "the API log pane showing the `SMART DIFF:` line with no model line beside it",
+      "why": "That line is written with the Fastify request logger in `server/src/modules/smart-diff/service.ts:255` and goes to the API process's stdout. There is no pane in the web UI that renders the API's own log, so a browser recorder has nothing to point a camera at.",
+      "capture_instead": "Text evidence: tail the API stdout while loading the Files tab and grep for `SMART DIFF:`; the claim is that NO `REVIEW model:` or `INTENT CLASSIFIER model:` line appears beside it."
+    },
+    {
+      "plan_scene": "the terminal running `verify:l03` with both lanes green",
+      "why": "A Playwright browser recorder cannot film a terminal.",
+      "capture_instead": "Text evidence: `bash scripts/verify-l03.sh` output, pasted verbatim."
+    }
+  ],
+  "agents": [
+    {
+      "name": "General Reviewer",
+      "model": "deepseek/deepseek-v4-flash"
+    },
+    {
+      "name": "Security Reviewer",
+      "model": "deepseek/deepseek-v4-flash"
+    },
+    {
+      "name": "Performance Reviewer",
+      "model": "deepseek/deepseek-v4-flash"
+    },
+    {
+      "name": "Test Quality Reviewer",
+      "model": "deepseek/deepseek-v4-flash"
+    },
+    {
+      "name": "API Contract Reviewer",
+      "model": "deepseek/deepseek-v4-flash"
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "4cee8dab-87b8-4296-bf79-922b2bebd5a0",
+      "agent": "API Contract Reviewer",
+      "status": "failed",
+      "model": "deepseek/deepseek-v4-flash",
+      "cost_usd": null,
+      "findings": 0,
+      "score": null
+    },
+    {
+      "run_id": "9757745d-fe60-4905-8907-23cc7d35dd90",
+      "agent": "Test Quality Reviewer",
+      "status": "failed",
+      "model": "deepseek/deepseek-v4-flash",
+      "cost_usd": null,
+      "findings": 0,
+      "score": null
+    },
+    {
+      "run_id": "11ff70ae-ebd9-426d-8143-4f039d604960",
+      "agent": "Performance Reviewer",
+      "status": "failed",
+      "model": "deepseek/deepseek-v4-flash",
+      "cost_usd": null,
+      "findings": 0,
+      "score": null
+    },
+    {
+      "run_id": "7b5e8019-8cb4-41e3-b1ad-1b33667e7d92",
+      "agent": "Security Reviewer",
+      "status": "failed",
+      "model": "deepseek/deepseek-v4-flash",
+      "cost_usd": null,
+      "findings": 0,
+      "score": null
+    },
+    {
+      "run_id": "6eab48f3-1ef2-4fb3-be49-2d863d1f7aa4",
+      "agent": "General Reviewer",
+      "status": "failed",
+      "model": "deepseek/deepseek-v4-flash",
+      "cost_usd": null,
+      "findings": 0,
+      "score": null
+    }
+  ],
+  "total_cost_usd": null
+}
