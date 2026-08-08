@@ -155,6 +155,43 @@ _(no entries yet)_
   env var; that is untried, and `next.config.mjs` is in the reviewed
   `package-config` group, so it belongs in its own change. (2026-08-06)
 
+- **Deleting an export while `pnpm dev` is running leaves a phantom compile error
+  that OUTLIVES the fix, and no gate can see it.** Removing
+  `FOCUS_SCROLL_MAX_FRAMES` from `FindingsPanel/constants.ts` and `orderedGroups`
+  from `SmartDiffViewer/helpers.ts` took a few seconds, during which the watcher
+  compiled a state where the export was gone but the import was not. Next kept
+  `Attempted import error: 'orderedGroups' is not exported from './helpers'` in
+  its issue counter **after the code was valid again**, so the browser showed an
+  error while `pnpm typecheck`, `pnpm lint` and 177 tests were all green — they
+  read the final state on disk and know nothing about the watcher's history. The
+  tell is that the reported symbol no longer exists in the source at all: `grep
+  -rn '<symbol>' client/src` returns nothing. Fix is a dev-server restart, plus
+  Cmd+Shift+R in any tab still holding the old page. Do not go looking for the
+  bug in the code — there isn't one. (2026-08-08)
+
+- **Neither jsdom nor a non-painting browser pane can observe scrolling, and the
+  way each fails invites the opposite conclusion.** jsdom implements no layout
+  and no `scrollIntoView`, so every test here asserts *a call*, never a movement.
+  Worse, a browser pane with `document.visibilityState === "hidden"` runs no
+  `requestAnimationFrame` **and** no `behavior: "smooth"` animation — while a
+  manual `el.scrollIntoView({block:"center"})` with no `behavior` works fine,
+  which makes "the scroll mechanics are fine, so the app's code path is broken"
+  look proven when nothing of the sort was shown. Three consecutive fix rounds on
+  `FindingsPanel`'s deep-link scroll were driven off measurements that
+  environment could not make. Before concluding anything about scrolling, check
+  `document.visibilityState` and whether a bare `requestAnimationFrame` fires at
+  all; if it does not, you cannot test this here — it needs a headed browser or
+  an `e2e/specs/*.flow.json`. (2026-08-08)
+
+- **A card at index 0 is a false positive for "the deep link worked".**
+  `FindingsPanel` renders `defaultExpanded={i === 0}` and `focusIdx` starts at
+  `0`, so the first card is expanded and ring-highlighted whether or not the
+  focus effect ever ran. Verifying `?finding=<id>` against the first finding in
+  the list therefore proves nothing, and it read as a working chain for a while
+  here. Always deep-link to a card that is **not** first — the tell is that the
+  target's expanded text is longer than its neighbours' while `getComputedStyle`
+  on the first card reports `boxShadow: none`. (2026-08-08)
+
 ## Codebase Patterns
 
 - **A route-local test's path to `messages/` is EIGHT levels up, and getting it
@@ -287,9 +324,34 @@ _(no entries yet)_
   `729ddc3e` = `screen_conv_conf.jsx`. The module names are in a leading comment
   on line 1 of each decoded blob, not in the manifest. (2026-08-05)
 
+- **React 19 flushes passive effects INSIDE RTL's synchronous `render()`, so a
+  spy attached after `render()` never sees an effect that fires on mount.**
+  `ReviewRunAccordion.test.tsx` attached a per-element `scrollIntoView` spy after
+  rendering and failed with `expected "spy" to be called 1 times, but got 0
+  times` — which reads as "the component never scrolls" and is wrong. It cost a
+  wrong fix first: the production code was wrapped in `requestAnimationFrame` to
+  make the test pass, which then silently dropped the scroll in any backgrounded
+  tab. Attach the spy to `Element.prototype` in `beforeEach`, before `render()`,
+  and `delete` it in `afterEach`. A test's spy-attachment order must never
+  dictate when production code runs. (2026-08-08)
+
+- **next-intl needs explicit ICU plurals — `"{count} findings"` renders `1
+  findings`.** The form that works is
+  `"{count, plural, one {# finding} other {# findings}}"`, and `#` is the
+  placeholder inside a plural arm, not `{count}`. This bit four keys in
+  `messages/en/` at once (`smartDiff.filesCount`, `findingsBadge`, `summary`, and
+  `diffViewer.findingsBadge`) because the singular case only appears when real
+  data happens to produce exactly one. Nothing type-checks it: a missing plural
+  arm is a runtime string, not an error. Grep `"{count}` in `messages/` when
+  adding a counted noun. (2026-08-08)
+
 ## Recurring Errors & Fixes
 
-_(no entries yet)_
+- `Attempted import error: 'X' is not exported from './Y'` in the browser while
+  `pnpm typecheck`, `pnpm lint` and `pnpm test` are all green → a stale Next dev
+  compile, not a bug. Confirm with `grep -rn 'X' client/src` returning nothing,
+  then restart the dev server and hard-reload the tab. See the fuller entry under
+  *What Doesn't Work*. (2026-08-08)
 
 ## Session Notes
 
@@ -343,6 +405,20 @@ _(no entries yet)_
   Stats — usage and token cost only. The design's pull-frequency and accept-rate
   tiles were left out rather than stubbed: nothing links a finding to the skill
   that caused it.
+
+- **2026-08-08** — L03 homework, Smart Diff client lane. Built `useSmartDiff`
+  with a named invalidator, one optional `smart?` capability on the shared
+  `FileCard`/`CodeLine`, a route-local `SmartDiffViewer` behind a URL-bound
+  toggle, and the finding → Agent-runs click chain. `DiffViewer.tsx` was left
+  untouched on purpose, which is what makes "no findings in original mode" a
+  type-system property rather than a runtime flag. Two decisions overrode the
+  plan after live evidence: the toggle keeps `router.replace` while opening a
+  finding uses `router.push`, because Back could not otherwise return to
+  `?tab=diff&view=smart`; and the client's `ROLE_ORDER` re-sort was deleted so
+  the server owns group order alone. Most of the session's cost went to a scroll
+  that could not be observed in either available environment — see the two
+  entries under *What Doesn't Work*; the honest outcome is that every other link
+  of the chain is confirmed in the live app and the scroll is not.
 
 ## Open Questions
 

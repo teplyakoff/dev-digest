@@ -195,6 +195,32 @@ would be obvious to anyone reading the code, don't write it.
   cheap pass got expensive" from "the price estimate was wrong", and a cost
   regression here will look like model drift if you do not read it. (2026-08-06)
 
+- **Extends the 2026-08-06 `Parameters<typeof fn>[N]` entry above: a
+  repository's inferred RETURN type leaks row shapes the same way, and the same
+  rule stays blind.** `reviewRepo.getPrFiles` is
+  `Promise<(typeof t.prFiles.$inferSelect)[]>` and `reviewsForPull` returns rows
+  built from `$inferSelect`, so `modules/smart-diff/service.ts` field-read both
+  and depended on two table shapes with **no `db/schema` import** —
+  `RING_2_FORBIDDEN` in `eslint.config.js` cannot fire on that either. The
+  parameter-position fix was already written down; the return position was not,
+  and this was the second instance. Remedy is the same shape as
+  `diff-loader.ts`'s: declare locally the fields the service actually reads
+  (`PrFileRef`, `FindingRef`) and type the calls through them. A tell that you
+  have one of these: a `as Severity`-style cast in a service, which exists only
+  because a `text` column arrived as `string`. (2026-08-08)
+
+- **`eslint.config.js` enumerates the ring globs by literal FILENAME, so a new
+  module file named anything else is covered by no rule at all.** The lists name
+  `service.ts`, `routes.ts`, `repository.ts`, `repository/**`, `helpers.ts`,
+  `constants.ts`, `run-executor.ts`, `diff-loader.ts`, `pipeline/**`.
+  `modules/smart-diff/classify.ts` — the file holding that whole feature's
+  decision logic — matched none, so it could have taken `db/schema` or a sibling
+  import with no error, while the module as a whole looked lint-clean. Adding a
+  file whose name is not on that list means editing the glob list in the same
+  change. Verify it actually bites rather than assuming: plant
+  `import * as t from '../../db/schema.js'` in the new file, run `pnpm lint`,
+  expect an error naming `no-restricted-imports`, then revert. (2026-08-08)
+
 ## Codebase Patterns
 
 - The Zod contracts are **vendored twice — `server/src/vendor/shared/**` and
@@ -314,6 +340,30 @@ would be obvious to anyone reading the code, don't write it.
   its own line. (3) Scope on `agent_runs.workspace_id`; `run_traces` has no
   workspace column, only the run FK. (2026-08-05)
 
+- **One row in `reviews` is one AGENT, not one review pass — so "the latest
+  review" is whichever agent finished last, and it is usually not the one with
+  the findings.** A single Run Review writes a `kind: 'review'` row per agent.
+  On `teplyakoff/dev-digest#5` the newest row was API Contract Reviewer with **0
+  findings**, while Test Quality Reviewer (10) and General Reviewer (3) sat
+  behind it — so `reviews.find(r => r.review.kind === 'review')` reported zero
+  for a PR that really had 13. `modules/smart-diff/service.ts` now unions every
+  `kind: 'review'` row instead; the cost, taken knowingly, is that a re-run
+  agent's superseded findings stay visible until its older review is deleted.
+  Note the seed makes this worse: its findings hang off a review row with **no
+  `run_id`**, so they are unreachable from the Agent-runs tab entirely. Check
+  with `select r.kind, a.name, count(f.id) from reviews r left join findings f
+  on f.review_id=r.id left join agents a on a.id=r.agent_id where r.pr_id=…
+  group by r.id, a.name`. (2026-08-08)
+
+- **`getPrFiles` issues no `ORDER BY`, so there is no such thing as a PR's file
+  order.** `modules/reviews/repository/pull.repo.ts` is
+  `db.select().from(t.prFiles).where(eq(t.prFiles.prId, prId))` — rows come back
+  in whatever order Postgres has them, which is insertion order in practice.
+  Anything user-facing that says "original order" is therefore describing an
+  implementation detail, not PR order and not alphabetical order; a plan that
+  claims otherwise is wrong, and one did. If an ordering actually matters, sort
+  explicitly at the point of use rather than trusting the read. (2026-08-08)
+
 ## Tool & Library Notes
 
 - **`db.execute()` returns the ROWS, not a `{ rows }` wrapper — this codebase is
@@ -356,6 +406,13 @@ would be obvious to anyone reading the code, don't write it.
 
 - `relation ... does not exist` on a fresh boot → migrations were never applied.
   The server does not migrate on boot by design. Run `pnpm db:migrate`. (2026-07-27)
+
+- `Error: No host port found for host IP` from testcontainers' `startContainer`
+  during `pnpm test` → a flake in parallel container startup, not your change.
+  Observed on `test/intent.it.test.ts` roughly once in six full runs; it passes
+  in isolation and on the next full run. Re-run once before investigating, and
+  say so rather than retrying until green — a suite that fails one run in six is
+  worth naming, not hiding. (2026-08-08)
 
 - `expected [ { …(16) }, { …(16) } ] to have a length of 1 but got 2` in
   `reviews.it.test.ts` after touching `REVIEW_FIXTURE` → the fixture feeds
@@ -436,6 +493,18 @@ would be obvious to anyone reading the code, don't write it.
   empty knowledge layer. Deliberately did NOT implement the design's
   pull-frequency and accept-rate tiles: no table links a finding to the skill
   that provoked it, so both numbers would have been invented.
+
+- **2026-08-08** — L03 homework, Smart Diff server lane. New
+  `modules/smart-diff/` (`constants` → `classify` → `service` → `routes`)
+  computing role grouping and risk order from path patterns and persisted
+  findings, with no model call: the service holds no reachable LLM adapter, a
+  stub `llm()` that throws is asserted never called, and the it-test pins that
+  `agent_runs` is unchanged across the request. Two things only running it
+  revealed — that one `reviews` row is one agent (the endpoint reported 0
+  findings on a PR with 13), and that `getPrFiles` has no `ORDER BY`; both are
+  entries above. A review pass also found that `classify.ts` sat outside every
+  lint ring glob, which was fixed by extending the glob list and proved by
+  planting a forbidden import and watching `pnpm lint` fail.
 
 ## Open Questions
 

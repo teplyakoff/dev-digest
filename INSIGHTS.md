@@ -112,6 +112,31 @@ here. Here is for what has no package at all.
   echo, a heredoc, a doc edit — is blocked too; that is documented and accepted,
   and costs one `PSR_SKIP=1`. (2026-08-06)
 
+- **A plan's factual premises are not reviewed by anything, and a wrong one
+  survives every gate.** `docs/plans/L03-smart-diff.md:499` asserted that the
+  Files tab's original mode is "alphabetical by path". It is not — `getPrFiles`
+  has no `ORDER BY` — and the claim had already been through planning and review.
+  A second premise in the same plan was self-contradictory: S9 specified
+  `router.replace` while the end-to-end checklist required browser Back to return
+  to `?tab=diff&view=smart`, which `replace` cannot do because it overwrites the
+  entry Back would return to. Neither is catchable by typecheck, lint or tests,
+  because both are claims *about* the code rather than code. When a plan states a
+  fact about existing behaviour, verify it against the source before building on
+  it, and treat a plan that both prescribes a mechanism and demands an outcome
+  that mechanism forbids as a question for the author, not a puzzle to solve
+  silently. (2026-08-08)
+
+- **A verification script that cannot be shown to go red is not evidence.**
+  `scripts/verify-l03.sh` was written, ran green, and could have shipped there —
+  a script whose lanes silently matched zero test files would have printed the
+  same two `PASS` lines. Proving it: append a deliberately failing `it()` to one
+  of the files it filters on, run it, confirm one `FAIL`, confirm the *other*
+  lane still ran (that is what `set -uo pipefail` without `-e` buys), confirm
+  exit 1, then restore the file and verify with `md5` that it is byte-identical.
+  The same applies to a lint rule added to cover a new path: plant the violation,
+  watch it error, revert. Costs two minutes; without it the check is decoration.
+  (2026-08-08)
+
 ## Codebase Patterns
 
 - **A review subagent that needs two skills in one pass takes no `Skill` tool —
@@ -300,6 +325,20 @@ _(no entries yet)_
   marks live billed reviews `failed` in the dev database** (written up in
   `server/INSIGHTS.md`, tracked as separate work off `main`).
 
+- **2026-08-08** — L03 homework, Smart Diff, S1–S10b built through `implementer`
+  / `test-writer` with `architecture-reviewer` and `plan-verifier` over the
+  result, then `/pr-self-review`. The orchestration worked: two disjoint package
+  lanes ran in parallel after the contract landed, and both reviewers found real
+  defects the passes had missed (a ring-2 row leak, a lint blind spot, a severity
+  enum the client had already drifted). What did **not** work was trusting
+  measurements the environment could not make — three fix rounds went into a
+  scroll that neither jsdom nor a non-painting browser pane can observe, and the
+  correction only came from checking `document.visibilityState`. Two of the
+  plan's own premises turned out false under live data (see *What Doesn't Work*),
+  both found by running the feature against a real imported PR rather than the
+  seed, which could not exercise it at all. Ended `CLEAN` at 0 blockers after one
+  HIGH and three MEDIUMs were fixed inside the run.
+
 ## Open Questions
 
 - `reviewer-core/test/**` matches **no group** in
@@ -330,3 +369,15 @@ _(no entries yet)_
   subagent's own `tools` / `disallowedTools` frontmatter, or only in
   `settings.json`? If it works in frontmatter, the plugin-collision problem
   becomes a config fix instead of a convention held up by prose.
+
+- `.claude/skills/pr-self-review/severity.md` §3.2 lists "a direct edit to
+  `*/src/vendor/**`" on the closed BLOCKER list, but `server/AGENTS.md` states
+  that `server/src/vendor/shared/**` **is** the source and is exactly where a
+  contract change must be made. The two cannot both be right, and a run that
+  changes a contract has to choose. The `vendor-sync` gate already resolves it
+  correctly — it checks that both copies moved together rather than forbidding
+  the edit — so the wording looks like the stale half. Settles by a maintainer
+  narrowing §3.2 to `client/src/vendor/**`; until then a reviewer has to know
+  that the gate, not the prose, is the authority. Note the fix invalidates every
+  cached group reviewed against `pr-self-review`'s own files, so it belongs in
+  its own change.
