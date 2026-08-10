@@ -5,6 +5,11 @@ import { Icon, Badge, Button, SectionLabel, EmptyState } from "@devdigest/ui";
 import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
+// Direct module import — the IntentCard folder deliberately ships no `index.ts`
+// (frontend-architecture §12 forbids new barrels). Its siblings all have one;
+// they predate the rule and are not a precedent to copy.
+import { IntentCard } from "../IntentCard/IntentCard";
+import { usePrIntent, useDeriveIntent } from "@/lib/hooks/reviews";
 import { s } from "./styles";
 import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
@@ -21,6 +26,10 @@ interface FindingsTabProps {
   /** owner/repo + head sha — used to deep-link a finding's file:line to GitHub. */
   repoFullName?: string | null;
   headSha?: string | null;
+  /** `?finding=<id>` — the finding a Smart Diff click asked us to open. */
+  focusFindingId?: string | null;
+  /** The run that owns it, resolved upstream from the reviews already fetched. */
+  focusRunId?: string | null;
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
@@ -37,10 +46,22 @@ export function FindingsTab({
   cancelMutation,
   repoFullName,
   headSha,
+  focusFindingId,
+  focusRunId,
   onOpenTrace,
   onDelete,
   onRunDone,
 }: FindingsTabProps) {
+  // The intent card's data lives HERE rather than in `IntentCard`, which keeps
+  // that component presentational and adds ZERO props to this one — it already
+  // takes 14, and react-best-practices wants 5-7, so growing it further is the
+  // worse of the two options.
+  const intentQuery = usePrIntent(prId);
+  const deriveIntent = useDeriveIntent(prId);
+  const handleDeriveIntent = useCallback(() => {
+    deriveIntent.mutate();
+  }, [deriveIntent]);
+
   const handleCancelAll = useCallback(() => {
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
   }, [liveRunIds, cancelMutation]);
@@ -71,6 +92,15 @@ export function FindingsTab({
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
 
+  // An incoming `?finding=<id>` drives the SAME mechanism the Timeline drives:
+  // open + scroll the owning run's accordion. Synchronising this component with
+  // an external system (the URL) is what an Effect is for; the scroll and the
+  // un-filtering below it are not derivable from props.
+  React.useEffect(() => {
+    if (!focusFindingId || !focusRunId) return;
+    setTarget((p) => ({ runId: focusRunId, n: (p?.n ?? 0) + 1 }));
+  }, [focusFindingId, focusRunId]);
+
   // Reviews carry no cost/token usage — that lives on the agent_runs row. Index
   // the runs we already fetched so each accordion can show what its run cost.
   const runById = React.useMemo(
@@ -93,6 +123,18 @@ export function FindingsTab({
 
   return (
     <section>
+      {/* "Before the review results" is literally the top of this tab: the tab
+          LABELLED "Agent runs" is `?tab=findings`, and `?tab=overview` renders
+          only `pr.body`. The design bundle puts an intent block on a PR-Brief
+          Overview card, but the rest of that brief is unbuilt — this moves there
+          when it lands. */}
+      <IntentCard
+        intent={intentQuery.data?.intent}
+        headSha={headSha}
+        onDerive={handleDeriveIntent}
+        deriving={deriveIntent.isPending}
+      />
+
       {liveRunIds.length > 0 && (
         <div style={s.liveRunSection}>
           <SectionLabel
@@ -185,6 +227,7 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            focusFindingId={focusFindingId}
             run={review.run_id ? runById.get(review.run_id) : undefined}
           />
         ))

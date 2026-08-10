@@ -4,7 +4,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Icon } from "@devdigest/ui";
+import { Icon, SEV, type Severity } from "@devdigest/ui";
 import type { PrFile } from "@/lib/types";
 import { AUTO_EXPAND_MAX_LINES } from "../constants";
 import { parsePatch, type Line } from "../helpers";
@@ -15,7 +15,14 @@ import {
   type CommentThread,
   type DiffCommentApi,
 } from "../comments";
-import { s, chevronFor } from "../styles";
+import {
+  findingsForLine,
+  partitionFindings,
+  renderedLineNumbers,
+  severityTagLabel,
+  type SmartFileView,
+} from "../findings";
+import { s, chevronFor, unanchoredChipFor } from "../styles";
 import { CodeLine } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
 
@@ -30,12 +37,33 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+export function FileCard({
+  file,
+  commenting,
+  smart,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  /** Smart Diff only. Absent → this card renders exactly as it always has. */
+  smart?: SmartFileView;
+}) {
   const t = useTranslations("shell");
+  // Smart Diff's ROLE policy outranks the size rule: a one-line lock-file bump
+  // is small, and "Boilerplate starts collapsed" has to hold anyway.
   const [open, setOpen] = React.useState(
-    (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
+    smart?.defaultOpen ??
+      ((file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES)
   );
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
+
+  // Same split as comments: findings that land on a rendered line vs. ones no
+  // line can host. On seed data (`patch: null`) every finding is unanchored, so
+  // this is the normal path, not a fallback.
+  const smartFindings = smart?.findings;
+  const { anchored, unanchored } = React.useMemo(
+    () => partitionFindings(smartFindings ?? [], renderedLineNumbers(lines)),
+    [smartFindings, lines],
+  );
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -72,6 +100,27 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
             {commentCount}
           </span>
         )}
+        {smart && smart.isLarge && (
+          <span style={s.largeChip}>
+            <Icon.AlertTriangle size={11} />
+            {t("diffViewer.largeFile")}
+          </span>
+        )}
+        {smart && smart.findings.length > 0 && (
+          // Opens (never closes) the card: a reader clicking the count wants the
+          // findings, and a collapsed group's file is the case that matters.
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(true);
+            }}
+            style={s.findingsBadge}
+          >
+            <Icon.AlertOctagon size={12} />
+            {t("diffViewer.findingsBadge", { count: smart.findings.length })}
+          </button>
+        )}
       </div>
       {open && (
         <div style={s.fileBody}>
@@ -85,8 +134,32 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
+                findings={smart ? findingsForLine(ln, anchored) : undefined}
+                onOpenFinding={smart?.onOpenFinding}
               />
             ))
+          )}
+          {smart && unanchored.length > 0 && (
+            <div style={s.unanchoredWrap}>
+              <span style={s.unanchoredTitle}>
+                {t("diffViewer.unanchoredTitle", { count: unanchored.length })}
+              </span>
+              {unanchored.map((f) => {
+                const sev = SEV[f.severity as Severity];
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    title={f.title}
+                    aria-label={t("diffViewer.openFinding", { title: f.title })}
+                    onClick={() => smart.onOpenFinding(f.id)}
+                    style={unanchoredChipFor(sev.c, sev.bg)}
+                  >
+                    {severityTagLabel(f.severity)} · {f.title}
+                  </button>
+                );
+              })}
+            </div>
           )}
           {commenting && commenting.showComments && <OutdatedComments threads={outdated} />}
         </div>

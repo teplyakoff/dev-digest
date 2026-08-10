@@ -109,7 +109,119 @@ _(no entries yet)_
   `SkillBodyEditor.test.tsx` asserts a 200-line body renders the same height as
   a 1-line one. (2026-08-03)
 
+- **A component test that passes the prop by hand proves nothing about whether
+  anything passes it, and both halves look correct in isolation.**
+  `AgentCard.test.tsx` had asserted the skill-count badge since L02 by rendering
+  `<AgentCard skillCount={3} />` — green, and the badge had never once appeared
+  in the app, because `AgentsListView` never passed it. Neither file is wrong on
+  its own; the gap is between them, and no amount of component-level coverage
+  can see it. Whenever a component takes an optional display prop, the guard
+  that matters is a test on the VIEW that renders it from mocked API data
+  (`AgentsListView.test.tsx` mocks `useAgents` and asserts the badge text). Mock
+  the shell — `vi.mock("…/components/app-shell")` — or you inherit the repo
+  switcher, theme and router. (2026-08-05)
+
+- **Corrects the symptom in the 2026-08-03 `pnpm build` entry above: the routes
+  do NOT go blank. The page renders perfectly and loses only its CSS** — which
+  is a much worse failure, because it names the wrong culprit. What you actually
+  see is the full app in serif type: correct markup, correct data, every card and
+  list in place, links underlined and blue, no dark theme. It reads as "my styles
+  broke", so the next twenty minutes go into `styles.ts`, the design tokens, or
+  whichever component was touched last — none of which is the cause. The cause is
+  that a production build overwrote `client/.next` under a running dev server.
+  Two tells that cost seconds instead: the **"1 Issue"** badge bottom-left, and
+  in the network log **exactly one 404 on
+  `_next/static/css/app/layout.css?v=<timestamp>`** while every other request is
+  200. Recovery is unchanged — `rm -rf client/.next` **and** a full restart; the
+  running server cannot recover on its own, and reloading the page does nothing.
+  (2026-08-06)
+
+- **The `pnpm build` hazard is not "someone forgets" — it is baked into every
+  verification checklist in this repo, and prose will not save you.**
+  `docs/plans/L03-intent-layer.md` carries the warning twice, in S7 and in the
+  end-to-end block ("Stop `pnpm dev` first"), and the stack was still poisoned
+  during that very sweep — because the sweep is run as one `typecheck && lint &&
+  test && build` chain against a stack that was deliberately left up for manual
+  checking. Any checklist ending in `pnpm build` is a loaded gun pointed at a dev
+  server that a previous step told you to start. **There is no scratch-directory
+  escape hatch on this version** — `next build --distDir .next-verify` fails with
+  `error: unknown option '--distDir'` (checked 2026-08-06; `distDir` is a
+  `next.config.mjs` key, not a CLI flag, and the config here does not set it). So
+  today the only options are: stop the stack, build, restart it; or skip the
+  build and lose the one check that catches the webpack `.js`→`.ts` vendor trap.
+  Do not rely on remembering — the reminder is already written down twice and was
+  still ignored. Making this safe would mean `distDir: process.env.NEXT_DIST_DIR
+  ?? '.next'` in `next.config.mjs` so a verification build can be redirected by
+  env var; that is untried, and `next.config.mjs` is in the reviewed
+  `package-config` group, so it belongs in its own change. (2026-08-06)
+
+- **Deleting an export while `pnpm dev` is running leaves a phantom compile error
+  that OUTLIVES the fix, and no gate can see it.** Removing
+  `FOCUS_SCROLL_MAX_FRAMES` from `FindingsPanel/constants.ts` and `orderedGroups`
+  from `SmartDiffViewer/helpers.ts` took a few seconds, during which the watcher
+  compiled a state where the export was gone but the import was not. Next kept
+  `Attempted import error: 'orderedGroups' is not exported from './helpers'` in
+  its issue counter **after the code was valid again**, so the browser showed an
+  error while `pnpm typecheck`, `pnpm lint` and 177 tests were all green — they
+  read the final state on disk and know nothing about the watcher's history. The
+  tell is that the reported symbol no longer exists in the source at all: `grep
+  -rn '<symbol>' client/src` returns nothing. Fix is a dev-server restart, plus
+  Cmd+Shift+R in any tab still holding the old page. Do not go looking for the
+  bug in the code — there isn't one. (2026-08-08)
+
+- **Neither jsdom nor a non-painting browser pane can observe scrolling, and the
+  way each fails invites the opposite conclusion.** jsdom implements no layout
+  and no `scrollIntoView`, so every test here asserts *a call*, never a movement.
+  Worse, a browser pane with `document.visibilityState === "hidden"` runs no
+  `requestAnimationFrame` **and** no `behavior: "smooth"` animation — while a
+  manual `el.scrollIntoView({block:"center"})` with no `behavior` works fine,
+  which makes "the scroll mechanics are fine, so the app's code path is broken"
+  look proven when nothing of the sort was shown. Three consecutive fix rounds on
+  `FindingsPanel`'s deep-link scroll were driven off measurements that
+  environment could not make. Before concluding anything about scrolling, check
+  `document.visibilityState` and whether a bare `requestAnimationFrame` fires at
+  all; if it does not, you cannot test this here — it needs a headed browser or
+  an `e2e/specs/*.flow.json`. (2026-08-08)
+
+- **A card at index 0 is a false positive for "the deep link worked".**
+  `FindingsPanel` renders `defaultExpanded={i === 0}` and `focusIdx` starts at
+  `0`, so the first card is expanded and ring-highlighted whether or not the
+  focus effect ever ran. Verifying `?finding=<id>` against the first finding in
+  the list therefore proves nothing, and it read as a working chain for a while
+  here. Always deep-link to a card that is **not** first — the tell is that the
+  target's expanded text is longer than its neighbours' while `getComputedStyle`
+  on the first card reports `boxShadow: none`. (2026-08-08)
+
 ## Codebase Patterns
+
+- **A route-local test's path to `messages/` is EIGHT levels up, and getting it
+  wrong fails at import time with no hint of the right depth.** From
+  `src/app/repos/[repoId]/pulls/[number]/_components/<Name>/`, the correct import
+  is `"../../../../../../../../messages/en/<ns>.json"`. Seven `../` (the
+  intuitive count, stopping at `src/`) produces
+  `Failed to resolve import … Does the file exist?` and nothing suggests the
+  fix. Copy the specifier from a sibling — `RunTraceDrawer.test.tsx` has it
+  right — rather than counting. (2026-08-06)
+
+- **`@testing-library/user-event` is NOT a dependency of this package; every test
+  here uses `fireEvent`.** `package.json` carries only `@testing-library/react`
+  and `jest-dom`. The `react-testing-library` skill says "always `userEvent`,
+  never `fireEvent`", so following it literally produces
+  `Failed to resolve import "@testing-library/user-event"`. Either add the
+  package deliberately as its own change, or use `fireEvent` and say why in the
+  test — do not add it as a side effect of writing one test. (2026-08-06)
+
+- **A denormalized count is invalidated by the OTHER feature's mutation, and the
+  hook that owns it usually lives in a different file.** `GET /agents` carries
+  `skills_count` and `GET /skills` carries `used_by`, but the mutation that
+  changes both — `useSetAgentSkills` — is in `lib/hooks/skills.ts`, so it has to
+  invalidate `["agents"]` as well as its own keys. Same for `useDeleteSkill`:
+  deleting a skill unlinks it everywhere, so every agent's count moves. The
+  symptom of getting this wrong is not an error — it is a stale number that
+  looks right until you reload, which is exactly the kind of thing a demo
+  surfaces and a test does not. When you add a denormalized field to a list
+  endpoint, grep for every mutation that can change it and invalidate from
+  there. (2026-08-05)
 
 - The Zod contracts under `src/vendor/shared/**` are **hand-copied from
   `server/src/vendor/shared/**`, and there is no re-vendor script.** A field
@@ -191,9 +303,55 @@ _(no entries yet)_
   `5dd941dc-…815d` = `prdetail_runs.jsx`, `f798d8ad-…ff8a` = `screen_trace.jsx`.
   These are the visual source of truth when porting a screen. (2026-07-28)
 
+- **`MonoLink` with no `href` renders a `<button>`, so wrapping it in a
+  `next/link` nests a button inside an anchor.** The `href` prop is not "the
+  same link, typed" — it switches the primitive to an `<a target="_blank">`,
+  which is wrong for in-app navigation. For an internal destination pass
+  `onClick={() => router.push(...)}` and let the button be the control;
+  `SkillStatsTab` navigates to `/agents/:id?tab=skills` that way. Read the
+  vendored primitive before composing it — several in `src/vendor/ui/primitives`
+  change element type based on which props are set. (2026-08-05)
+
+- **Extends the 2026-07-28 design-bundle decode entry: L02 ships a SECOND bundle
+  with different UUIDs, and the line-170 recipe does not open it.**
+  `_assets/L02/DevDigest Design (standalone) (3).html` is the source of truth for
+  anything L02, and its manifest is not on the same line — find it with a regex
+  on `<script type="__bundler/manifest">` instead of indexing line 169, then
+  decode entries the same way (base64 → gzip). Useful UUID prefixes in that file:
+  `d71d023c` = `chrome.jsx` (the sidebar `NAV`, which is where the WORKSPACE /
+  SKILLS LAB split is specified), `2d3fde59` = `screen_skills.jsx`
+  (`SkillStatsTab`, `SkillCard`), `09ba214d` = `screen_agents.jsx`,
+  `729ddc3e` = `screen_conv_conf.jsx`. The module names are in a leading comment
+  on line 1 of each decoded blob, not in the manifest. (2026-08-05)
+
+- **React 19 flushes passive effects INSIDE RTL's synchronous `render()`, so a
+  spy attached after `render()` never sees an effect that fires on mount.**
+  `ReviewRunAccordion.test.tsx` attached a per-element `scrollIntoView` spy after
+  rendering and failed with `expected "spy" to be called 1 times, but got 0
+  times` — which reads as "the component never scrolls" and is wrong. It cost a
+  wrong fix first: the production code was wrapped in `requestAnimationFrame` to
+  make the test pass, which then silently dropped the scroll in any backgrounded
+  tab. Attach the spy to `Element.prototype` in `beforeEach`, before `render()`,
+  and `delete` it in `afterEach`. A test's spy-attachment order must never
+  dictate when production code runs. (2026-08-08)
+
+- **next-intl needs explicit ICU plurals — `"{count} findings"` renders `1
+  findings`.** The form that works is
+  `"{count, plural, one {# finding} other {# findings}}"`, and `#` is the
+  placeholder inside a plural arm, not `{count}`. This bit four keys in
+  `messages/en/` at once (`smartDiff.filesCount`, `findingsBadge`, `summary`, and
+  `diffViewer.findingsBadge`) because the singular case only appears when real
+  data happens to produce exactly one. Nothing type-checks it: a missing plural
+  arm is a runtime string, not an error. Grep `"{count}` in `messages/` when
+  adding a counted noun. (2026-08-08)
+
 ## Recurring Errors & Fixes
 
-_(no entries yet)_
+- `Attempted import error: 'X' is not exported from './Y'` in the browser while
+  `pnpm typecheck`, `pnpm lint` and `pnpm test` are all green → a stale Next dev
+  compile, not a bug. Confirm with `grep -rn 'X' client/src` returning nothing,
+  then restart the dev server and hard-reload the tab. See the fuller entry under
+  *What Doesn't Work*. (2026-08-08)
 
 ## Session Notes
 
@@ -225,6 +383,42 @@ _(no entries yet)_
   and `FindingsPanel` (toggle filter chips composing with hide-low-confidence).
   The predicted `common`-namespace fan-out from the 2026-07-28 entry landed
   exactly as warned — `RunHistory.test.tsx` had to add `common` to its messages.
+
+- **2026-08-06** — L03 Intent Layer UI. `IntentCard` at the top of
+  `?tab=findings` (the tab labelled "Agent runs"), `usePrIntent` /
+  `useDeriveIntent` joining `lib/hooks/reviews.ts`, and an "Intent" prompt block
+  in the trace drawer. `FindingsTab` owns the hooks and passes results down, so
+  the card stays presentational and the tab gains zero props — it already takes
+  14. The footer naming the model, the sources used and what could NOT be read is
+  entirely invented: the design bundle's INTENT mock is
+  `{intent, in_scope, out_of_scope}` only, and without that line a thin
+  derivation and a well-sourced one render identically. `pnpm build` after: the
+  shared First Load JS stayed at 102 kB, so the type-only contract import held.
+
+- **2026-08-05** — L02 mentor-feedback pass. Split the sidebar into WORKSPACE and
+  SKILLS LAB in `src/vendor/ui/nav.ts` (the design had it that way all along, and
+  both `/skills` and `/agents` already said "Skills Lab" in their breadcrumbs);
+  `nav-registry.test.ts` now pins section membership as well as routes, and the
+  command palette picked up the grouping for free because `useShellCommands`
+  already maps `group: g.section`. Fed `AgentCard`'s dormant skill-count badge
+  from the new `Agent.skills_count`, and added the skill editor's fourth tab,
+  Stats — usage and token cost only. The design's pull-frequency and accept-rate
+  tiles were left out rather than stubbed: nothing links a finding to the skill
+  that caused it.
+
+- **2026-08-08** — L03 homework, Smart Diff client lane. Built `useSmartDiff`
+  with a named invalidator, one optional `smart?` capability on the shared
+  `FileCard`/`CodeLine`, a route-local `SmartDiffViewer` behind a URL-bound
+  toggle, and the finding → Agent-runs click chain. `DiffViewer.tsx` was left
+  untouched on purpose, which is what makes "no findings in original mode" a
+  type-system property rather than a runtime flag. Two decisions overrode the
+  plan after live evidence: the toggle keeps `router.replace` while opening a
+  finding uses `router.push`, because Back could not otherwise return to
+  `?tab=diff&view=smart`; and the client's `ROLE_ORDER` re-sort was deleted so
+  the server owns group order alone. Most of the session's cost went to a scroll
+  that could not be observed in either available environment — see the two
+  entries under *What Doesn't Work*; the honest outcome is that every other link
+  of the chain is confirmed in the live app and the scroll is not.
 
 ## Open Questions
 

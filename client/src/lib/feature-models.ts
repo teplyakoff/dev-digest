@@ -22,8 +22,11 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: "review_intent",
     label: "PR Review · Intent",
     description: "Derives a PR’s intent and scope before review.",
-    defaultProvider: "openai",
-    defaultModel: "gpt-4.1",
+    // Mirrors the shared registry. MIND THE `-0731` SUFFIX: without it this is
+    // the model the seeded REVIEW agents run, and the intent classifier stops
+    // being a separate cheap pass while still appearing to work.
+    defaultProvider: "openrouter",
+    defaultModel: "deepseek/deepseek-v4-flash-0731",
   },
   {
     id: "risk_brief",

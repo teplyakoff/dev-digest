@@ -10,6 +10,7 @@
 | `e2e/**` | `e2e/INSIGHTS.md` |
 | `demo/**` | `demo/INSIGHTS.md` |
 | `server/src/modules/repo-intel/**` | `server/INSIGHTS.md` |
+| `.claude/**`, `docs/**`, `scripts/**`, root `AGENTS.md` / `CLAUDE.md` | root `INSIGHTS.md` |
 
 `repo-intel` is a module, not a package, and has no file of its own — its
 `AGENTS.md` sends insights up to the server's. Do not create one for it.
@@ -20,9 +21,17 @@ every package they affect, **reworded for that package** — a reader of
 The pnpm 11 `ERR_PNPM_IGNORED_BUILDS` entry, present in both `server/` and
 `client/` with different `allowBuilds:` lists, is the precedent.
 
-**Meta-work has no target.** Changes confined to `.claude/`, `docs/agent-prompts/`
-or the root `AGENTS.md` touch no package. Write nothing and say why — do not
-force the lesson into whichever file happens to be closest.
+**Meta-work goes to the root file.** Changes confined to `.claude/`,
+`docs/agent-prompts/` or the root `AGENTS.md` touch no package, and a lesson from
+them used to be discarded. It now has a home: root `INSIGHTS.md`, for the agent
+and skill infrastructure, cross-package conventions, and the scripts and docs at
+the root. The gate is unchanged — non-obvious, actionable cold, evidenced — and a
+meta lesson that fails it is still written nowhere.
+
+The root file is **not** the overflow bin for a package lesson you cannot place.
+If a reader of `server/INSIGHTS.md` would need it, it goes there. Root is for
+what has no package at all. (Supersedes the earlier "Meta-work has no target"
+rule, 2026-08-06.)
 
 ## The seven sections
 

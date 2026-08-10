@@ -1,0 +1,209 @@
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import type { PrFile, SmartDiff, SmartDiffFile, SmartDiffFinding } from "@devdigest/shared";
+// EIGHT levels up from a route-local `_components/<Name>/` folder — the
+// specifier is copied from RunTraceDrawer.test.tsx rather than counted
+// (client/INSIGHTS.md, "Codebase Patterns").
+import prReview from "../../../../../../../../messages/en/prReview.json";
+import shell from "../../../../../../../../messages/en/shell.json";
+import { SmartDiffViewer } from "./SmartDiffViewer";
+
+/* No `vi.mock` anywhere in this file, deliberately. `SmartDiffViewer` takes
+   `data` as a prop and never fetches, so a fixture is all it needs — if this
+   file ever needs to mock `@/lib/hooks/reviews`, the component has started
+   fetching and violates frontend-architecture §10.
+
+   `fireEvent`, not `userEvent`: `@testing-library/user-event` is not a
+   dependency of this package (client/INSIGHTS.md, 2026-08-06). */
+
+afterEach(cleanup);
+
+const CORE_PATH = "server/src/modules/reviews/service.ts";
+const WIRING_PATH = "server/src/modules/index.ts";
+const LOCK_PATH = "pnpm-lock.yaml";
+
+/** Hunk starts at new-side line 10, so the two added lines are 11 and 12. */
+const CORE_PATCH = [
+  "@@ -10,3 +10,5 @@ export class ReviewsService {",
+  "   async run() {",
+  "+const MAX_RETRIES = 99;",
+  "+await sleep(0);",
+  "   }",
+].join("\n");
+
+/** Hunk starts at new-side line 1, so the added line is 2. */
+const LOCK_PATCH = ["@@ -1,2 +1,3 @@", " lockfileVersion: '9.0'", "+sha512-deadbeef"].join("\n");
+
+/* `SmartDiff` carries no patch text, so the bodies come from the PR detail the
+   page already holds. The wiring file is deliberately absent: a path with no
+   matching PR file renders "no diff text", which is the seeded-data state. */
+const PR_FILES: PrFile[] = [
+  { path: CORE_PATH, additions: 2, deletions: 0, patch: CORE_PATCH },
+  { path: LOCK_PATH, additions: 1, deletions: 0, patch: LOCK_PATCH },
+];
+
+/**
+ * `finding_lines` is DERIVED from `findings` here, exactly as the contract
+ * demands (`brief.ts`) — a fixture that set the two independently would be
+ * pinning a payload the producer may never emit.
+ */
+function file(path: string, o: Partial<Omit<SmartDiffFile, "path">> = {}): SmartDiffFile {
+  const findings = o.findings ?? [];
+  return {
+    path,
+    pseudocode_summary: null,
+    additions: o.additions ?? 2,
+    deletions: o.deletions ?? 1,
+    finding_lines: [...new Set(findings.map((f) => f.line))].sort((a, b) => a - b),
+    findings,
+    is_large: o.is_large ?? false,
+  };
+}
+
+const CORE_FINDINGS: SmartDiffFinding[] = [
+  { id: "f-core-1", line: 11, severity: "CRITICAL", title: "Unbounded retry loop" },
+  { id: "f-core-2", line: 12, severity: "WARNING", title: "Sleep with zero delay" },
+];
+
+const LOCK_FINDING: SmartDiffFinding = {
+  id: "f-lock-1",
+  line: 2,
+  severity: "SUGGESTION",
+  title: "Lockfile churn",
+};
+
+/**
+ * Groups are passed through in the order the caller wrote them — the viewer no
+ * longer re-sorts, so the fixture's order IS the expected render order.
+ *
+ * The `core → wiring → boilerplate` guarantee moved to where it is produced:
+ * `smart-diff/service.ts` emits groups in `ROLE_ORDER` and omits the empty ones,
+ * pinned by `server/test/smart-diff-service.test.ts`. This file pins the
+ * property that is still the client's — that it renders the payload faithfully.
+ */
+function smartDiff(groups: SmartDiff["groups"]): SmartDiff {
+  return {
+    groups,
+    split_suggestion: { too_big: false, total_lines: 12, proposed_splits: [] },
+  };
+}
+
+function renderViewer(data: SmartDiff, onOpenFinding: (id: string) => void = vi.fn()) {
+  render(
+    // Both namespaces: the viewer's own strings are `prReview.smartDiff`, but
+    // the shared FileCard/CodeLine read `shell.diffViewer` — a shared component
+    // must not depend on a route namespace. One namespace renders raw keys.
+    <NextIntlClientProvider locale="en" messages={{ prReview, shell }}>
+      <SmartDiffViewer data={data} files={PR_FILES} onOpenFinding={onOpenFinding} />
+    </NextIntlClientProvider>,
+  );
+}
+
+describe("SmartDiffViewer", () => {
+  // Test-matrix assertion 30. The fixture is in the order the service really
+  // sends (`ROLE_ORDER`, empty groups omitted), because that is the payload this
+  // viewer will ever be handed; the "no re-sort" property is pinned separately
+  // below, where a non-canonical order can actually detect one.
+  it("renders each group's files under its own header, keeps a lock-file's body out of the document, and opens a finding from a core line", () => {
+    const onOpenFinding = vi.fn();
+    renderViewer(
+      smartDiff([
+        {
+          role: "core",
+          files: [file(CORE_PATH, { additions: 2, deletions: 0, findings: CORE_FINDINGS })],
+        },
+        { role: "wiring", files: [file(WIRING_PATH)] },
+        { role: "boilerplate", files: [file(LOCK_PATH, { additions: 1, deletions: 0 })] },
+      ]),
+      onOpenFinding,
+    );
+
+    // Group labels and file paths in document order — one assertion pinning both
+    // the render order AND which group each file landed in.
+    expect(
+      screen
+        .getAllByText(
+          /^(Core logic|Wiring|Boilerplate|server\/src\/modules\/reviews\/service\.ts|server\/src\/modules\/index\.ts|pnpm-lock\.yaml)$/,
+        )
+        .map((el) => el.textContent),
+    ).toEqual([
+      "Core logic",
+      CORE_PATH,
+      "Wiring",
+      WIRING_PATH,
+      "Boilerplate",
+      LOCK_PATH,
+    ]);
+
+    // Core starts expanded: its diff body is on screen…
+    expect(screen.getByText("const MAX_RETRIES = 99;")).toBeInTheDocument();
+    // …and Boilerplate does not, even though its one-line bump is small enough
+    // for FileCard's own AUTO_EXPAND_MAX_LINES rule to have opened it.
+    expect(screen.queryByText("sha512-deadbeef")).not.toBeInTheDocument();
+
+    // The core file advertises its finding count.
+    expect(screen.getByRole("button", { name: /2 findings/ })).toBeInTheDocument();
+
+    // A severity tag on a core diff line hands its finding id back to the page,
+    // which is what turns into `?tab=findings&finding=<id>`.
+    fireEvent.click(screen.getByRole("button", { name: "Open finding: Unbounded retry loop" }));
+    expect(onOpenFinding).toHaveBeenCalledTimes(1);
+    expect(onOpenFinding).toHaveBeenCalledWith("f-core-1");
+  });
+
+  /* Replaces the assertion this file used to make — that the viewer re-sorted a
+     boilerplate-first fixture into `ROLE_ORDER`. That sort was a second source
+     of truth for "business logic first": the service already emits groups in
+     `ROLE_ORDER` and omits the empty ones, and the guarantee is pinned where it
+     is produced, in `server/test/smart-diff-service.test.ts`. What is still the
+     client's to get wrong is faithfulness — so the fixture is handed over in an
+     order the deleted sort would have "corrected", and must come out unchanged.
+     Reintroduce the client sort and this test goes red. */
+  it("renders groups in payload order rather than re-sorting them", () => {
+    renderViewer(
+      smartDiff([
+        { role: "boilerplate", files: [file(LOCK_PATH, { additions: 1, deletions: 0 })] },
+        { role: "core", files: [file(CORE_PATH, { additions: 2, deletions: 0 })] },
+      ]),
+    );
+
+    expect(
+      screen.getAllByText(/^(Core logic|Boilerplate)$/).map((el) => el.textContent),
+    ).toEqual(["Boilerplate", "Core logic"]);
+  });
+
+  // Test-matrix assertion 31, the AT RISK one. Two rules pull the other way —
+  // FileCard's AUTO_EXPAND_MAX_LINES (this file is 1 line) and the design's
+  // `useState(finding_lines.length > 0)` (this file has a finding). The role
+  // policy carried by `smart.defaultOpen` has to beat both.
+  it("keeps a boilerplate file collapsed even when it has findings", () => {
+    renderViewer(
+      smartDiff([
+        {
+          role: "boilerplate",
+          files: [file(LOCK_PATH, { additions: 1, deletions: 0, findings: [LOCK_FINDING] })],
+        },
+        { role: "core", files: [file(CORE_PATH, { additions: 2, deletions: 0 })] },
+      ]),
+    );
+
+    // The card knows about the finding — the badge is rendered from it, in the
+    // singular: `findingsBadge` is an ICU plural, so one finding is "1 finding".
+    const badge = screen.getByRole("button", { name: /\b1 finding\b/ });
+    // …and the body is still shut, so neither the diff text nor the finding's
+    // own tag is reachable.
+    expect(screen.queryByText("sha512-deadbeef")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open finding: Lockfile churn" }),
+    ).not.toBeInTheDocument();
+
+    // Clicking the badge opens it. This is what separates "withheld" from
+    // "never rendered": if the body were simply missing, it could not appear.
+    fireEvent.click(badge);
+    expect(screen.getByText("sha512-deadbeef")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open finding: Lockfile churn" }),
+    ).toBeInTheDocument();
+  });
+});

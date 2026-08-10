@@ -32,6 +32,7 @@ export function ReviewRunAccordion({
   headSha,
   targetRunId = null,
   targetNonce = 0,
+  focusFindingId = null,
   run,
 }: {
   review: ReviewRecord;
@@ -46,13 +47,28 @@ export function ReviewRunAccordion({
    *  (driven from the Timeline: clicking an agent name navigates here). */
   targetRunId?: string | null;
   targetNonce?: number;
+  /** `?finding=<id>` — passed through to the panel, which owns the un-filtering
+   *  and the scroll. This component only has to be open by the time it lands. */
+  focusFindingId?: string | null;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
+  // Derived in render: does the finding the URL names live in THIS run?
+  const ownsFocusFinding =
+    !!focusFindingId && review.findings.some((f) => f.id === focusFindingId);
   React.useEffect(() => {
     if (review.run_id && review.run_id === targetRunId) {
       setOpen(true);
-      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      // When the URL named a finding inside this run, the panel below owns the
+      // scroll: it targets that finding's own card, and this header-level scroll
+      // would throw that away. It is not a race — the panel's effect is a CHILD
+      // of this one, so it runs on the pass that mounts it, and `targetRunId`
+      // then arrives one commit LATER (FindingsTab resolves the owning run in
+      // its own effect). Measured: card first, accordion header second, and the
+      // last scroll is the one the browser keeps.
+      if (!ownsFocusFinding) {
+        rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRunId, targetNonce, review.run_id]);
@@ -161,6 +177,7 @@ export function ReviewRunAccordion({
             prId={prId}
             repoFullName={repoFullName}
             headSha={headSha}
+            focusFindingId={focusFindingId}
           />
         </div>
       )}

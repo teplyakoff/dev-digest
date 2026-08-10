@@ -11,12 +11,21 @@ how to put one in a PR: `README.md`.
 - `npm run record` — the review loop. **Spends real money.** It fires a real
   `POST /pulls/:id/review`, so every recording costs whatever the models cost.
 - `npm run record:skills` — the L02 Skills feature. **Free** — it calls no model.
+- `npm run record:conventions` — the L02 homework: the Conventions Extractor plus
+  the API Contract Reviewer control experiment. **Spends real money** (one
+  extraction); the two experiment runs are found, not triggered.
+- `npm run record:intent` — the L03 Intent Layer. **Spends real money**: two
+  review triggers plus the classifier calls behind them.
+- `npm run record:smart-diff` — the L03 homework Smart Diff. **Free** — it
+  triggers no review at all. It films a PR that ALREADY carries findings anchored
+  to rendered lines, and its preflight refuses to launch the browser otherwise.
 - `npm run typecheck`
 
 ## Map
 
 - `record.ts` — the review loop: one step per scene, each captioned.
-- `record-skills.ts` — the Skills feature, same shape.
+- `record-skills.ts` · `record-conventions.ts` · `record-intent.ts` ·
+  `record-smart-diff.ts` — one lab's feature each, same shape.
 - `lib/zip.ts` · `lib/skills-fixture.ts` — the import fixture archive, built in
   memory rather than checked in, so a reader can diff its entries against the
   "ignored" list the preview renders.
@@ -50,6 +59,14 @@ how to put one in a PR: `README.md`.
 - It creates `migration-safety` and imports `error-handling-guard`, deleting both
   by name first — `skills` has a unique `(workspace_id, name)` index, so without
   that cleanup the second run 409s. The agent's link set is restored in `finally`.
+- `record:intent`'s opening scene needs the target PR to have **no intent row**,
+  and nothing in the product deletes one, so there is no route to call. It films
+  the derived card instead and warns; `delete from pr_intent where pr_id = …`
+  restores the empty state.
+- **Dropdown items carry their hint inside the same `<button>`**, so an agent's
+  accessible name is `"General Reviewer deepseek/deepseek-v4-flash"` — match by
+  prefix, never `exact: true`. The trace drawer's tabs are passed as bare strings,
+  so its tab labels are literally `trace` and `log`, not "Live log".
 
 ## Read when
 

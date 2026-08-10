@@ -55,9 +55,18 @@ export class AgentsService {
     this.repo = new AgentsRepository(container.db);
   }
 
+  /**
+   * Every agent in the workspace, each carrying how many skills it links so the
+   * card can render its knowledge-layer badge without a request per agent.
+   * `skills_count` is list-only — see the field's note in the contract.
+   */
   async list(workspaceId: string): Promise<Agent[]> {
     const rows = await this.repo.list(workspaceId);
-    return rows.map(toAgentDto);
+    const counts = await this.repo.skillCounts(
+      workspaceId,
+      rows.map((r) => r.id),
+    );
+    return rows.map((r) => ({ ...toAgentDto(r), skills_count: counts.get(r.id) ?? 0 }));
   }
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {

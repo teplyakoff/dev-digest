@@ -24,6 +24,7 @@ const VersionParams = z.object({
  *   GET    /skills/:id/versions         → body history (newest first)
  *   GET    /skills/:id/versions/:version→ one body snapshot
  *   GET    /skills/:id/agents           → agents that load this skill
+ *   GET    /skills/:id/stats            → usage + what it has cost across runs
  *
  * The agent side of the link lives in the agents module
  * (`GET/POST /agents/:id/skills`) — it is A2's to own.
@@ -164,5 +165,12 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     const usage = await service.usage(workspaceId, req.params.id);
     if (!usage) throw new NotFoundError('Skill not found');
     return usage;
+  });
+
+  app.get('/skills/:id/stats', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const stats = await service.stats(workspaceId, req.params.id);
+    if (!stats) throw new NotFoundError('Skill not found');
+    return stats;
   });
 }

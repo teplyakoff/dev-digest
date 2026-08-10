@@ -40,6 +40,10 @@
     "reply": "Reply",
     "viewOnGitHub": "View on GitHub",
     "postedToGitHub": "Posts to GitHub immediately",
-    "outdatedTitle": "{count} comment(s) on older revisions"
+    "outdatedTitle": "{count} comment(s) on older revisions",
+    "findingsBadge": "{count, plural, one {# finding} other {# findings}}",
+    "largeFile": "large file",
+    "openFinding": "Open finding: {title}",
+    "unanchoredTitle": "{count} finding(s) not on a shown line"
   }
 }

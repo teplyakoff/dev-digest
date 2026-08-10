@@ -8,14 +8,22 @@ export interface SkillEditorTab {
 }
 
 /**
- * L02 ships Config / Preview / Versions. The design also has Evals and Stats;
- * both depend on machinery later lessons build (eval runs, pull/accept
- * telemetry), so they are left out rather than stubbed.
+ * Config / Preview / Versions / Stats.
+ *
+ * Stats used to be excluded alongside Evals on the grounds that it "depends on
+ * machinery later lessons build". That was half right: the design's tab wants
+ * pull-frequency and accept-rate, which really do need telemetry nobody has
+ * built. But usage and token cost are already persisted on every run trace, and
+ * a skill's cost is the one thing L02 promised to show. So the tab ships with
+ * the numbers that exist and none of the ones that don't.
+ *
+ * Evals remains out — there are no eval runs to report on at all.
  */
 export const TABS: readonly SkillEditorTab[] = [
   { key: "config", labelKey: "detail.tabs.config", icon: "Settings" },
   { key: "preview", labelKey: "detail.tabs.preview", icon: "Eye" },
   { key: "versions", labelKey: "detail.tabs.versions", icon: "History" },
+  { key: "stats", labelKey: "detail.tabs.stats", icon: "BarChart" },
 ];
 
 export const VALID_TABS = TABS.map((t) => t.key);

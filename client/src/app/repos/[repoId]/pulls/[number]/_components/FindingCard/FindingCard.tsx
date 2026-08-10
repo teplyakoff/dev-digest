@@ -27,6 +27,7 @@ export function FindingCard({
   f,
   focused,
   defaultExpanded,
+  expandNonce,
   onAction,
   pending,
   repoFullName,
@@ -34,7 +35,11 @@ export function FindingCard({
 }: {
   f: FindingRecord;
   focused?: boolean;
+  /** INITIAL state only — it feeds `useState`, so changing it later does
+   *  nothing. Use `expandNonce` to expand a card that is already mounted. */
   defaultExpanded?: boolean;
+  /** Bump to expand this card now (deep link from the Files tab). */
+  expandNonce?: number;
   onAction?: (action: FindingActionKind, reply?: string) => void;
   pending?: boolean;
   repoFullName?: string | null;
@@ -42,6 +47,10 @@ export function FindingCard({
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
+  // Expand-only: a later bump never collapses a card the reader opened.
+  React.useEffect(() => {
+    if (expandNonce) setExpanded(true);
+  }, [expandNonce]);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
     repoFullName && headSha

@@ -15,6 +15,7 @@ export const PROMPT_COLORS = {
   system: "var(--text-muted)",
   skills: "var(--accent)",
   memory: "var(--warn)",
+  intent: "var(--ok)",
   repoMap: "var(--accent)",
   specs: "var(--text-secondary)",
   callers: "var(--warn)",

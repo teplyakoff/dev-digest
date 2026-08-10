@@ -1,0 +1,25 @@
+$ bash scripts/verify-l03.sh
+── verify:l03 · Smart Diff classification ──────────────────────────
+[1/2] server — role assignment + group ordering
+Already up to date
+Done in 180ms using pnpm v11.5.3
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/server
+ ✓ test/smart-diff-classify.test.ts (18 tests) 3ms
+ ✓ test/smart-diff-service.test.ts (15 tests) 5ms
+ Test Files  2 passed (2)
+      Tests  33 passed (33)
+   Start at  14:07:01
+   Duration  278ms (transform 55ms, setup 0ms, collect 64ms, tests 7ms, environment 0ms, prepare 103ms)
+[2/2] client — group expand/collapse policy
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+ ✓ src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/SmartDiffViewer.test.tsx (3 tests) 73ms
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  14:07:01
+   Duration  1.13s (transform 150ms, setup 47ms, collect 548ms, tests 73ms, environment 253ms, prepare 46ms)
+── result ──────────────────────────────────────────────────────────
+  PASS  server  classification + ordering
+  PASS  client  expand/collapse policy
+verify:l03 PASSED
+
+exit=0

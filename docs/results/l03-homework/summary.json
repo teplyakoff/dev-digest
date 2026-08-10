@@ -1,0 +1,145 @@
+{
+  "recorded_at": "2026-08-08T13:30:13.688Z",
+  "repo": "teplyakoff/dev-digest",
+  "pr": 1,
+  "pr_id": "d4cdfac0-5733-45e1-9822-e44d27976a10",
+  "pr_title": "Homework l01",
+  "pr_status": "merged",
+  "review_triggered": false,
+  "files": {
+    "count": 92,
+    "with_patch": 83
+  },
+  "smart_diff": {
+    "groups": [
+      {
+        "role": "core",
+        "files": 44
+      },
+      {
+        "role": "wiring",
+        "files": 36
+      },
+      {
+        "role": "boilerplate",
+        "files": 12
+      }
+    ],
+    "findings": 2,
+    "changed_lines": 7885,
+    "too_big": true,
+    "lock_file": {
+      "path": "demo/package-lock.json",
+      "additions": 614,
+      "deletions": 0
+    },
+    "large_file": {
+      "path": "demo/record.ts",
+      "role": "core",
+      "additions": 405,
+      "deletions": 0
+    }
+  },
+  "anchored_findings": [
+    {
+      "path": "client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx",
+      "role": "core",
+      "line": 74,
+      "severity": "CRITICAL",
+      "id": "943b3d94-f642-4776-9031-a5a57eb58c90"
+    },
+    {
+      "path": "server/src/modules/pulls/routes.ts",
+      "role": "wiring",
+      "line": 144,
+      "severity": "WARNING",
+      "id": "85637bcf-a99d-448f-bdb9-dc72f881bab0"
+    }
+  ],
+  "hero_finding": {
+    "id": "943b3d94-f642-4776-9031-a5a57eb58c90",
+    "path": "client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx",
+    "role": "core",
+    "line": 74,
+    "severity": "CRITICAL",
+    "tag": "blocker",
+    "badge": "1 finding",
+    "title": "runById map uses wrong key (run_id instead of id)"
+  },
+  "finding_clicked": {
+    "id": "943b3d94-f642-4776-9031-a5a57eb58c90",
+    "url": "http://localhost:3000/repos/574318a8-1866-4391-9829-0504a84e85e1/pulls/1?tab=findings&view=smart&finding=943b3d94-f642-4776-9031-a5a57eb58c90",
+    "run_id": "33cf84f0-9800-4235-89f3-549a06da64c1",
+    "agent": "General Reviewer"
+  },
+  "original_mode_finding_tags": 0,
+  "scenes": [
+    {
+      "n": 1,
+      "name": "Files changed in original order",
+      "note": "asserted: 0 finding tags on screen while 2 exist"
+    },
+    {
+      "n": 2,
+      "name": "Toggle to Smart order, section label flips"
+    },
+    {
+      "n": 3,
+      "name": "Summary strip: files, +/−, findings, changed lines",
+      "note": "strip reads \"2 findings\""
+    },
+    {
+      "n": 4,
+      "name": "Large-PR banner",
+      "note": "7885 changed lines"
+    },
+    {
+      "n": 5,
+      "name": "Core logic group on top, swatch + description"
+    },
+    {
+      "n": 6,
+      "name": "Lock-file inside a collapsed Boilerplate group",
+      "note": "asserted: card has exactly one child, so no body"
+    },
+    {
+      "n": 7,
+      "name": "A large file's `large file` chip"
+    },
+    {
+      "n": 8,
+      "name": "The file header's findings badge",
+      "note": "core · client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx · badge \"1 finding\""
+    },
+    {
+      "n": 9,
+      "name": "Severity rail and tag on the finding's own line",
+      "note": "client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx:74 · blocker · rail asserted"
+    },
+    {
+      "n": 10,
+      "name": "Finding click-through to its card",
+      "note": "owned by General Reviewer (run 33cf84f0)"
+    },
+    {
+      "n": 11,
+      "name": "Back returns to ?tab=diff&view=smart"
+    }
+  ],
+  "not_filmable": [
+    {
+      "plan_scene": "the API log pane showing the `SMART DIFF:` line with no model line beside it",
+      "why": "That line is written with the Fastify request logger in `server/src/modules/smart-diff/service.ts:255` and goes to the API process's stdout. There is no pane in the web UI that renders the API's own log, so a browser recorder has nothing to point a camera at.",
+      "capture_instead": "Text evidence: tail the API stdout while loading the Files tab and grep for `SMART DIFF:`; the claim is that NO `REVIEW model:` or `INTENT CLASSIFIER model:` line appears beside it."
+    },
+    {
+      "plan_scene": "the terminal running `verify:l03` with both lanes green",
+      "why": "A Playwright browser recorder cannot film a terminal.",
+      "capture_instead": "Text evidence: `bash scripts/verify-l03.sh` output, pasted verbatim."
+    }
+  ],
+  "out_of_scope": {
+    "scene": "badges and rails APPEARING after a review, with no reload",
+    "why": "Running a review is not the Smart Diff feature — it is L01's. Filming it here cost the first take ~10 of its 11 minutes and real money, and taught a viewer nothing about grouping, risk order or the click-through. This recorder therefore triggers no review at all and films a PR whose findings already exist. The no-reload invalidation is S6's claim; it belongs to a test, not to this camera."
+  }
+}

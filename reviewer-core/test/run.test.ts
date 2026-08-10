@@ -104,6 +104,82 @@ describe('reviewPullRequest (engine)', () => {
     ).rejects.toThrow('cancelled');
   });
 
+  it('scope filter runs AFTER grounding, and the score comes from ITS survivors', async () => {
+    // The invariant, end to end: grounding drops the phantom, the scope gate
+    // then drops the tagged-out-of-scope WARNING, and the score is recomputed
+    // from what is left — not from the model's number, and not from the
+    // post-grounding set the gate has since narrowed.
+    const scoped = {
+      verdict: 'request_changes',
+      summary: 'mixed',
+      score: 11,
+      findings: [
+        { ...fixture.findings[0]!, scope: 'in_scope' },
+        // Grounded (line 11 is in the diff) but out of the PR's stated scope.
+        {
+          id: 'f-oos',
+          severity: 'WARNING',
+          category: 'style',
+          title: 'unrelated naming nit',
+          file: 'src/config.ts',
+          start_line: 11,
+          end_line: 11,
+          rationale: 'pre-existing',
+          confidence: 0.5,
+          kind: 'finding',
+          scope: 'out_of_scope',
+        },
+        // Ungrounded — grounding must still drop this before the gate sees it.
+        { ...fixture.findings[1]!, scope: 'in_scope' },
+      ],
+    };
+    const llm = new MockLLMProvider('openai', { structured: scoped });
+    const diff = await new MockGitClient().diff();
+    const events: string[] = [];
+
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff,
+      llm,
+      intent: 'Stated purpose: rotate the Stripe key.',
+      scopeFilter: true,
+      onEvent: (e) => events.push(e.msg),
+    });
+
+    // Grounding still reports over the PRE-filter set: 2 of 3 cited real lines.
+    expect(outcome.grounding).toBe('2/3 passed');
+    expect(outcome.review.findings.map((f) => f.title)).toEqual(['Hardcoded Stripe secret key']);
+    // One CRITICAL survivor ⇒ 100 − 35. If the score had been taken from the
+    // post-grounding set it would read 53 (a WARNING costs 12).
+    expect(outcome.review.score).toBe(65);
+    expect(events.some((m) => m.includes('scope filter dropped'))).toBe(true);
+    expect(events.some((m) => m.includes('Scope filter: 1/2 kept'))).toBe(true);
+  });
+
+  it('an out-of-scope tag drops nothing while the filter is disarmed', async () => {
+    // Same fixture, `scopeFilter` absent: the tag is recorded by the model and
+    // ignored by the engine. Off is the default, and it must be inert.
+    const llm = new MockLLMProvider('openai', {
+      structured: {
+        verdict: 'comment',
+        summary: 's',
+        score: 50,
+        findings: [{ ...fixture.findings[0]!, scope: 'out_of_scope' }],
+      },
+    });
+    const diff = await new MockGitClient().diff();
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff,
+      llm,
+      intent: 'Stated purpose: something else entirely.',
+    });
+    expect(outcome.review.findings).toHaveLength(1);
+    expect(outcome.review.score).toBe(65);
+  });
+
   it('forwards sessionId to every LLM call (OpenRouter session grouping)', async () => {
     const seen: (string | undefined)[] = [];
     const recorder: LLMProvider = {

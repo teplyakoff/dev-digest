@@ -64,4 +64,17 @@ describe('routes (no DB)', () => {
     expect(res.json().error.code).toBe('validation_error');
     await app.close();
   });
+
+  // The Docker-free half of `/pulls/:id/smart-diff`'s access control: `IdParams`
+  // rejects a non-uuid at the edge, so the handler body — and therefore the
+  // workspace-scoped PR lookup and both reads — never runs. Without the schema
+  // this would reach the database before anything checked the id, which is why
+  // it is worth a case of its own rather than being folded into the it-test.
+  it('GET /pulls/:id/smart-diff rejects a non-uuid id with a 422', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({ method: 'GET', url: '/pulls/not-a-uuid/smart-diff' });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
 });

@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["record.ts", "record-skills.ts", "lib/**/*.ts"]
+  "include": ["record.ts", "record-skills.ts", "record-conventions.ts", "record-intent.ts", "record-smart-diff.ts", "lib/**/*.ts"]
 }

@@ -100,6 +100,13 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         {trace.prompt_assembly.memory != null && (
           <PromptBlock label={t("trace.prompt.memory")} text={trace.prompt_assembly.memory} color={PROMPT_COLORS.memory} />
         )}
+        {/* Null on every trace persisted before L03 and on any run whose
+            derivation failed — `PromptAssembly.intent` is nullish for exactly
+            that reason, and this `!= null` is what makes an old trace render
+            without the row instead of an empty one. */}
+        {trace.prompt_assembly.intent != null && (
+          <PromptBlock label={t("trace.prompt.intent")} text={trace.prompt_assembly.intent} color={PROMPT_COLORS.intent} />
+        )}
         {trace.prompt_assembly.repo_map != null && (
           <PromptBlock label={t("trace.prompt.repoMap")} text={trace.prompt_assembly.repo_map} color={PROMPT_COLORS.repoMap} />
         )}

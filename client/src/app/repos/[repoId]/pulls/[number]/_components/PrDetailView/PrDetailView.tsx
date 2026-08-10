@@ -67,16 +67,58 @@ export function PrDetailView() {
 
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
-  const setParam = (key: string, val: string | null) => {
+  /**
+   * Merge a whole patch of query params in ONE navigation.
+   *
+   * Opening a finding sets `tab` and `finding` together, and calling a one-key
+   * setter twice races: both calls read `search` from the same render's closure,
+   * so the second navigation overwrites the first. The tell is a URL with
+   * `finding` but no `tab` (or the reverse), depending on render timing.
+   *
+   * `history` chooses what that one navigation does to the back stack, and the
+   * two kinds of URL change here genuinely differ:
+   *
+   * - `"replace"` (the default) for a VIEW PREFERENCE that the reviewer stays
+   *   put for — the Smart/Original toggle, the tab, the trace drawer. Pushing on
+   *   the toggle would make Back an undo log of clicks on the same screen.
+   * - `"push"` for a real DESTINATION. The finding click leaves the Files tab
+   *   for `?tab=findings&finding=<id>`; replacing there overwrites the entry the
+   *   reviewer came from, so Back skips the Files tab entirely instead of
+   *   returning them to `?tab=diff&view=smart`. Verified in a live browser.
+   */
+  const setParams = (
+    patch: Record<string, string | null>,
+    opts: { history?: "push" | "replace" } = {},
+  ) => {
     const sp = new URLSearchParams(search.toString());
-    if (val == null) sp.delete(key);
-    else sp.set(key, val);
-    router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
+    for (const [key, val] of Object.entries(patch)) {
+      if (val == null) sp.delete(key);
+      else sp.set(key, val);
+    }
+    const href = `/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`;
+    if (opts.history === "push") router.push(href);
+    else router.replace(href);
   };
+  // Unchanged for its existing callers: one key, replaced, never pushed.
+  const setParam = (key: string, val: string | null) => setParams({ [key]: val });
   const setTab = (t: string) => setParam("tab", t);
+
+  // Files-tab ordering lives in the URL, not in component state: the
+  // click-through navigates AWAY to `?tab=findings`, and with local state
+  // pressing Back would return the reviewer to the Files tab in Original order
+  // — the mode silently lost on the feature's most-used interaction. Absent
+  // `view` means smart, so a reviewer lands on the sorted diff.
+  const diffView = search.get("view") === "original" ? "original" : "smart";
+  // `?finding=<id>` is the whole click-through: which finding to open, resolved
+  // to its owning run from data this view already holds.
+  const focusFindingId = search.get("finding");
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
+  // Derived in render, never stored: which run owns the finding the URL names.
+  const focusRunId =
+    (focusFindingId && runs.find((r) => r.findings.some((f) => f.id === focusFindingId))?.run_id) ||
+    null;
   const allFindings: FindingRecord[] = runs.flatMap((r) => r.findings);
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");
   const findingsCount = allFindings.length;
@@ -153,6 +195,8 @@ export function PrDetailView() {
             repoFullName={repoFullName}
             headSha={pr.head_sha}
             cancelMutation={cancel}
+            focusFindingId={focusFindingId}
+            focusRunId={focusRunId}
             onOpenTrace={(id) => setParam("trace", id)}
             onDelete={(id) => {
               if (window.confirm("Delete this run from history? (its logs are removed too)"))
@@ -163,6 +207,13 @@ export function PrDetailView() {
               // A settled run (done OR failed) must appear in "Run history"
               // immediately, with no page reload.
               invalidateRuns.history();
+              // The run derived the intent as shared pre-work, so the card may
+              // be showing a state the run has already replaced.
+              invalidateRuns.intent();
+              // The run produced findings, and Smart Diff joins EVERY stored
+              // review's findings onto the file list — so its badges and line
+              // rails must appear with no page reload.
+              invalidateRuns.smartDiff();
               refetchReviews();
             }}
           />
@@ -174,6 +225,13 @@ export function PrDetailView() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            view={diffView}
+            // REPLACE: the toggle is a view preference on the screen the
+            // reviewer is already on, not somewhere they navigated to.
+            onSetView={(v) => setParam("view", v)}
+            // Tab AND finding in ONE navigation — see `setParams` above — and a
+            // PUSH, so Back comes back to `?tab=diff&view=smart`.
+            onOpenFinding={(id) => setParams({ tab: "findings", finding: id }, { history: "push" })}
           />
         )}
       </div>

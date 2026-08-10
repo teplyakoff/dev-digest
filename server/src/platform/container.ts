@@ -9,6 +9,8 @@ import type {
   LLMProvider,
   FeatureModelChoice,
   FeatureModelId,
+  RepoRef,
+  UnifiedDiff,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -29,7 +31,9 @@ import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
+import { loadDiff, type DiffPullRef } from '../modules/reviews/diff-loader.js';
 import { SkillsService } from '../modules/skills/service.js';
+import { IntentService } from '../modules/intent/service.js';
 import { getFeatureModelOverride } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -82,6 +86,7 @@ export class Container {
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
   private _skills?: SkillsService;
+  private _intent?: IntentService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -149,6 +154,40 @@ export class Container {
    */
   get skills(): SkillsService {
     return (this._skills ??= new SkillsService(this));
+  }
+
+  /**
+   * The PR intent classifier (L03), shared across features.
+   *
+   * Here for the same reason `skills` is: the review executor needs it, and
+   * `modules/intent` is that executor's SIBLING — onion §11 makes a sibling
+   * module private and the container the sanctioned route. `run-executor.ts`
+   * calls `container.intent.deriveIfStale(...)`, never `../intent/service.js`.
+   *
+   * The service also exposes `scopeFilterArmed` and `renderIntentBlock` as
+   * methods for the same reason: they are pure helpers, but reaching them
+   * directly would be a sibling import of `../intent/helpers.js`.
+   */
+  get intent(): IntentService {
+    return (this._intent ??= new IntentService(this));
+  }
+
+  /**
+   * A PR's unified diff — `git diff base...head`, falling back to reassembling
+   * the persisted `pr_files` patches.
+   *
+   * Promoted to the composition root because a SECOND feature needs it: the
+   * intent classifier shows the model changed paths + hunk headers, and
+   * `modules/reviews/diff-loader.ts` is its sibling. The implementation stays
+   * where it is (the review path is still its main caller); this is the
+   * container doing its §11 job of handing shared behaviour to both.
+   */
+  loadPrDiff(
+    workspaceId: string,
+    pull: DiffPullRef,
+    repo: RepoRef,
+  ): Promise<UnifiedDiff> {
+    return loadDiff(this, this.reviewRepo, workspaceId, pull, repo);
   }
 
   /**

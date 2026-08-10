@@ -51,13 +51,22 @@
     "blockers": " · {count} blockers"
   },
   "smartDiff": {
-    "coreLabel": "Core",
+    "coreLabel": "Core logic",
+    "coreDesc": "The substance of the change — review closely",
     "wiringLabel": "Wiring",
+    "wiringDesc": "Hooks the core into the app",
     "boilerplateLabel": "Boilerplate",
+    "boilerplateDesc": "Generated / mechanical — skim",
     "largeTitle": "This PR is large ({lines} changed lines)",
     "largeBody": "Consider splitting it into smaller, focused PRs for easier review:",
-    "filesCount": "{count} files",
+    "filesCount": "{count, plural, one {# file} other {# files}}",
     "findingLines": "{count} finding-lines",
+    "findingsBadge": "{count, plural, one {# finding} other {# findings}}",
+    "summary": "{count, plural, one {# changed line} other {# changed lines}}",
+    "smartOrder": "Smart order",
+    "originalOrder": "Original order",
+    "errorTitle": "Couldn’t sort these files",
+    "errorBody": "Smart order is unavailable right now — switch to Original order to read the diff.",
     "groupedByRole": "Smart Diff · grouped by role"
   },
   "list": {
@@ -107,5 +116,20 @@
     "goToReview": "Jump to this run’s findings below",
     "openTrace": "Open run trace & logs",
     "deleteRun": "Delete run"
+  },
+  "intent": {
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "none": "Intent has not been derived for this pull request yet.",
+    "derive": "Derive intent",
+    "rederive": "Re-derive",
+    "stale": "Derived against an older commit",
+    "lowConfidence": "low confidence",
+    "derivedBy": "Derived by {model} from {sources}.",
+    "noSources": "no sources",
+    "missing": "Could not be read: {items}",
+    "nothingInScope": "The classifier named nothing in scope.",
+    "nothingOutOfScope": "Nothing was named as deliberately out of scope.",
+    "heading": "Intent"
   }
 }

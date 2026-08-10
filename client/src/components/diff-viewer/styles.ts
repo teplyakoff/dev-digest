@@ -64,7 +64,94 @@ export const s = {
     color: "var(--text-primary)",
     paddingRight: 12,
   } satisfies CSSProperties,
+
+  // ---- Smart Diff overlay (opt-in via FileCard's `smart` prop) ------------
+  /** Header badge: "N findings", clickable, beside the comment count. */
+  findingsBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontSize: 12,
+    fontWeight: 600,
+    padding: "1px 7px",
+    borderRadius: 5,
+    border: "none",
+    background: "var(--crit-bg)",
+    color: "var(--crit)",
+    cursor: "pointer",
+  } satisfies CSSProperties,
+  /** Header chip marking a file past LARGE_FILE_LINES. */
+  largeChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontSize: 11,
+    padding: "1px 7px",
+    borderRadius: 5,
+    background: "var(--warn-bg)",
+    color: "var(--warn)",
+  } satisfies CSSProperties,
+  /** Footer list for findings no rendered line can host (see findings.ts). */
+  unanchoredWrap: {
+    borderTop: "1px solid var(--border)",
+    margin: "4px 14px 4px 58px",
+    paddingTop: 10,
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  } satisfies CSSProperties,
+  unanchoredTitle: {
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
 } as const;
+
+/**
+ * The 3px full-height rail in the severity colour, on a line that carries a
+ * finding. Absolute inside the row, which is why `lineRowFor` takes `anchored`.
+ */
+export function findingRailFor(color: string): CSSProperties {
+  return { position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: color };
+}
+
+/** The right-hand severity tag on a diff line — a real button (it navigates). */
+export function findingTagFor(color: string): CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "0 10px 0 0",
+    fontSize: 10.5,
+    fontWeight: 600,
+    color,
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    flexShrink: 0,
+  };
+}
+
+/** A finding that could not be anchored to a line, rendered as a chip. */
+export function unanchoredChipFor(color: string, bg: string): CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "3px 9px",
+    borderRadius: 6,
+    border: "none",
+    fontSize: 11.5,
+    fontWeight: 600,
+    color,
+    background: bg,
+    cursor: "pointer",
+    maxWidth: "100%",
+  };
+}
 
 /** Chevron rotates 90deg when the file card is open. */
 export function chevronFor(open: boolean): CSSProperties {
@@ -75,10 +162,24 @@ export function chevronFor(open: boolean): CSSProperties {
   };
 }
 
-/** Row background per line kind (add/del tinted, others transparent). */
-export function lineRowFor(kind: Line["kind"]): CSSProperties {
+/**
+ * Row background per line kind (add/del tinted, others transparent).
+ *
+ * `anchored` adds the containing block the finding rail is positioned against.
+ * It is a parameter rather than an unconditional `position: relative` so that a
+ * `FileCard` with no `smart` prop emits exactly the style attribute it emits
+ * today — the mode separation has to be invisible when the mode is off.
+ */
+export function lineRowFor(kind: Line["kind"], anchored = false): CSSProperties {
   const background = kind === "add" ? "var(--code-add)" : kind === "del" ? "var(--code-del)" : "transparent";
-  return { display: "flex", alignItems: "stretch", fontSize: 13, lineHeight: "20px", background };
+  return {
+    display: "flex",
+    alignItems: "stretch",
+    fontSize: 13,
+    lineHeight: "20px",
+    background,
+    ...(anchored ? { position: "relative" as const } : {}),
+  };
 }
 
 /** Gutter sign colour per line kind. */

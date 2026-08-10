@@ -8,11 +8,13 @@ import { api, API_BASE } from "../api";
 import { notify } from "../toast";
 import type {
   FindingActionKind,
+  PrIntentView,
   PrReviewComment,
   ReviewRecord,
   ReviewRunResponse,
   RunEvent,
   RunSummary,
+  SmartDiff,
 } from "@devdigest/shared";
 
 /**
@@ -34,6 +36,8 @@ const keys = {
   runs: (prId: PrId) => ["pr-runs", prId] as const,
   reviews: (prId: PrId) => ["reviews", prId] as const,
   comments: (prId: PrId) => ["pr-comments", prId] as const,
+  intent: (prId: PrId) => ["pr-intent", prId] as const,
+  smartDiff: (prId: PrId) => ["pr-smart-diff", prId] as const,
 };
 
 /**
@@ -53,9 +57,18 @@ export function invalidateRunHistory(qc: QueryClient, prId: PrId): void {
 }
 
 /**
- * The React-facing form of the two invalidators above, for components that need
+ * The React-facing form of the invalidators above, for components that need
  * them outside a mutation callback. Keeps `useQueryClient` — and with it any
  * knowledge of cache shape — inside this module.
+ *
+ * `intent` is here, and not only in `useDeriveIntent`, because the review path
+ * derives intent as SHARED PRE-WORK (`run-executor.ts`, before the agent loop).
+ * So the first review on a PR that had no intent produces one that this page
+ * never asked for — and without this invalidation the card keeps rendering its
+ * empty state until a manual reload. An exported invalidator with no caller
+ * reads as done while doing nothing, which is the failure `client/INSIGHTS.md`
+ * (2026-08-05) describes: a stale value that looks right until you reload, and
+ * that a demo surfaces where a test does not.
  */
 export function useInvalidatePrRuns(prId: PrId) {
   const qc = useQueryClient();
@@ -65,6 +78,10 @@ export function useInvalidatePrRuns(prId: PrId) {
       active: () => invalidateActiveRuns(qc, prId),
       /** A run reached a terminal status. */
       history: () => invalidateRunHistory(qc, prId),
+      /** A run settled, so it may have derived or re-derived the intent. */
+      intent: () => invalidatePrIntent(qc, prId),
+      /** A run settled, so the Smart Diff's findings/badges are now stale. */
+      smartDiff: () => invalidateSmartDiff(qc, prId),
     }),
     [qc, prId],
   );
@@ -109,6 +126,78 @@ export function usePrReviews(prId: PrId) {
     queryFn: () => api.get<ReviewRecord[]>(`/pulls/${prId}/reviews`),
     enabled: !!prId,
   });
+}
+
+// ---- Derived PR intent (L03) ----
+/**
+ * The PR's derived intent. `{intent: null}` before the first derivation — a 200
+ * with a null, never a 404, so the card renders its empty state without the
+ * caller having to read a status code.
+ */
+export function usePrIntent(prId: PrId) {
+  return useQuery({
+    queryKey: keys.intent(prId),
+    queryFn: () => api.get<PrIntentView>(`/pulls/${prId}/intent`),
+    enabled: !!prId,
+  });
+}
+
+/**
+ * Derive (or re-derive) the intent now.
+ *
+ * The response IS the new view, so it goes straight into the cache rather than
+ * invalidating — the same call `useExtractConventions` makes, for the same
+ * reason: invalidating would flash the card back through its loading state
+ * immediately after the user watched it finish.
+ */
+export function useDeriveIntent(prId: PrId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PrIntentView>(`/pulls/${prId}/intent`),
+    onSuccess: (data) => qc.setQueryData(keys.intent(prId), data),
+  });
+}
+
+/**
+ * "A review run finished, so the intent may have been (re-)derived by it" — the
+ * named invalidator, because the review path derives intent as shared pre-work
+ * and the card must not keep showing the pre-run state.
+ */
+export function invalidatePrIntent(qc: QueryClient, prId: PrId): void {
+  if (prId) qc.invalidateQueries({ queryKey: keys.intent(prId) });
+}
+
+// ---- Smart Diff (L03) ----
+/**
+ * The PR's files grouped by role (core / wiring / boilerplate), with each file's
+ * findings joined on. Computed on read from data the server already has — no
+ * model call — so it is safe to fetch as soon as the Files tab mounts.
+ *
+ * No schema is passed to `api.get`: no call site in this codebase validates at
+ * runtime, deliberately. Importing a Zod schema here would drag the whole
+ * `@devdigest/shared` barrel plus `zod` into the shared chunk (~15 kB First Load
+ * JS on every route, measured — `client/INSIGHTS.md` 2026-08-03), which is why
+ * `SmartDiff` above is a TYPE-only import.
+ */
+export function useSmartDiff(prId: PrId) {
+  return useQuery({
+    queryKey: keys.smartDiff(prId),
+    queryFn: () => api.get<SmartDiff>(`/pulls/${prId}/smart-diff`),
+    enabled: !!prId,
+  });
+}
+
+/**
+ * "A review run finished, so this PR's findings changed" — Smart Diff joins
+ * EVERY stored review's findings onto the file list (one review row is one
+ * agent), so a settled run invalidates it even though nothing about the files
+ * themselves moved. Without this the badges
+ * and line rails keep showing the pre-run state until a manual reload: a stale
+ * number that looks right, which a demo surfaces and a test does not
+ * (`client/INSIGHTS.md` 2026-08-05).
+ */
+export function invalidateSmartDiff(qc: QueryClient, prId: PrId): void {
+  if (prId) qc.invalidateQueries({ queryKey: keys.smartDiff(prId) });
 }
 
 /** Delete one run from the PR's run history (+ its trace). */

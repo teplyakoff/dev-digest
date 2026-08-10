@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
@@ -71,6 +71,45 @@ d('Testcontainers: pg + pgvector', () => {
     await seed(pg.handle.db);
     const ws = await pg.handle.db.select().from(t.workspaces);
     expect(ws.filter((w) => w.name === 'default')).toHaveLength(1);
+  });
+
+  /**
+   * The Security Reviewer shipped with an empty knowledge layer — the same
+   * "before" state the L02 control experiment exists to contrast against, but
+   * as a default. This pins the fix, and pins the ORDER, which is what the
+   * prompt is assembled in: what may never be persisted, then who may read it.
+   */
+  it('gives the Security Reviewer its skills, in prompt order', async () => {
+    await seed(pg.handle.db);
+    const [agent] = await pg.handle.db
+      .select()
+      .from(t.agents)
+      .where(eq(t.agents.name, 'Security Reviewer'));
+    const links = await pg.handle.db
+      .select({ name: t.skills.name, order: t.agentSkills.order })
+      .from(t.agentSkills)
+      .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+      .where(eq(t.agentSkills.agentId, agent!.id))
+      .orderBy(asc(t.agentSkills.order));
+
+    expect(links).toEqual([
+      { name: 'secret-handling', order: 0 },
+      { name: 'tenant-scoping', order: 1 },
+    ]);
+  });
+
+  it('re-seeding does not double-link a skill', async () => {
+    await seed(pg.handle.db);
+    await seed(pg.handle.db);
+    const [agent] = await pg.handle.db
+      .select()
+      .from(t.agents)
+      .where(eq(t.agents.name, 'Security Reviewer'));
+    const links = await pg.handle.db
+      .select()
+      .from(t.agentSkills)
+      .where(eq(t.agentSkills.agentId, agent!.id));
+    expect(links).toHaveLength(2);
   });
 });
 
