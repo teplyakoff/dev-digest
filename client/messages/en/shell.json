@@ -44,6 +44,7 @@
     "findingsBadge": "{count, plural, one {# finding} other {# findings}}",
     "largeFile": "large file",
     "openFinding": "Open finding: {title}",
+    "openFileFindings": "{count, plural, one {# finding} other {# findings}} in this file — open {title}",
     "unanchoredTitle": "{count} finding(s) not on a shown line"
   }
 }

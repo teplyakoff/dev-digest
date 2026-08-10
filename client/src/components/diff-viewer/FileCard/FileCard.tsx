@@ -17,6 +17,7 @@ import {
 } from "../comments";
 import {
   findingsForLine,
+  mostSevere,
   partitionFindings,
   renderedLineNumbers,
   severityTagLabel,
@@ -65,6 +66,12 @@ export function FileCard({
     [smartFindings, lines],
   );
 
+  // Where the header badge sends the reader. Derived in render, never stored:
+  // a stored copy goes stale the moment a run lands and the file gains a
+  // blocker. `null` when this file has no findings, which is also what hides
+  // the badge — one condition, so the badge and its destination cannot disagree.
+  const worstFinding = mostSevere(smartFindings ?? []);
+
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
   const comments = commenting?.comments;
@@ -106,14 +113,36 @@ export function FileCard({
             {t("diffViewer.largeFile")}
           </span>
         )}
-        {smart && smart.findings.length > 0 && (
-          // Opens (never closes) the card: a reader clicking the count wants the
-          // findings, and a collapsed group's file is the case that matters.
+        {smart && worstFinding && (
+          /* The badge is a DESTINATION, not a disclosure control.
+             `onOpenFinding` navigates to `?tab=findings&finding=<id>`, where the
+             panel un-filters, expands and scrolls to that card — the same chain
+             the per-line severity tags and the unanchored chips below already
+             use. It used to call `setOpen(true)` instead, which made the most
+             prominent finding affordance in Smart Diff the only one that went
+             nowhere; the file header itself still toggles the card, so nothing
+             was lost by taking that job off the badge.
+             `stopPropagation` stays: without it the header's own toggle fires on
+             the way out and the card is left in the opposite state for the
+             reader who presses Back.
+             It targets the file's MOST SEVERE finding, by the same rule that
+             colours a line's rail (`mostSevere`) — one badge cannot open three
+             cards, and opening a SUGGESTION while a blocker sits in the same
+             file is the silent downgrade that rule exists to prevent. */
           <button
             type="button"
+            title={worstFinding.title}
+            /* Its OWN accessible name, not `openFinding`. The badge and the
+               line tag can both point at the same finding, and two buttons
+               reading "Open finding: X" leaves a screen-reader user unable to
+               tell a file-level summary from a line-level tag. */
+            aria-label={t("diffViewer.openFileFindings", {
+              count: smart.findings.length,
+              title: worstFinding.title,
+            })}
             onClick={(e) => {
               e.stopPropagation();
-              setOpen(true);
+              smart.onOpenFinding(worstFinding.id);
             }}
             style={s.findingsBadge}
           >

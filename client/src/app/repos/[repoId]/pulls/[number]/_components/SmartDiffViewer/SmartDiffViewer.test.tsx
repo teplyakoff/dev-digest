@@ -143,7 +143,7 @@ describe("SmartDiffViewer", () => {
     expect(screen.queryByText("sha512-deadbeef")).not.toBeInTheDocument();
 
     // The core file advertises its finding count.
-    expect(screen.getByRole("button", { name: /2 findings/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /2 findings in this file/ })).toBeInTheDocument();
 
     // A severity tag on a core diff line hands its finding id back to the page,
     // which is what turns into `?tab=findings&finding=<id>`.
@@ -190,7 +190,7 @@ describe("SmartDiffViewer", () => {
 
     // The card knows about the finding — the badge is rendered from it, in the
     // singular: `findingsBadge` is an ICU plural, so one finding is "1 finding".
-    const badge = screen.getByRole("button", { name: /\b1 finding\b/ });
+    expect(screen.getByRole("button", { name: /\b1 finding in this file\b/ })).toBeInTheDocument();
     // …and the body is still shut, so neither the diff text nor the finding's
     // own tag is reachable.
     expect(screen.queryByText("sha512-deadbeef")).not.toBeInTheDocument();
@@ -198,12 +198,40 @@ describe("SmartDiffViewer", () => {
       screen.queryByRole("button", { name: "Open finding: Lockfile churn" }),
     ).not.toBeInTheDocument();
 
-    // Clicking the badge opens it. This is what separates "withheld" from
+    // Clicking the file header opens it. This is what separates "withheld" from
     // "never rendered": if the body were simply missing, it could not appear.
-    fireEvent.click(badge);
+    // It used to be the BADGE that opened the card; the badge now navigates
+    // instead (see the next test), and the header always did this job too.
+    fireEvent.click(screen.getByText(LOCK_PATH));
     expect(screen.getByText("sha512-deadbeef")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Open finding: Lockfile churn" }),
     ).toBeInTheDocument();
+  });
+
+  /* THE MENTOR-FEEDBACK GUARD (L04), at the level that matters: the previous
+     test proves a boilerplate file's body — and with it every per-line severity
+     tag — is NOT on screen. So for a collapsed file the header badge is the only
+     finding affordance the reader has, and until now it led nowhere. This is
+     also the assertion `FileCard.test.tsx` structurally cannot make: that test
+     hands `smart` over by hand, which proves nothing about whether the viewer
+     passes `onOpenFinding` down (client/INSIGHTS.md, 2026-08-05). */
+  it("routes a collapsed file's badge to the Agent-runs tab without opening the file", () => {
+    const onOpenFinding = vi.fn();
+    renderViewer(
+      smartDiff([
+        {
+          role: "boilerplate",
+          files: [file(LOCK_PATH, { additions: 1, deletions: 0, findings: [LOCK_FINDING] })],
+        },
+      ]),
+      onOpenFinding,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /\b1 finding in this file\b/ }));
+    expect(onOpenFinding.mock.calls).toEqual([[LOCK_FINDING.id]]);
+    // The click navigated AWAY; it must not also have expanded the card behind
+    // the reader, or Back returns them to a file they never opened.
+    expect(screen.queryByText("sha512-deadbeef")).not.toBeInTheDocument();
   });
 });

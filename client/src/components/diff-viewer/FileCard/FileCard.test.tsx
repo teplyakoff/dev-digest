@@ -152,7 +152,7 @@ describe("FileCard with the `smart` prop", () => {
     });
 
     // Real English, not raw keys: these also prove the intl wiring above.
-    expect(screen.getByRole("button", { name: /2 findings/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /2 findings in this file/ })).toBeInTheDocument();
     expect(screen.getByText("large file")).toBeInTheDocument();
     expect(screen.getByText(/1 finding\(s\) not on a shown line/)).toBeInTheDocument();
 
@@ -161,5 +161,45 @@ describe("FileCard with the `smart` prop", () => {
     fireEvent.click(screen.getByRole("button", { name: `Open finding: ${ANCHORED.title}` }));
     fireEvent.click(screen.getByRole("button", { name: `Open finding: ${UNANCHORED.title}` }));
     expect(onOpenFinding.mock.calls).toEqual([[ANCHORED.id], [UNANCHORED.id]]);
+  });
+
+  /* THE MENTOR-FEEDBACK GUARD (L04). The header badge is the most prominent
+     finding affordance in Smart Diff, and it was the only one that went
+     nowhere: it called `setOpen(true)` and the reader never left the Files tab.
+     Both halves below have to be asserted together — a badge that navigates but
+     picks the wrong finding lands the reader on a SUGGESTION while a blocker
+     sits in the same file, and both versions look identical from the outside. */
+  it("routes the header badge to the file's MOST SEVERE finding", () => {
+    const onOpenFinding = vi.fn();
+    // UNANCHORED (SUGGESTION) is listed FIRST, so "take the first one" and
+    // "take the most severe one" disagree — which is the whole point of the
+    // fixture order. ANCHORED is the CRITICAL.
+    renderCard(baseFile(), {
+      findings: [UNANCHORED, ANCHORED],
+      isLarge: false,
+      defaultOpen: true,
+      onOpenFinding,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /2 findings in this file/ }));
+    expect(onOpenFinding.mock.calls).toEqual([[ANCHORED.id]]);
+  });
+
+  it("does not toggle the card open or shut when the badge is clicked", () => {
+    // The badge sits INSIDE the header, whose own click handler toggles the
+    // card. Without `stopPropagation` the click navigates away AND flips the
+    // card, so pressing Back returns the reader to a file in the opposite state
+    // from the one they left — a bug with no symptom until someone goes back.
+    const onOpenFinding = vi.fn();
+    renderCard(baseFile(), {
+      findings: [ANCHORED],
+      isLarge: false,
+      defaultOpen: true,
+      onOpenFinding,
+    });
+
+    expect(screen.getByText(ADDED_LINE)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /1 finding in this file/ }));
+    expect(screen.getByText(ADDED_LINE)).toBeInTheDocument();
   });
 });
