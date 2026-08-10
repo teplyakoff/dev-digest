@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 import { FindingCard } from "./FindingCard";
+import { s } from "./styles";
 
 afterEach(cleanup);
 
@@ -80,5 +81,29 @@ describe("FindingCard (smoke, both themes)", () => {
     expect(onAction).toHaveBeenCalledWith("accept");
     fireEvent.click(screen.getByText("Dismiss"));
     expect(onAction).toHaveBeenCalledWith("dismiss");
+  });
+
+  /* A STRUCTURAL GUARD FOR A HAZARD THIS ENVIRONMENT CANNOT OBSERVE.
+     `s.card` once set the `borderColor` SHORTHAND next to the `borderLeftColor`
+     longhand — the pair React warns about on every rerender ("…can lead to
+     styling bugs"), and the warning was in this suite's own output. jsdom does
+     not model the collision and no misrender was ever observed from it, so a
+     rendered-colour assertion would pass either way and prove nothing. What CAN
+     be asserted is the shape of the style object: the four sides are named
+     individually and the shorthand never comes back. */
+  it("never mixes the borderColor shorthand into the card's style", () => {
+    for (const focused of [true, false]) {
+      const style = s.card(focused, "var(--crit)", false);
+      expect(style).not.toHaveProperty("borderColor");
+      expect(style).not.toHaveProperty("border");
+      // …and the focus signal is still actually carried, on the three sides the
+      // severity rail does not own.
+      const expected = focused ? "var(--crit)" : "var(--border)";
+      expect(style.borderTopColor).toBe(expected);
+      expect(style.borderRightColor).toBe(expected);
+      expect(style.borderBottomColor).toBe(expected);
+      // The left rail is the severity colour whether focused or not.
+      expect(style.borderLeftColor).toBe("var(--crit)");
+    }
   });
 });
