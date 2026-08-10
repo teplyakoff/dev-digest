@@ -82,6 +82,22 @@ describe("IntentCard", () => {
     expect(onDerive).toHaveBeenCalledTimes(1);
   });
 
+  /* BRANCH ORDER, not just branch presence. `loading` has to be checked BEFORE
+     `intent == null`, because while the first request is in flight BOTH are true
+     — React Query serves `undefined` until it lands. Test the harder pair
+     (`intent: null` AND loading) rather than `undefined`: if someone ever puts
+     the empty-state branch first, this is the case that goes red, and the cost
+     of missing it is a live "Derive intent" during every load of the default
+     tab, one click of which spends a real classifier call. */
+  it("shows no derive action while loading, even when there is no intent yet", () => {
+    const onDerive = vi.fn();
+    renderCard({ intent: null, loading: true, onDerive });
+
+    expect(screen.queryByText(/has not been derived/i)).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(onDerive).not.toHaveBeenCalled();
+  });
+
   it("flags a derivation made against an older commit, and re-derives on click", () => {
     const onDerive = vi.fn();
     renderCard({ headSha: "sha-two", onDerive });

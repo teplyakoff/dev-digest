@@ -5,11 +5,6 @@ import { Icon, Badge, Button, SectionLabel, EmptyState } from "@devdigest/ui";
 import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
-// Direct module import — the IntentCard folder deliberately ships no `index.ts`
-// (frontend-architecture §12 forbids new barrels). Its siblings all have one;
-// they predate the rule and are not a precedent to copy.
-import { IntentCard } from "../IntentCard/IntentCard";
-import { usePrIntent, useDeriveIntent } from "@/lib/hooks/reviews";
 import { s } from "./styles";
 import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
@@ -52,16 +47,6 @@ export function FindingsTab({
   onDelete,
   onRunDone,
 }: FindingsTabProps) {
-  // The intent card's data lives HERE rather than in `IntentCard`, which keeps
-  // that component presentational and adds ZERO props to this one — it already
-  // takes 14, and react-best-practices wants 5-7, so growing it further is the
-  // worse of the two options.
-  const intentQuery = usePrIntent(prId);
-  const deriveIntent = useDeriveIntent(prId);
-  const handleDeriveIntent = useCallback(() => {
-    deriveIntent.mutate();
-  }, [deriveIntent]);
-
   const handleCancelAll = useCallback(() => {
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
   }, [liveRunIds, cancelMutation]);
@@ -123,18 +108,6 @@ export function FindingsTab({
 
   return (
     <section>
-      {/* "Before the review results" is literally the top of this tab: the tab
-          LABELLED "Agent runs" is `?tab=findings`, and `?tab=overview` renders
-          only `pr.body`. The design bundle puts an intent block on a PR-Brief
-          Overview card, but the rest of that brief is unbuilt — this moves there
-          when it lands. */}
-      <IntentCard
-        intent={intentQuery.data?.intent}
-        headSha={headSha}
-        onDerive={handleDeriveIntent}
-        deriving={deriveIntent.isPending}
-      />
-
       {liveRunIds.length > 0 && (
         <div style={s.liveRunSection}>
           <SectionLabel

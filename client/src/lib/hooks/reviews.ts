@@ -6,9 +6,11 @@ import React from "react";
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api";
 import { notify } from "../toast";
+// The intent domain owns its own key and its own invalidator; this module holds
+// the facade below only because a settled RUN is what makes intent stale.
+import { invalidatePrIntent } from "./intent";
 import type {
   FindingActionKind,
-  PrIntentView,
   PrReviewComment,
   ReviewRecord,
   ReviewRunResponse,
@@ -36,7 +38,6 @@ const keys = {
   runs: (prId: PrId) => ["pr-runs", prId] as const,
   reviews: (prId: PrId) => ["reviews", prId] as const,
   comments: (prId: PrId) => ["pr-comments", prId] as const,
-  intent: (prId: PrId) => ["pr-intent", prId] as const,
   smartDiff: (prId: PrId) => ["pr-smart-diff", prId] as const,
 };
 
@@ -61,14 +62,11 @@ export function invalidateRunHistory(qc: QueryClient, prId: PrId): void {
  * them outside a mutation callback. Keeps `useQueryClient` — and with it any
  * knowledge of cache shape — inside this module.
  *
- * `intent` is here, and not only in `useDeriveIntent`, because the review path
- * derives intent as SHARED PRE-WORK (`run-executor.ts`, before the agent loop).
- * So the first review on a PR that had no intent produces one that this page
- * never asked for — and without this invalidation the card keeps rendering its
- * empty state until a manual reload. An exported invalidator with no caller
- * reads as done while doing nothing, which is the failure `client/INSIGHTS.md`
- * (2026-08-05) describes: a stale value that looks right until you reload, and
- * that a demo surfaces where a test does not.
+ * `intent` is here, and not only in `hooks/intent.ts`, because the trigger is a
+ * RUN settling, which is this module's subject: the review path derives intent
+ * as shared pre-work, so a run can change a card this module knows nothing
+ * about. The delegation keeps that fact in one place — a caller says "a run
+ * settled" and never learns that intent is cached at all.
  */
 export function useInvalidatePrRuns(prId: PrId) {
   const qc = useQueryClient();
@@ -126,45 +124,6 @@ export function usePrReviews(prId: PrId) {
     queryFn: () => api.get<ReviewRecord[]>(`/pulls/${prId}/reviews`),
     enabled: !!prId,
   });
-}
-
-// ---- Derived PR intent (L03) ----
-/**
- * The PR's derived intent. `{intent: null}` before the first derivation — a 200
- * with a null, never a 404, so the card renders its empty state without the
- * caller having to read a status code.
- */
-export function usePrIntent(prId: PrId) {
-  return useQuery({
-    queryKey: keys.intent(prId),
-    queryFn: () => api.get<PrIntentView>(`/pulls/${prId}/intent`),
-    enabled: !!prId,
-  });
-}
-
-/**
- * Derive (or re-derive) the intent now.
- *
- * The response IS the new view, so it goes straight into the cache rather than
- * invalidating — the same call `useExtractConventions` makes, for the same
- * reason: invalidating would flash the card back through its loading state
- * immediately after the user watched it finish.
- */
-export function useDeriveIntent(prId: PrId) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.post<PrIntentView>(`/pulls/${prId}/intent`),
-    onSuccess: (data) => qc.setQueryData(keys.intent(prId), data),
-  });
-}
-
-/**
- * "A review run finished, so the intent may have been (re-)derived by it" — the
- * named invalidator, because the review path derives intent as shared pre-work
- * and the card must not keep showing the pre-run state.
- */
-export function invalidatePrIntent(qc: QueryClient, prId: PrId): void {
-  if (prId) qc.invalidateQueries({ queryKey: keys.intent(prId) });
 }
 
 // ---- Smart Diff (L03) ----

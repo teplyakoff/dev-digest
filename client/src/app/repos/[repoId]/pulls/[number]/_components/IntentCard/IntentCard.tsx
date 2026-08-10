@@ -1,17 +1,18 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Badge, Button, Card, Icon, SectionLabel } from "@devdigest/ui";
+import { Badge, Button, Card, Icon, SectionLabel, Skeleton } from "@devdigest/ui";
 import type { PrIntentRecord } from "@devdigest/shared";
 import { s } from "./styles";
 
 /**
- * The derived-intent card, shown above the review results on `?tab=findings`.
+ * The derived-intent card, at the top of the PR's Overview tab — the default
+ * tab, so it is the first thing a reviewer reads about the change.
  *
  * PURELY PRESENTATIONAL: props in, JSX out. No hooks beyond `useTranslations`,
- * no fetching, no derived state. `FindingsTab` owns `usePrIntent` /
- * `useDeriveIntent` and hands the results down, which is also what lets a test
- * render this from mocked API data through the view rather than from a
+ * no fetching, no derived state. `OverviewTab` owns `usePullIntent` /
+ * `useRecalculateIntent` and hands the results down, which is also what lets a
+ * test render this from mocked API data through the view rather than from a
  * hand-passed prop.
  *
  * The provenance footer is not in the design bundle — the mock carries
@@ -26,16 +27,36 @@ import { s } from "./styles";
  */
 
 interface IntentCardProps {
-  /** `null` = never derived. Undefined while the query is in flight. */
+  /** `null` = never derived. Undefined while the query is in flight — but do not
+   *  read the difference off this prop, pass `loading` instead. */
   intent: PrIntentRecord | null | undefined;
+  /** The intent query is in flight. SEPARATE from `intent == null` on purpose:
+   *  see the loading branch below. */
+  loading?: boolean;
   /** The PR's current head; a mismatch means the card is showing stale intent. */
   headSha?: string | null;
   onDerive: () => void;
   deriving?: boolean;
 }
 
-export function IntentCard({ intent, headSha, onDerive, deriving }: IntentCardProps) {
+export function IntentCard({ intent, loading, headSha, onDerive, deriving }: IntentCardProps) {
   const t = useTranslations("prReview");
+
+  // IN FLIGHT IS NOT THE SAME STATE AS NEVER DERIVED, and collapsing the two was
+  // not a cosmetic flash. `intent == null` is true for `undefined` as well, so
+  // the first render of the Overview tab — the DEFAULT tab, so this is every PR
+  // page load — offered a live "Derive intent" button on a PR that already had
+  // one, and a click landing in that window spends a real classifier call.
+  // The loading branch therefore renders NO ACTION AT ALL; that, not the
+  // skeleton, is the point.
+  if (loading) {
+    return (
+      <Card style={s.wrap}>
+        <SectionLabel icon="Target">{t("intent.heading")}</SectionLabel>
+        <Skeleton height={64} />
+      </Card>
+    );
+  }
 
   if (intent == null) {
     return (
