@@ -62,7 +62,8 @@ Each package has its own README with deeper diagrams:
 [`client`](client/README.md) (UI route map) ·
 [`server`](server/README.md) (API map) ·
 [`reviewer-core`](reviewer-core/README.md) (review pipeline) ·
-[`mcp`](mcp/README.md) (the MCP tools, and what they cost every session) ·
+[`mcp`](mcp/README.md) (the MCP tools: how to start them from scratch, and why
+nothing starts them for you) ·
 [`e2e`](e2e/README.md).
 
 ## What works on day 1

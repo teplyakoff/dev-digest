@@ -41,9 +41,11 @@ vendored into `client/src/vendor/shared`.
 - `./scripts/dev.sh` — full local boot (Postgres → migrate → seed → API + web).
   Flags: `--no-seed` · `--no-client` · `--db-only`.
 - `./scripts/e2e.sh` — hermetic e2e on alternate ports; never touches the dev DB.
-- `mcp/bin/devdigest-mcp` — the stdio MCP server, registered in `.mcp.json`. Its
-  five tool definitions cost ~1 650 tokens in **every** agent session in this
-  repo; `claude --strict-mcp-config` opts out. See `mcp/README.md`.
+- `claude --mcp-config mcp/devdigest.mcp.json --strict-mcp-config` — the only
+  thing that starts the stdio MCP server. It is **opt-in**: `dev.sh` never
+  launches it, and the config deliberately does NOT sit at `.mcp.json`, which
+  Claude Code would auto-load into every session here at a measured 1 871
+  tokens. Needs the API on :3001. See `mcp/README.md`.
 - `cd demo && npm run record` — records a video of the real review loop. Unlike
   `e2e`, this triggers a real run and **spends money**; see `demo/README.md`.
 

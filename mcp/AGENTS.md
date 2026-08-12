@@ -4,8 +4,11 @@ Five tools over stdio, in front of the DevDigest REST API on
 `http://localhost:3001`. This package is a **transport adapter**. It holds no
 database pool, no `Container`, no secrets, and no model.
 
-The user-facing setup, the token cost and the `--strict-mcp-config` escape hatch
-are in `README.md` — do not restate them here.
+The from-scratch runbook, the token cost, and why the config lives at
+`mcp/devdigest.mcp.json` instead of an auto-discovered `.mcp.json` are all in
+`README.md` — do not restate them here. The short version: nothing starts this
+server for you, not `dev.sh` and not session startup. It is opt-in, per session,
+via `claude --mcp-config mcp/devdigest.mcp.json --strict-mcp-config`.
 
 ## Commands (npm, NOT pnpm)
 
