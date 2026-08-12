@@ -19,6 +19,11 @@ how to put one in a PR: `README.md`.
 - `npm run record:smart-diff` — the L03 homework Smart Diff. **Free** — it
   triggers no review at all. It films a PR that ALREADY carries findings anchored
   to rendered lines, and its preflight refuses to launch the browser otherwise.
+- `npm run record:mcp` — the L04 `@devdigest/mcp` stdio server, filmed through the
+  MCP Inspector. **Free** — the four tools it executes are read-only, and
+  `run_agent_on_pull_request` is opened but deliberately never run. Unlike every
+  other recorder it films a *third-party* UI, and it spawns and kills its own
+  Inspector, so nothing needs to be running on :6274 first.
 - `npm run typecheck`
 
 ## Map
@@ -26,6 +31,9 @@ how to put one in a PR: `README.md`.
 - `record.ts` — the review loop: one step per scene, each captioned.
 - `record-skills.ts` · `record-conventions.ts` · `record-intent.ts` ·
   `record-smart-diff.ts` — one lab's feature each, same shape.
+- `record-mcp.ts` — the odd one out: it drives the MCP Inspector, not the
+  DevDigest web app, so none of this repo's selectors apply and the Mantine
+  workarounds in it are specific to that UI.
 - `lib/zip.ts` · `lib/skills-fixture.ts` — the import fixture archive, built in
   memory rather than checked in, so a reader can diff its entries against the
   "ignored" list the preview renders.
@@ -63,6 +71,10 @@ how to put one in a PR: `README.md`.
   and nothing in the product deletes one, so there is no route to call. It films
   the derived card instead and warns; `delete from pr_intent where pr_id = …`
   restores the empty state.
+- **`record:mcp` needs the API on :3001 but nothing on :6274** — it spawns its
+  own Inspector and reads the auth token from that process's stdout, because the
+  token is generated per process and the URL cannot be hardcoded. A leftover
+  Inspector from a manual session holds the port and the recording never starts.
 - **Dropdown items carry their hint inside the same `<button>`**, so an agent's
   accessible name is `"General Reviewer deepseek/deepseek-v4-flash"` — match by
   prefix, never `exact: true`. The trace drawer's tabs are passed as bare strings,

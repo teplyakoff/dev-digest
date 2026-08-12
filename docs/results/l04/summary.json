@@ -1,0 +1,47 @@
+{
+  "recorded_at": "2026-08-12T19:33:29.840Z",
+  "inspector": "@modelcontextprotocol/inspector (spawned by this recorder)",
+  "server": "mcp/bin/devdigest-mcp (stdio)",
+  "api": "http://localhost:3001",
+  "repo": "teplyakoff/dev-digest",
+  "pull_request": 4,
+  "executed": [
+    {
+      "tool": "list_agents",
+      "args": {},
+      "first_line": "5 review agent(s) (enabled only):",
+      "chars": 1127
+    },
+    {
+      "tool": "get_findings",
+      "args": {
+        "pull_request": "teplyakoff/dev-digest#4"
+      },
+      "first_line": "teplyakoff/dev-digest#4 — 11 matching finding(s) of 11 total, from 3 agent(s): Security Reviewer, General Reviewer, API Contract Reviewer. Showing 11 from offse",
+      "chars": 1584
+    },
+    {
+      "tool": "get_conventions",
+      "args": {
+        "repo": "teplyakoff/dev-digest"
+      },
+      "first_line": "teplyakoff/dev-digest — 19 convention(s) of 20, showing 19 from offset 0. Last extraction: 20 kept of 20 proposed at 66727c8.",
+      "chars": 6741
+    },
+    {
+      "tool": "get_blast_radius",
+      "args": {
+        "repo": "teplyakoff/dev-digest",
+        "path": "server/src/modules/repos/routes.ts"
+      },
+      "first_line": "Tool Error",
+      "chars": 618
+    }
+  ],
+  "not_executed": [
+    {
+      "tool": "run_agent_on_pull_request",
+      "why": "calls GitHub and an LLM — spends money"
+    }
+  ]
+}
