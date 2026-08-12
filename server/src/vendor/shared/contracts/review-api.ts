@@ -39,8 +39,19 @@ export type ReviewRecord = z.infer<typeof ReviewRecord>;
 
 /**
  * Response of `POST /pulls/:id/review`. Each requested agent produces a run that
- * streams over SSE at `/runs/:runId/events`; clients subscribe per run. The
- * persisted reviews are also returned once the (synchronous) run completes.
+ * streams over SSE at `/runs/:runId/events`; clients subscribe per run.
+ *
+ * **`reviews` is ALWAYS `[]` on this response.** The route is fire-and-forget:
+ * `modules/reviews/service.ts` kicks off `executor.executeRuns(...)` with
+ * `void … .catch(…)` and returns immediately, so nothing has been persisted yet
+ * when the response is written. Reviews are read afterwards from
+ * `GET /pulls/:id/reviews`, or waited for by polling `GET /pulls/:id/runs`.
+ *
+ * This comment previously claimed the reviews "are also returned once the
+ * (synchronous) run completes", which was never true of the implementation. It
+ * is corrected here rather than deleted because the field itself stays: a
+ * caller that reads `reviews` and finds it empty needs to know that is by
+ * design, not a failure.
  */
 export const ReviewRunTarget = z.object({
   run_id: z.string(),
