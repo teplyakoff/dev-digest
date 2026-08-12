@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-08-12T19:33:29.840Z",
-  "inspector": "@modelcontextprotocol/inspector (spawned by this recorder)",
+  "recorded_at": "2026-08-12T19:54:04.719Z",
+  "inspector": "@modelcontextprotocol/inspector@2.2.0 (spawned by this recorder)",
   "server": "mcp/bin/devdigest-mcp (stdio)",
   "api": "http://localhost:3001",
   "repo": "teplyakoff/dev-digest",

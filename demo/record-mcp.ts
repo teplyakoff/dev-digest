@@ -57,6 +57,15 @@ const CAPTION_ID = "__devdigest_caption";
 /** The tool that costs money. Filmed, never executed — see the header. */
 const COSTLY_TOOL = "run_agent_on_pull_request";
 
+/**
+ * Pinned, not floating. `npx -y <name>` would fetch and execute whatever the
+ * registry serves at record time, with full Node access and outside every
+ * lockfile in this repo. It is also what makes the take reproducible: these
+ * frames are of one specific Inspector UI, and a screencast whose tool version
+ * is unnamed is weaker evidence. Bump deliberately, then re-record.
+ */
+const INSPECTOR_PKG = "@modelcontextprotocol/inspector@2.2.0";
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let shotNo = 0;
 
@@ -72,23 +81,45 @@ function warn(msg: string) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Kill the Inspector and everything it spawned.
+ *
+ * Always the process GROUP: `npx` is a launcher, the server that holds the port
+ * is its child, and signalling only the npx pid leaves that child listening on
+ * :6274 — which is precisely what stops the *next* recording from starting. Two
+ * paths need this (start-up timeout and the normal teardown), so it lives in one
+ * place rather than being remembered twice.
+ */
+function stopInspector(child: ChildProcess) {
+  if (!child.pid) return;
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // Both failed: say so. A silently held port looks like a hung recorder.
+      warn(`could not stop the Inspector (pid ${child.pid}) — check :6274 by hand`);
+    }
+  }
+}
+
+/**
  * Start `@modelcontextprotocol/inspector` pointed at our launcher and resolve
  * the URL it prints — which carries a per-process auth token, so the URL cannot
  * be hardcoded and the token must be read from stdout rather than guessed.
  */
 function startInspector(): Promise<{ url: string; child: ChildProcess }> {
   return new Promise((resolve, reject) => {
-    const child = spawn("npx", ["-y", "@modelcontextprotocol/inspector", "mcp/bin/devdigest-mcp"], {
+    const child = spawn("npx", ["-y", INSPECTOR_PKG, "mcp/bin/devdigest-mcp"], {
       cwd: REPO_ROOT,
       env: { ...process.env, MCP_AUTO_OPEN_ENABLED: "false" },
       stdio: ["ignore", "pipe", "pipe"],
-      // Its own process group: `npx` spawns the real server as a child, and
-      // killing only the npx pid leaves that child holding the port.
+      // Its own process group, so stopInspector can signal the whole tree.
       detached: true,
     });
 
     const timer = setTimeout(() => {
-      child.kill();
+      stopInspector(child);
       reject(new Error("the Inspector did not print a URL within 90 s"));
     }, 90_000);
 
@@ -445,7 +476,7 @@ async function main() {
 
     const summary = {
       recorded_at: new Date().toISOString(),
-      inspector: "@modelcontextprotocol/inspector (spawned by this recorder)",
+      inspector: `${INSPECTOR_PKG} (spawned by this recorder)`,
       server: "mcp/bin/devdigest-mcp (stdio)",
       api: API,
       repo: REPO_NAME,
@@ -478,14 +509,7 @@ async function main() {
   } finally {
     await ctx?.close();
     await browser?.close();
-    // npx spawns the real server as a child; kill the group or it keeps :6274.
-    if (inspector?.pid) {
-      try {
-        process.kill(-inspector.pid, "SIGTERM");
-      } catch {
-        inspector.kill("SIGTERM");
-      }
-    }
+    if (inspector) stopInspector(inspector);
   }
 }
 
