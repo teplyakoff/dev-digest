@@ -14,6 +14,7 @@ aliases, not published modules):
 | `server/`        | `@devdigest/api`            | Fastify API + Drizzle/Postgres (pgvector)             | 3001 |
 | `client/`        | `@devdigest/web`            | Next.js 15 web app (the studio)                       | 3000 |
 | `reviewer-core/` | `@devdigest/reviewer-core`  | Pure review engine: diff → prompt → LLM → findings    | —    |
+| `mcp/`           | `@devdigest/mcp`            | Local stdio MCP server over the API (five tools)      | stdio |
 | `e2e/`           | `@devdigest/e2e`            | Deterministic browser e2e (agent-browser)             | —    |
 | `server/src/vendor/shared` | `@devdigest/shared` | Zod contracts shared across every package             | —    |
 
@@ -61,6 +62,7 @@ Each package has its own README with deeper diagrams:
 [`client`](client/README.md) (UI route map) ·
 [`server`](server/README.md) (API map) ·
 [`reviewer-core`](reviewer-core/README.md) (review pipeline) ·
+[`mcp`](mcp/README.md) (the MCP tools, and what they cost every session) ·
 [`e2e`](e2e/README.md).
 
 ## What works on day 1
@@ -82,7 +84,7 @@ These are intentionally **not** in the starter — each lesson adds one back:
 | L01 | Run cost badge · severity filter on findings |
 | L02 | Skills in the product · Conventions extractor |
 | L03 | Intent layer · Smart Diff |
-| L04 | `devdigest-mcp` server · Blast Radius (reads `repo-intel`) |
+| L04 | `devdigest-mcp` server ([`mcp/`](mcp/README.md), five stdio tools) · Blast Radius (reads `repo-intel`) — the MCP tool for it is a registered, honest stub: the API exposes no blast-radius route yet |
 | L05 | Project Context Folder · Onboarding generator · PR Brief card |
 | L06 | Eval pipeline · Secret/Phantom gates · Plan Verifier · Export to CI |
 | L07 | Multi-agent review · Run Trace / Live Log · Persistent memory · per-agent stats |
@@ -143,6 +145,7 @@ path filter — full strategy in **[`TESTING.md`](TESTING.md)**.
 | server unit (hermetic) | `server-unit.yml` | no |
 | server integration (real Postgres) | `server-integration.yml` | yes |
 | reviewer-core (engine) | `reviewer-core.yml` | no |
+| mcp (stdio adapter, fake API client) | `mcp.yml` | no |
 | web e2e (agent-browser, real stack) | `e2e-web.yml` | yes |
 
 Server tests split by filename: `*.it.test.ts` are DB-backed (testcontainers
