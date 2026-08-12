@@ -1,0 +1,27 @@
+{
+  "name": "@devdigest/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DevDigest MCP server — a local stdio adapter over the DevDigest REST API (http://localhost:3001). Five read-mostly tools: list_agents, run_agent_on_pull_request, get_findings, get_conventions, get_blast_radius. No database, no secrets, no prompt assembly and no model call — this package is transport, not a review path.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src test",
+    "build": "tsc --noEmit -p tsconfig.json",
+    "start": "tsx src/main.ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.10.0",
+    "eslint": "^10.8.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^2.1.8"
+  }
+}
