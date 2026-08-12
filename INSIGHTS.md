@@ -174,6 +174,22 @@ here. Here is for what has no package at all.
   that is the only cheap evidence that the key is the one the previous run
   wrote. (2026-08-12)
 
+- **Extends the entry above: that sanity check is not reachable from a later
+  round, because a cache entry does not record what it was keyed on.** Every file
+  in `.git/devdigest/cache/` starts with `group:` and `skills:` and nothing else
+  — no file list, no skill paths — so a subsequent round cannot reconstruct the
+  argument list the previous one passed to `cache-key` and therefore cannot prove
+  a HIT is the right entry. Probing for it in round 8 of the L04 review cost
+  several attempts and produced only misses (`mcp-core` → `167277cd91abac26`,
+  nothing on disk), which is indistinguishable from "the files changed". Use the
+  cheaper and stronger check instead: `git diff --name-only <verdict-head>..HEAD`
+  against the head recorded in `.git/devdigest/verdict`. If a file does not
+  appear there, its blob is unchanged and the prior round's findings stand — no
+  key arithmetic involved. Report those groups as *carried on verified-identical
+  blobs*, never as `cached`, so the report does not claim a check nobody ran.
+  Fixing the cache properly means writing the key inputs into the entry.
+  (2026-08-12)
+
 - **A free port is not a stopped dev server, and `pkill -f "tsx watch
   src/server.ts"` matches nothing.** Stopping the API after a live run looked
   like it worked — `lsof -tiTCP:3001` came back empty — and two processes ran

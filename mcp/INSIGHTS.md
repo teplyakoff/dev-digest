@@ -54,6 +54,22 @@ _(no entries yet)_
   `fetch` that rejects, and keep a sibling test proving a genuine failure still
   propagates. (2026-08-12)
 
+- **`get_findings`' header names every agent that REVIEWED the pull request, not
+  the agents whose findings it is returning** — so it credits agents that found
+  nothing. `collect-findings.ts:59-63` pushes `row.agent_name` for every
+  `kind: 'review'` row before reading `row.findings`, and a row with an empty
+  `findings` array still lands in `agents`. On `teplyakoff/dev-digest#4` the
+  output reads *"11 finding(s) … from 3 agent(s): Security Reviewer, General
+  Reviewer, API Contract Reviewer"* while the Security Reviewer has **0**
+  findings across all four of its runs there; the real split is 8 General + 3 API
+  Contract. This actively misleads the caller's model, which is the audience the
+  header exists for: it was read as evidence that the security agent had flagged
+  the contract break, and it had not. Build `agents` from the rows that
+  contributed at least one finding — or from `matched`, so the header describes
+  what was actually returned rather than what was scanned. Note the union in the
+  comment above it is right and must stay; only the attribution is wrong.
+  (2026-08-12)
+
 ## Codebase Patterns
 
 - **One row in `reviews` is one AGENT, not one review pass** — carried over from

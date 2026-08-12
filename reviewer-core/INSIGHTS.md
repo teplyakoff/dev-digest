@@ -10,7 +10,18 @@ _(no entries yet)_
 
 ## What Doesn't Work
 
-_(no entries yet)_
+- **The run trace prints the model's self-reported score, which this package's
+  own contract says is ignored.** `review/run.ts:264` emits `Reduced to N
+  finding(s); verdict=…, score=${merged.score}` straight off `reduceReviews`,
+  before `groundFindings` and before the scope gate; the score that is actually
+  persisted is computed ~40 lines later at `run.ts:302` by
+  `scoreFromFindings(scoped.kept)`. On a real Security Reviewer run against
+  `dev-digest#4` the trace read `verdict=approve, score=0` while the run row
+  stored `score=100` — the two numbers disagree by design and nothing on the line
+  says which is which. Reading a trace: trust the run row, not this line. Whoever
+  touches it next, label it (`model score, pre-grounding`) rather than deleting
+  it — the number is genuinely interesting, it just is not the score.
+  (2026-08-12)
 
 ## Codebase Patterns
 
