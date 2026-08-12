@@ -25,7 +25,7 @@ is a decision, not an oversight.
 | `mcp-tests` | `mcp/test/**` | [onion-architecture](../onion-architecture/SKILL.md) §12 | no — HIGH ceiling |
 | `package-config` | `*/eslint.config.*`, `*/next.config.*`, `*/vitest.config.*`, `*/tsconfig*.json`, `*/package.json` | the package's own skill ([next-best-practices](../next-best-practices/SKILL.md) or [fastify-best-practices](../fastify-best-practices/SKILL.md)), [security](../security/SKILL.md) | yes |
 | `security-sweep` | every changed source file matching a trigger in §3 | [security](../security/SKILL.md) | yes |
-| `infra` | `.github/**`, `scripts/*.sh`, `*/bin/**`, `docker-compose.yml`, `.claude/**`, `**/*.mcp.json` | [security](../security/SKILL.md) | yes |
+| `infra` | `.github/**`, `scripts/*.sh`, `*/bin/**`, `docker-compose.yml`, `.claude/**`, `.mcp.json`, `**/*.mcp.json` | [security](../security/SKILL.md) | yes |
 | `light` | `e2e/**`, `demo/**` | — read the diff, report obvious breakage only | no — HIGH ceiling |
 | — skipped — | `docs/**`, `*.md`, `**/INSIGHTS.md`, lockfiles, `_assets/**`, `**/migrations/meta/**`, generated output | — | — |
 
@@ -45,10 +45,12 @@ never travel inward). **Never `frontend-architecture`.**
 production code, assert on recorded output rather than call counts), mirroring
 `server-tests`. Two neighbouring paths are covered by widening `infra` rather
 than by rows of their own: `*/bin/**`, because a package launcher is an
-executable script that no `src` group matches, and `**/*.mcp.json`, because a
-committed server registration is a supply-chain surface for every clone — the
-glob rather than the bare filename because this repo deliberately keeps its own
-at `mcp/devdigest.mcp.json`, outside Claude Code's auto-discovery. This
+executable script that no `src` group matches, and any MCP registration,
+because a committed server definition is a supply-chain surface for every
+clone — this repo's own `.mcp.json` is auto-discovered by Claude Code, so it
+runs `mcp/bin/devdigest-mcp` in every session opened here. Both the root
+dotfile and any `*.mcp.json` elsewhere are listed, because a leading-dot name
+is not reliably matched by a `*` glob and this row is read, not executed. This
 does **not** settle `reviewer-core/test/**`, which is still in no group — that
 one is recorded as an open question in the root `INSIGHTS.md` and belongs to
 its own change.

@@ -8,21 +8,27 @@ at `http://localhost:3001`: no database pool, no secrets file, no model.
 MCP client ──stdio(JSON-RPC)──▶ devdigest-mcp ──HTTP──▶ @devdigest/api :3001
 ```
 
-## This server is opt-in, and nothing starts it for you
+## What starts it, and what does not
 
 Two things are true and easy to confuse:
 
-- **`./scripts/dev.sh` never starts this server.** It boots Postgres, runs the
-  migrations, seeds, and starts the API and the web client. `scripts/` contains
-  no reference to `mcp` at all. Starting the app has never started the tools.
-- **The config is not auto-discovered either.** It lives at
-  `mcp/devdigest.mcp.json`, *not* at `.mcp.json` in the repo root. Claude Code
-  auto-loads a root `.mcp.json` for every session in the directory; this one it
-  will not touch unless you name it on the command line.
+- **The tools are registered automatically.** `.mcp.json` in the repo root is
+  auto-discovered by Claude Code, so every session opened in this directory has
+  the five tools without any flag. That is deliberate — the deliverable should
+  be there when you need it — and it is paid for by every session, including
+  ones that will never call it. The number is in [token cost](#token-cost).
+- **`./scripts/dev.sh` still never starts this server.** It boots Postgres, runs
+  the migrations, seeds, and starts the API and the web client; `scripts/`
+  contains no reference to `mcp` at all. The *client* spawns the server, on
+  demand, over stdio. Starting the app and starting the tools are unrelated
+  events, and neither implies the other.
 
-So the tools exist when you ask for them and cost nothing when you don't. The
-price of the other arrangement is in [the token cost](#token-cost) below — it is
-why this one was chosen.
+The consequence worth internalising: with a session open and no API running,
+every tool answers with the same actionable error rather than a stack trace.
+That is not the server failing to start — it started fine and has nothing to
+talk to.
+
+To run a session **without** the tools: `claude --strict-mcp-config`.
 
 ## From scratch
 
@@ -85,29 +91,40 @@ and it leaves Postgres running after Ctrl-C. Stop that with `docker compose stop
 — never `docker compose down -v`, which deletes the volume and every imported
 repo and review with it.
 
-### 5. Start a client session with the tools
+### 5. Start a client session
 
 From the repo root, in a second terminal:
 
 ```sh
-claude --mcp-config mcp/devdigest.mcp.json --strict-mcp-config
+claude
 ```
 
-- `--mcp-config` loads this server for this session only.
-- `--strict-mcp-config` drops **every other** MCP server you have configured —
-  globally, per-user, from plugins. On a machine with a dozen connectors that is
-  usually a far bigger context saving than these five tools cost. Leave it off if
-  you need your other servers in the same session.
+That is the whole step. `.mcp.json` is auto-discovered, so the tools are there.
+The first time a project server appears, the client asks whether to trust it —
+approve it once and it stays approved for the project.
 
-Verify inside the session by calling `list_agents`. With the API up you get the
-workspace's agents; with it down you get the error quoted above — either way the
-tool is wired. Note that `claude mcp list` will **not** show it: that subcommand
-reads the stored configurations and ignores `--mcp-config`.
+Verify by calling `list_agents`. With the API up you get the workspace's agents;
+with it down you get the error quoted above — either way the tool is wired, and
+that error is the fastest way to tell "server did not start" from "server
+started and the API is missing".
+
+Two flags worth knowing:
+
+| | |
+|---|---|
+| `claude --strict-mcp-config` | run **without** these tools, and without any of your other MCP servers |
+| `claude --mcp-config <file>` | load a server from an explicit file, e.g. to point at a different API |
+
+Note that `claude mcp list` shows your stored user- and plugin-level servers; do
+not use it to confirm this one. Call a tool instead.
 
 ### 6. Point it somewhere else (rarely)
 
+Edit `env.DEVDIGEST_API_URL` in `.mcp.json`, or override it for one session with
+an explicit config file:
+
 ```sh
-DEVDIGEST_API_URL=http://127.0.0.1:4001 claude --mcp-config mcp/devdigest.mcp.json
+claude --mcp-config /path/to/other.mcp.json --strict-mcp-config
 ```
 
 Only loopback hosts are accepted — `localhost`, `127.0.0.1`, `::1`. Anything else
@@ -185,11 +202,12 @@ them**, so the five cost **1 871 measured tokens** — serialised `tools/list` f
 the running server, 7 481 characters at ~4 chars/token, against an earlier
 estimate of ~1 650.
 
-That number is the reason the config sits at `mcp/devdigest.mcp.json` rather than
-at `.mcp.json` in the root. Auto-discovery would charge it to **every** session in
-this repo, `planner`, `researcher` and the review agents included, none of which
-can use these tools. Opt-in inverts the default: you pay when the session is
-about DevDigest, and the rest pay nothing.
+Because `.mcp.json` is committed and auto-discovered, that is charged to **every**
+session in this repo — `planner`, `researcher` and the review agents included,
+none of which can call these tools. That is the deliberate trade: the tools are
+always there, and the price is always paid. `claude --strict-mcp-config` is the
+per-session opt-out, and it is worth reaching for when a session is not about
+DevDigest at all.
 
 Measured per tool, from the same payload:
 
