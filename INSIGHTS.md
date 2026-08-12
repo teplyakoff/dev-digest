@@ -32,6 +32,17 @@ here. Here is for what has no package at all.
   layers, four disjoint finding sets, 249 unit tests green throughout. When
   trimming an agent budget, trim how input reaches the checkers. (2026-08-06)
 
+- **`implementer`'s "Handoff to review" section is the highest-yield input a
+  review has, and it is free.** On L04 the agent ended its report by naming
+  three judgement calls it wanted a second opinion on. Two of them became
+  findings the review would otherwise have had to derive from 2 000 lines of
+  new code — `Deps` importing ring 2 from the ring-1 port file, and a
+  structural re-declaration of the SDK's `RequestHandlerExtra`. It also
+  volunteered the one gate defect it had introduced. Read that section first
+  and treat each item as a lead to confirm or dismiss; it costs one paragraph
+  of reading and it is written by the only party that knows which decisions
+  were close. (2026-08-12)
+
 ## What Doesn't Work
 
 - **A subagent whose `tools` allowlist omits `Skill` cannot invoke any skill in
@@ -137,6 +148,32 @@ here. Here is for what has no package at all.
   watch it error, revert. Costs two minutes; without it the check is decoration.
   (2026-08-08)
 
+- **A character class cannot anchor a pattern in `gates.sh`, because
+  `added_hits` feeds grep `path<TAB>content` and the TAB is already consumed.**
+  Fixing the `xit\(` false positive on `process.exit(` by writing
+  `[^A-Za-z]xit\(` silently stopped matching any `xit(` at column 0 of the
+  source line: the literal `TAB` earlier in the pattern eats the only character
+  the class could have matched, and there is nothing left to backtrack onto.
+  Colocated client tests live under `client/src/**`, where a top-level `xit(`
+  is exactly how a skipped test is written — so the gate lost its most common
+  real case while still reporting PASS. Use `\b` instead (`\bxit\(` matches
+  after a TAB and after a space, and still rejects `exit(`); both GNU and BSD
+  grep support it under `-E`. Test any new pattern against BOTH a column-0 and
+  an indented occurrence — either one alone proves nothing. (2026-08-12)
+
+- **`git hash-object` inside `collect-diff.sh cache-key` degrades to the
+  literal string `missing`, so a key built from a mangled argument list is
+  still sixteen valid-looking hex characters.** Computing one group's key two
+  ways during the L04 review returned `5a1e9b9e623214c5` and
+  `1013ffe4e4e0190a` from byte-identical inputs, because one call path did not
+  word-split the path list and `hash-object` was handed a single nonexistent
+  multi-path filename. Nothing errors and nothing warns: the wrong key simply
+  never collides with the right one, so every group reads as a cache miss
+  forever and the findings written under it are orphaned. Sanity-check a
+  computed key by asserting a HIT on a group whose files did not change —
+  that is the only cheap evidence that the key is the one the previous run
+  wrote. (2026-08-12)
+
 ## Codebase Patterns
 
 - **A review subagent that needs two skills in one pass takes no `Skill` tool —
@@ -217,6 +254,18 @@ here. Here is for what has no package at all.
   reason. An unlabelled borrowed frame is the failure; a labelled one is evidence
   the take could not otherwise carry. (2026-08-06)
 
+- **A new package needs THREE rows in `routing.md`, not one — `src`, `test` and
+  the launcher — or `/pr-self-review` reviews part of it and says PASS.** L04
+  added `mcp/` with a single `mcp/src/**` row. That left 912 lines under
+  `mcp/test/**` and a new executable `mcp/bin/devdigest-mcp` matching no group
+  at all, and the run still ended `PASS_WITH_NOTES`; the only reason it
+  surfaced is that `report-format.md` makes the "Not reviewed" table
+  mandatory. The fix was an `mcp-tests` row (onion §12, HIGH ceiling, mirroring
+  `server-tests`) plus widening `infra` to `*/bin/**` and `.mcp.json`. When
+  adding a package, write the rows before the code — and read the "Not
+  reviewed" table of the first run as the check that you got them all.
+  (2026-08-12)
+
 ## Tool & Library Notes
 
 - **A `PreToolUse` hook *can* be scoped to one subagent — read the read-only
@@ -256,6 +305,20 @@ here. Here is for what has no package at all.
   surface. The parenthesised syntax is version-gated: if it does not resolve, the
   agent still launches — a launch only fails when *nothing* in `tools` resolves.
   (2026-08-06)
+
+- **Editing `routing.md` or `gates.sh` does NOT invalidate a single cached
+  review group — only `SKILL.md` blobs and the group's own files do.**
+  `cache_key()` hashes the group name, each reviewed file's blob, and whatever
+  skill-file paths the caller passes; `routing.md` and `gates.sh` are passed to
+  neither, so they are invisible to it. Verified during the L04 review: three
+  client groups still returned HIT after both files changed. This **supersedes
+  the parenthetical in this file's own Open Questions** — twice, in the
+  `reviewer-core/test/**` and `severity.md` §3.2 entries — which claims that
+  fixing them "invalidates the cached findings of every group reviewed against
+  `pr-self-review`'s own files". It does not, and treating a routing change as
+  a cache flush hides that the newly-routed files have never actually been
+  reviewed. If you want a genuine flush it is `rm -rf .git/devdigest/cache`,
+  which `report-format.md` already documents. (2026-08-12)
 
 ## Recurring Errors & Fixes
 
@@ -338,6 +401,21 @@ _(no entries yet)_
   both found by running the feature against a real imported PR rather than the
   seed, which could not exercise it at all. Ended `CLEAN` at 0 blockers after one
   HIGH and three MEDIUMs were fixed inside the run.
+
+- **2026-08-12** — L04, the `devdigest-mcp` stdio server, built by `implementer`
+  from `docs/plans/L04-mcp-server.md` in one pass (272 k tokens, 144 tool calls,
+  28 min) and then reviewed with `/pr-self-review`. The plan survived contact
+  almost intact; the one substantive deviation was forced by a tooling
+  interaction it could not have predicted (a `zod/*` path alias against the MCP
+  SDK's dual zod-3/zod-4 declarations, `TS2589` on every `registerTool`).
+  Review round 1 returned 1 HIGH and 4 MEDIUM, round 2 zero of each. Two of the
+  five came straight from the implementer's own handoff section, one was a
+  latent defect in `gates.sh` that this change set made reachable, and one — the
+  routing gap — existed only because the "Not reviewed" table forces the report
+  to admit what it skipped. Every fix was demonstrated red before acceptance,
+  which caught nothing new but cost about four minutes total. The verdict
+  mechanism itself behaved exactly as designed: committing nothing, changing
+  three files, and watching the fingerprint invalidate the round-1 token.
 
 ## Open Questions
 

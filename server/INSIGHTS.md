@@ -221,6 +221,20 @@ would be obvious to anyone reading the code, don't write it.
   `import * as t from '../../db/schema.js'` in the new file, run `pnpm lint`,
   expect an error naming `no-restricted-imports`, then revert. (2026-08-08)
 
+- **`POST /pulls/:id/review` has never been synchronous, and its own contract
+  docstring said it was — for three lessons, through every gate.**
+  `vendor/shared/contracts/review-api.ts` claimed the persisted reviews "are
+  also returned once the (synchronous) run completes". `modules/reviews/service.ts`
+  fires `void this.executor.executeRuns(...).catch(...)` and returns
+  immediately, so `reviews` on that response is **always `[]`**. Nothing catches
+  a wrong comment: typecheck, lint and every test pass identically whether the
+  prose is true or false, and the web client never noticed because it refetches
+  on SSE. It cost a whole L04 design premise — a blocking MCP tool built on that
+  sentence would have reported zero findings on every PR — and was corrected on
+  2026-08-12. When a contract comment describes RUNTIME behaviour rather than
+  shape, read the handler before building on it; the field stays because a
+  caller finding `[]` needs to know that is by design. (2026-08-12)
+
 ## Codebase Patterns
 
 - The Zod contracts are **vendored twice — `server/src/vendor/shared/**` and
