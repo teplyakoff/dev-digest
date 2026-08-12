@@ -174,6 +174,20 @@ here. Here is for what has no package at all.
   that is the only cheap evidence that the key is the one the previous run
   wrote. (2026-08-12)
 
+- **A free port is not a stopped dev server, and `pkill -f "tsx watch
+  src/server.ts"` matches nothing.** Stopping the API after a live run looked
+  like it worked — `lsof -tiTCP:3001` came back empty — and two processes ran
+  on for **9 h 24 m**: `pnpm dev` (96418) and its child
+  `node .../tsx/dist/cli.mjs watch src/server.ts` (96432). The port was free
+  only because the listener had been killed by PID from `lsof`; the file
+  watcher above it never had a port and so never showed up. The `pkill` pattern
+  missed because `pnpm dev` spawns tsx through its CLI entry point, so the real
+  command line contains `cli.mjs watch src/server.ts`, not `tsx watch …` —
+  close enough to read as correct and not close enough to match. Verify with
+  `ps -Ao pid,command | grep Projects/dev-digest` after stopping anything;
+  a port check answers a different question than the one being asked.
+  (2026-08-12)
+
 ## Codebase Patterns
 
 - **A review subagent that needs two skills in one pass takes no `Skill` tool —
@@ -265,6 +279,19 @@ here. Here is for what has no package at all.
   adding a package, write the rows before the code — and read the "Not
   reviewed" table of the first run as the check that you got them all.
   (2026-08-12)
+
+- **State the RATIONALE for a placement decision in one file; let the others
+  state only the fact.** Whether the MCP registration lives at an
+  auto-discovered `.mcp.json` or at a name only an explicit flag loads was
+  reversed twice in one session, and each reversal meant editing the same five
+  files — `AGENTS.md`, `mcp/AGENTS.md`, `mcp/README.md`, the root `README.md`
+  and `pr-self-review/routing.md` — because every one of them explained *why*
+  rather than pointing at the explanation. Ten edits for two decisions, and the
+  real risk is not the typing: a file missed in the sweep goes on asserting the
+  reverse, and `*.md` is on routing's skipped row, so no review pass would ever
+  catch it. The fact ("it is auto-discovered", "it costs 1 871 tokens") is
+  cheap to repeat and useful in each place. The argument for it belongs in the
+  package README, once. (2026-08-12)
 
 ## Tool & Library Notes
 

@@ -96,6 +96,19 @@ _(no entries yet)_
   bisecting the `paths` block, and the reasoning is inlined in
   `tsconfig.json:31-40` so it is not re-added. (2026-08-12)
 
+- **An `outputSchema` enum that lists a status the tool never emits is a lie
+  the type system cannot catch, and the SDK will not stop you.**
+  `RunAgentOutput.status` advertised `failed | timeout | cancelled` while every
+  one of those paths returned text only, so a caller switching on
+  `structuredContent.status` fell through to `undefined` on exactly the
+  outcomes worth branching on. The reason the payload had been left off was
+  caution about emitting it beside `isError`; the SDK settles it —
+  `@modelcontextprotocol/sdk/dist/esm/server/mcp.js:193`, `validateToolOutput`
+  returns early on `result.isError`, so a structured payload there is
+  **forwarded unvalidated rather than rejected**. Emit it on every path. When
+  adding a member to an output enum, grep for the code that produces it before
+  believing the schema. (2026-08-12)
+
 ## Recurring Errors & Fixes
 
 _(no entries yet)_
