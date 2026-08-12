@@ -25,8 +25,34 @@ export interface RunReviewCommand {
   topFindings: number;
 }
 
+/**
+ * `completed` means the REVIEW succeeded, not that the poll stopped.
+ *
+ * The distinction is not academic and it was not free: a run that hits the
+ * API's own 10-minute executor deadline settles as `failed`, which is a
+ * terminal status, so the poll ends normally. Reporting that as `completed`
+ * with `findings_total: 0` tells the caller the pull request is clean when in
+ * fact nothing reviewed it. Observed live on a real PR — run 63f42ba1,
+ * "Run exceeded the 10-minute deadline and was aborted", reported as completed.
+ *
+ * `partial` exists for `all_agents`, where one agent finishing and another
+ * failing is ordinary. Collapsing that into either neighbour loses something a
+ * caller acts on.
+ */
+export type RunReviewStatus =
+  /** Every run reached `done`. */
+  | 'completed'
+  /** At least one run reached `done`, at least one did not. */
+  | 'partial'
+  /** The poll settled and NO run reached `done` — all failed or were cancelled. */
+  | 'failed'
+  /** `max_wait_seconds` elapsed; the runs are still going. */
+  | 'timeout'
+  /** The caller aborted the tool call; the runs are still going. */
+  | 'cancelled';
+
 export interface RunReviewOutcome {
-  status: 'completed' | 'timeout' | 'cancelled';
+  status: RunReviewStatus;
   label: string;
   pullId: string;
   runIds: string[];
@@ -89,19 +115,26 @@ export async function runReview(
   });
 
   const runs = outcome.value ?? [];
-  const status =
-    outcome.status === 'settled'
-      ? 'completed'
-      : outcome.status === 'aborted'
-        ? 'cancelled'
-        : 'timeout';
+  // `settled` is a statement about the POLL, not about the review. Ask the runs
+  // themselves what happened before naming the outcome.
+  const succeeded = runs.filter((r) => r.status === 'done').length;
+  const status: RunReviewStatus =
+    outcome.status === 'aborted'
+      ? 'cancelled'
+      : outcome.status === 'timeout'
+        ? 'timeout'
+        : succeeded === 0
+          ? 'failed'
+          : succeeded === runs.length
+            ? 'completed'
+            : 'partial';
 
   // Findings are only worth reading back when something actually finished.
   let topFindings: FindingRecord[] = [];
   let totalFindings = 0;
   const severityCounts: Record<Severity, number> = { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 };
 
-  if (status === 'completed' && runs.some((r) => r.status === 'done')) {
+  if (succeeded > 0 && (status === 'completed' || status === 'partial')) {
     const reviews = await api.listReviews(pullId, signal);
     // One row per AGENT — union them, never `.find()` (server/INSIGHTS.md:343-356).
     const fresh = reviews

@@ -26,6 +26,20 @@ _(no entries yet)_
   `run_id` set that `POST /pulls/:id/review` handed back. Terminal statuses are
   `done | failed | cancelled`. (2026-08-11)
 
+- **A terminal run is not a successful run, and conflating them reports a
+  clean bill of health for a pull request nothing reviewed.** The poll's `done`
+  predicate is `done | failed | cancelled` — all three END the wait. Mapping
+  "the poll settled" onto `status: 'completed'` therefore turned a run that hit
+  the API's own 10-minute executor deadline into
+  `{"status":"completed","findings_total":0}`, which a model reads as "no
+  problems found". Ask the RUNS what happened, never the poll: every run `done`
+  → completed, some → partial, none → failed with `isError`. Found by running
+  the tool against a real PR (`teplyakoff/quiz-generator#31`, run 63f42ba1,
+  600 015 ms, `Run exceeded the 10-minute deadline and was aborted`) — every
+  fixture here scripted `… → done`, so no hermetic test could reach it, and
+  neither could a review pass. When a poller has more than one terminal state,
+  write the fixture for the unhappy ones first. (2026-08-12)
+
 - **There are TWO cancellation windows in the poller, and checking
   `signal.aborted` between ticks covers only one.** An abort that lands while
   `listRuns` is in flight does not resolve the promise — it REJECTS it, with

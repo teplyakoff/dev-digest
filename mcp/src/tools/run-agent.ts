@@ -33,7 +33,7 @@ export const RunAgentInput = z
  * recoverable rather than a dead end.
  */
 export const RunAgentOutput = z.object({
-  status: z.enum(['completed', 'timeout', 'cancelled']),
+  status: z.enum(['completed', 'partial', 'failed', 'timeout', 'cancelled']),
   run_ids: z.array(z.string()),
   findings_total: z.number().int(),
   critical: z.number().int(),
@@ -49,8 +49,8 @@ export const runAgentOnPullRequest: ToolDescriptor = {
       'Run a DevDigest review agent over a pull request and WAIT for it to finish, then return a',
       'compact summary: score, blockers, severity counts, cost, and the top few findings.',
       'This CALLS GITHUB AND AN LLM AND SPENDS MONEY. Typical latency is tens of seconds, but',
-      'runs of ~15 minutes have happened; on timeout it returns the run ids and keeps going.',
-      'Use get_findings for the full list — this never dumps every finding.',
+      'runs of ~15 minutes happen. status is completed|partial|failed|timeout|cancelled — only',
+      'the first two mean the PR was reviewed. Use get_findings for the full list of findings.',
       'Example: run_agent_on_pull_request({ pull_request: "acme/api#482", agent: "Security Reviewer" }).',
     ].join('\n'),
     inputSchema: RunAgentInput,
@@ -116,10 +116,22 @@ async function run(
     },
   );
 
-  return outcome.status === 'completed' ? completed(outcome) : unfinished(outcome, input);
+  switch (outcome.status) {
+    case 'completed':
+    case 'partial':
+      // `partial` still renders the summary, because the runs that DID finish
+      // produced real findings and dropping them would be the opposite
+      // mistake. Each run line carries its own status and error, so the
+      // failure is on the page rather than inferred from a count.
+      return settled(outcome);
+    case 'failed':
+      return failed(outcome);
+    default:
+      return unfinished(outcome, input);
+  }
 }
 
-function completed(o: RunReviewOutcome): ToolResult {
+function settled(o: RunReviewOutcome): ToolResult {
   const runLines = o.runs.map((r) => {
     const bits = [
       `${r.agent_name ?? r.agent_id ?? 'agent'}: ${r.status}`,
@@ -135,9 +147,11 @@ function completed(o: RunReviewOutcome): ToolResult {
     return `- ${bits.join(' · ')} (run ${r.run_id})`;
   });
 
+  const failedRuns = o.runs.filter((r) => r.status !== 'done').length;
   const head =
-    `${o.label}: ${o.runs.length} run(s) finished in ${Math.round(o.waitedMs / 1000)}s. ` +
-    `${o.totalFindings} finding(s) — ${o.severityCounts.CRITICAL} CRITICAL, ` +
+    `${o.label}: ${o.runs.length} run(s) finished in ${Math.round(o.waitedMs / 1000)}s` +
+    (failedRuns > 0 ? `, ${failedRuns} of them WITHOUT completing` : '') +
+    `. ${o.totalFindings} finding(s) — ${o.severityCounts.CRITICAL} CRITICAL, ` +
     `${o.severityCounts.WARNING} WARNING, ${o.severityCounts.SUGGESTION} SUGGESTION.`;
 
   // Scores and grounding strings are reported exactly as read. Recomputing or
@@ -167,14 +181,71 @@ function completed(o: RunReviewOutcome): ToolResult {
         ),
       },
     ],
-    structuredContent: {
-      status: o.status,
-      run_ids: o.runIds,
-      findings_total: o.totalFindings,
-      critical: o.severityCounts.CRITICAL,
-      warning: o.severityCounts.WARNING,
-      suggestion: o.severityCounts.SUGGESTION,
-    },
+    structuredContent: structured(o),
+  };
+}
+
+/**
+ * Emitted on EVERY path, including the `isError` ones.
+ *
+ * `outputSchema` exists here for exactly one reason — so a model can read the
+ * outcome and the run ids without parsing prose — and that reason is strongest
+ * precisely when something went wrong. An enum that advertises `failed`,
+ * `timeout` and `cancelled` while the tool only ever emits `completed` and
+ * `partial` structurally is an enum that lies: a caller switching on
+ * `structuredContent.status` would fall through to `undefined` on every
+ * outcome worth branching on.
+ *
+ * Legal, and checked rather than assumed —
+ * `@modelcontextprotocol/sdk/dist/esm/server/mcp.js:193`:
+ * `validateToolOutput` returns early on `result.isError`, so the payload is
+ * forwarded to the client unvalidated rather than rejected.
+ */
+function structured(o: RunReviewOutcome): Record<string, unknown> {
+  return {
+    status: o.status,
+    run_ids: o.runIds,
+    findings_total: o.totalFindings,
+    critical: o.severityCounts.CRITICAL,
+    warning: o.severityCounts.WARNING,
+    suggestion: o.severityCounts.SUGGESTION,
+  };
+}
+
+/**
+ * Every run reached a terminal state and NONE of them reached `done`.
+ *
+ * This is a distinct outcome from a timeout — the work is over, not still
+ * going — and it is emphatically not a clean review. It gets `isError: true`
+ * so no caller can read it as one, and it names each run's own error, because
+ * "the executor deadline expired" and "the provider refused the request" want
+ * different next moves from the reader.
+ *
+ * Found by running the tool for real: a 10-minute executor deadline settles a
+ * run as `failed`, which is terminal, which used to end here as
+ * `status: 'completed', findings_total: 0` — a clean bill of health for a pull
+ * request that nothing had reviewed.
+ */
+function failed(o: RunReviewOutcome): ToolResult {
+  const lines = o.runs.map((r) => {
+    const who = r.agent_name ?? r.agent_id ?? 'agent';
+    const why = r.error ? `: ${clamp(r.error, 300)}` : '';
+    const spent = r.duration_ms !== null ? ` after ${Math.round(r.duration_ms / 1000)}s` : '';
+    return `- ${who} — ${r.status ?? 'unknown'}${spent}${why} (run ${r.run_id})`;
+  });
+
+  return {
+    ...textResult(
+      `${o.label}: NO agent completed. ${o.runs.length} run(s) reached a terminal state and none of ` +
+        `them is \`done\`, so this pull request has NOT been reviewed — do not read the absence of ` +
+        `findings as an absence of problems.\n` +
+        `${lines.join('\n')}\n` +
+        `Run ids: ${o.runIds.join(', ')}\n` +
+        `Retry with run_agent_on_pull_request, or check the run's trace in the DevDigest UI. ` +
+        `Note that a cost of "unknown" does not mean the provider was not billed.`,
+      true,
+    ),
+    structuredContent: structured(o),
   };
 }
 
@@ -187,9 +258,11 @@ function completed(o: RunReviewOutcome): ToolResult {
  * answers, the run settles anyway (`server/INSIGHTS.md:38-64`). Cancelling would
  * pay for the run and throw the result away.
  *
- * No `structuredContent` on this path: the SDK skips output validation entirely
- * when `isError` is set (`server/mcp.js:185-195`), so the ids have to be, and
- * are, in the text.
+ * The ids go in BOTH the text and `structuredContent` — see `structured()`.
+ * An earlier version left the structured payload off here out of caution about
+ * emitting it beside `isError`; reading the SDK settled it (validation is
+ * skipped, the payload is still forwarded), and this is the path where a
+ * machine-readable run id is worth the most.
  */
 function unfinished(o: RunReviewOutcome, input: z.infer<typeof RunAgentInput>): ToolResult {
   const why =
@@ -200,12 +273,15 @@ function unfinished(o: RunReviewOutcome, input: z.infer<typeof RunAgentInput>): 
     .filter((r) => r.status === 'running' || r.status === null)
     .map((r) => r.agent_name ?? r.run_id);
 
-  return textResult(
-    `${why}; ${o.runs.length > 0 ? `${pending.length} of ${o.runs.length}` : 'the'} run(s) are still going.\n` +
-      `The runs were NOT cancelled and are still being billed to completion — cancelling does not ` +
-      `abort the request in flight, it only discards the result.\n` +
-      `Run ids: ${o.runIds.join(', ')}\n` +
-      `Read the result later with get_findings({ pull_request: "${o.label}" }).`,
-    true,
-  );
+  return {
+    ...textResult(
+      `${why}; ${o.runs.length > 0 ? `${pending.length} of ${o.runs.length}` : 'the'} run(s) are still going.\n` +
+        `The runs were NOT cancelled and are still being billed to completion — cancelling does not ` +
+        `abort the request in flight, it only discards the result.\n` +
+        `Run ids: ${o.runIds.join(', ')}\n` +
+        `Read the result later with get_findings({ pull_request: "${o.label}" }).`,
+      true,
+    ),
+    structuredContent: structured(o),
+  };
 }

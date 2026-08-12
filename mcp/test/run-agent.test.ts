@@ -212,8 +212,10 @@ describe('run_agent_on_pull_request', () => {
     expect(text(res)).toContain('run-new');
     expect(text(res)).toContain('get_findings');
     expect(text(res)).toMatch(/NOT cancelled/);
-    // Conservative: no structuredContent on the isError path.
-    expect(res.structuredContent).toBeUndefined();
+    // The ids are machine-readable here too. The SDK skips output validation
+    // when `isError` is set but still forwards the payload, and a timeout is
+    // exactly when a caller needs the run ids without parsing prose.
+    expect(res.structuredContent).toMatchObject({ status: 'timeout', run_ids: ['run-new'] });
   });
 
   it('sends a progress notification per tick only when the client asked for one', async () => {
@@ -265,6 +267,88 @@ describe('run_agent_on_pull_request', () => {
     expect(res.isError).toBe(true);
     expect(text(res)).toMatch(/cancelled this tool call/);
     expect(text(res)).toContain('run-new');
+    expect(res.structuredContent).toMatchObject({ status: 'cancelled', run_ids: ['run-new'] });
+  });
+
+  /*
+   * Found by running the tool against a real PR, not by any test here: the
+   * API's executor aborts a run at its own 10-minute deadline and writes
+   * `failed`, which is TERMINAL — so the poll settles normally. That used to
+   * be reported as `status: 'completed', findings_total: 0`, which reads as a
+   * clean pull request. Every fixture in this file scripted `… → done`, so
+   * nothing could see it.
+   */
+  it('does NOT call a run that failed "completed"', async () => {
+    const { deps, extra } = ctx({
+      runTicks: [
+        [makeRun({ run_id: 'run-new', status: 'running' })],
+        [
+          makeRun({
+            run_id: 'run-new',
+            status: 'failed',
+            error: 'Run exceeded the 10-minute deadline and was aborted',
+            duration_ms: 600_015,
+          }),
+        ],
+      ],
+    });
+
+    const res = await withClock(
+      runAgentOnPullRequest.handler({ pull_request: 'acme/payments-api#482' }, deps, extra),
+    );
+
+    expect(res.isError).toBe(true);
+    // `failed` is in the output enum, so the tool has to actually emit it —
+    // a caller switching on `structuredContent.status` must not fall through
+    // to `undefined` on the one outcome most worth branching on.
+    expect(res.structuredContent).toMatchObject({ status: 'failed', run_ids: ['run-new'] });
+    expect(text(res)).toMatch(/NO agent completed/);
+    expect(text(res)).toContain('10-minute deadline');
+    expect(text(res)).toContain('run-new');
+    // The whole point: a caller must not read "no findings" as "no problems".
+    expect(text(res)).toMatch(/has NOT been reviewed/);
+    // And it must not have gone looking for findings that cannot exist.
+    expect((deps.api as FakeApiClient).calls).not.toContain('listReviews(pr-1)');
+  });
+
+  it('reports a mixed all_agents outcome as partial, keeping the findings that exist', async () => {
+    const { deps, extra } = ctx({
+      reviewRun: {
+        pr_id: 'pr-1',
+        runs: [
+          { run_id: 'run-a', agent_id: 'agent-1', agent_name: 'General Reviewer' },
+          { run_id: 'run-b', agent_id: 'agent-2', agent_name: 'Security Reviewer' },
+        ],
+        reviews: [],
+      },
+      runTicks: [
+        [
+          makeRun({ run_id: 'run-a', status: 'done', score: 80 }),
+          makeRun({ run_id: 'run-b', status: 'failed', error: 'provider refused the request' }),
+        ],
+      ],
+      reviews: {
+        'pr-1': [
+          makeReview({ run_id: 'run-a', findings: [makeFinding({ title: 'Unbounded retry loop' })] }),
+        ],
+      },
+    });
+
+    const res = await withClock(
+      runAgentOnPullRequest.handler(
+        { pull_request: 'acme/payments-api#482', all_agents: true },
+        deps,
+        extra,
+      ),
+    );
+
+    expect(res.isError).toBeUndefined();
+    expect(res.structuredContent).toMatchObject({ status: 'partial', findings_total: 1 });
+    // The agent that DID finish keeps its findings...
+    expect(text(res)).toContain('Unbounded retry loop');
+    // ...and the one that did not is on the page, not inferred from a count.
+    expect(text(res)).toMatch(/1 of them WITHOUT completing/);
+    expect(text(res)).toContain('provider refused the request');
   });
 
   it('names the enabled agents when the requested one does not exist', async () => {
