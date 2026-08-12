@@ -58,6 +58,7 @@ psr_package() {
     server/*) echo server ;;
     client/*) echo client ;;
     reviewer-core/*) echo reviewer-core ;;
+    mcp/*) echo mcp ;;
     e2e/*) echo e2e ;;
     demo/*) echo demo ;;
     docs/*) echo docs ;;
@@ -66,9 +67,10 @@ psr_package() {
   esac
 }
 
-# Five packages, two managers, one lockfile each — see the layout table in
+# Six packages, two managers, one lockfile each — see the layout table in
 # AGENTS.md. Guessing wrong here writes the wrong lockfile, which is itself a
-# gate below.
+# gate below. `mcp` needs no entry: the `*)` branch already answers npm, which
+# is one of the reasons it was chosen.
 psr_pm() {
   case "$1" in
     server | client) echo pnpm ;;
