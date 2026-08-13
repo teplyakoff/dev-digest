@@ -14,9 +14,6 @@ import { PrDetailHeader } from "../PrDetailHeader";
 import { OverviewTab } from "../OverviewTab";
 import { FindingsTab } from "../FindingsTab";
 import { DiffTab } from "../DiffTab";
-// Direct module import: new components ship without an `index.ts`
-// (frontend-architecture §12; client/INSIGHTS.md 2026-08-10).
-import { BlastTab } from "../BlastTab/BlastTab";
 import RunTraceDrawer from "../RunTraceDrawer";
 import { usePullDetail, usePulls } from "@/lib/hooks";
 import {
@@ -185,7 +182,13 @@ export function PrDetailView() {
 
       <div style={s.body}>
         {tab === "overview" && (
-          <OverviewTab prId={prId} prBody={pr.body} headSha={pr.head_sha} />
+          <OverviewTab
+            prId={prId}
+            prBody={pr.body}
+            headSha={pr.head_sha}
+            repoId={repoId}
+            repoFullName={repoFullName}
+          />
         )}
 
         {tab === "findings" && (
@@ -240,15 +243,6 @@ export function PrDetailView() {
             // Tab AND finding in ONE navigation — see `setParams` above — and a
             // PUSH, so Back comes back to `?tab=diff&view=smart`.
             onOpenFinding={(id) => setParams({ tab: "findings", finding: id }, { history: "push" })}
-          />
-        )}
-
-        {tab === "blast" && (
-          <BlastTab
-            prId={prId}
-            repoId={repoId}
-            repoFullName={repoFullName}
-            headSha={pr.head_sha}
           />
         )}
       </div>

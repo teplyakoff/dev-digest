@@ -3,7 +3,7 @@
 // every existing test here uses `fireEvent`. Adding the package to satisfy the
 // skill's preference would touch the lockfile for a one-click test.
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { PrIntentView } from "@devdigest/shared";
 // EIGHT levels up from a route-local `_components/<Name>/` folder — the
@@ -11,6 +11,7 @@ import type { PrIntentView } from "@devdigest/shared";
 // "Codebase Patterns").
 import prReview from "../../../../../../../../messages/en/prReview.json";
 import common from "../../../../../../../../messages/en/common.json";
+import blast from "../../../../../../../../messages/en/blast.json";
 
 /**
  * THE GUARD THAT ACTUALLY MATTERS.
@@ -47,6 +48,32 @@ const INTENT_VIEW: PrIntentView = {
 
 const recalculate = vi.fn();
 
+const BLAST_VIEW = {
+  status: "full" as const,
+  reason: null,
+  changed_files: ["src/middleware/ratelimit.ts"],
+  symbols: [
+    {
+      name: "rateLimit",
+      file: "src/middleware/ratelimit.ts",
+      kind: "function",
+      callers: [{ file: "src/api/public/index.ts", symbol: "publicRouter", line: 23, rank: 0.9 }],
+      callers_total: 1,
+    },
+  ],
+  endpoints: [
+    {
+      route: "GET /api/public/items",
+      file: "src/api/public/index.ts",
+      depth: 1,
+      via: "src/middleware/ratelimit.ts",
+    },
+  ],
+  crons: [],
+  indexed_sha: "abc1234def",
+  counts: { symbols: 1, callers: 1, endpoints: 1 },
+};
+
 /** Mutable per-test query state. `vi.hoisted` because the `vi.mock` factory
  *  below is hoisted above every other statement in this file. */
 const query = vi.hoisted(() => ({ loading: false }));
@@ -66,6 +93,18 @@ vi.mock("@/lib/hooks/intent", () => ({
   useRecalculateIntent: () => ({ mutate: recalculate, isPending: false }),
 }));
 
+// The Blast card is the tab's second half and fetches through React Query too.
+// Mocked for the same reason as the intent hooks rather than wrapping this file
+// in a provider: the missing provider IS the guard above, and keeping it means a
+// real hook leaking in still throws instead of quietly passing.
+// `BlastRadiusCard.test.tsx` is where the card's own states are covered.
+vi.mock("@/lib/hooks/blast", () => ({
+  usePrBlast: () => ({ data: BLAST_VIEW, isLoading: false, isError: false, refetch: vi.fn() }),
+}));
+vi.mock("@/lib/hooks/repo-intel", () => ({
+  useResyncRepoIntel: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 import { OverviewTab } from "./OverviewTab";
 
 afterEach(() => {
@@ -78,8 +117,8 @@ const PR_BODY = "Rate limiting was requested after the incident on the 3rd.";
 
 function renderTab(headSha = "sha-one") {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview, common }}>
-      <OverviewTab prId="pr1" prBody={PR_BODY} headSha={headSha} />
+    <NextIntlClientProvider locale="en" messages={{ prReview, common, blast }}>
+      <OverviewTab prId="pr1" prBody={PR_BODY} headSha={headSha} repoId="repo1" repoFullName="acme/api" />
     </NextIntlClientProvider>,
   );
 }
@@ -110,8 +149,8 @@ describe("OverviewTab — the intent card", () => {
   // the reviewer lands on, so it must not depend on the body being there.
   it("still shows the card on a PR opened with no description", () => {
     render(
-      <NextIntlClientProvider locale="en" messages={{ prReview, common }}>
-        <OverviewTab prId="pr1" prBody={null} headSha="sha-one" />
+      <NextIntlClientProvider locale="en" messages={{ prReview, common, blast }}>
+        <OverviewTab prId="pr1" prBody={null} headSha="sha-one" repoId="repo1" repoFullName="acme/api" />
       </NextIntlClientProvider>,
     );
     expect(screen.getByText(/per-IP rate limiter to the public API/i)).toBeInTheDocument();
@@ -126,7 +165,7 @@ describe("OverviewTab — the intent card", () => {
      that carries this test is the BUTTON COUNT, not the skeleton. */
   it("offers no action at all while the intent query is in flight", () => {
     query.loading = true;
-    renderTab();
+    const { container } = renderTab();
 
     // The card is mounted — this is a loading state, not an absent card.
     expect(screen.getAllByText("Intent").length).toBeGreaterThan(0);
@@ -134,7 +173,15 @@ describe("OverviewTab — the intent card", () => {
     expect(screen.queryByText(/has not been derived/i)).not.toBeInTheDocument();
     // …nor anything clickable. Naming "Derive intent" alone would let a future
     // rename slip a live button back in; zero buttons cannot.
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    //
+    // SCOPED TO THE INTENT CARD, and it did not used to be. This assertion ran
+    // over the whole tab back when the tab was only this card; L04 put Blast
+    // Radius beside it in the design's two-card brief, and that card has its own
+    // controls that have nothing to do with whether a classifier call is one
+    // click away. Counting them here would make an unrelated component able to
+    // fail this test — and, worse, able to pass it by rendering nothing.
+    const intentCard = container.querySelector("div")!.children[0] as HTMLElement;
+    expect(within(intentCard).queryAllByRole("button")).toHaveLength(0);
   });
 
   // The other side of the same split: once the query settles, the card must come

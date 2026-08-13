@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-08-13T06:24:38.012Z",
+  "recorded_at": "2026-08-13T08:12:47.392Z",
   "repo": "teplyakoff/dev-digest",
   "pull_request": 4,
   "index": {
@@ -65,7 +65,11 @@
     {
       "n": 5,
       "name": "endpoints",
-      "note": "depths: 0, 2"
+      "note": "reposRoutes hosts DELETE /repos/:id; depths: 0, 2"
+    },
+    {
+      "n": 5.5,
+      "name": "graph"
     },
     {
       "n": 6,

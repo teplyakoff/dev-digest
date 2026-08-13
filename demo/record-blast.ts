@@ -3,15 +3,16 @@
  *
  * Seven scenes, in one unedited take:
  *
- *   1. The Blast tab on a PR that changes a SHARED HELPER — counts, and the
- *      commit the map was computed at.
+ *   1. The PR Brief on Overview — Intent on the left, Blast Radius on the right,
+ *      with its stat row and the commit the map was computed at.
  *   2. The changed symbol with the widest reach, its callers under it.
  *   3. A caller's `file:line`, framed close, with the URL it carries asserted
  *      against the map's own data before the click.
  *   4. That link followed for real, into a second tab: github.com, the file, the
  *      `#L<n>` fragment, and the source line highlighted.
- *   5. Back on the tab: the HTTP routes, with `in a changed file` and
- *      `N hops downstream` telling two different strengths of claim apart.
+ *   5. The routes, nested under the symbol they hang off — expand it and the
+ *      downstream comes with it, which is the chain the feature IS.
+ *  5b. The same map as a node-link graph.
  *   6. A PR in an UNINDEXED repository → the degraded state, which offers
  *      Re-analyze and does not claim there are no callers.
  *   7. The API's own log line for the request just made: index tables read,
@@ -38,6 +39,10 @@
  *
  * A broken claim THROWS. Nothing here costs money, so a take is free to redo and
  * a loud failure is strictly better than a video whose caption lies.
+ *
+ * Structure and placement are ported from `blast.jsx` + `screen_pr_detail.jsx`
+ * in the L02 design bundle, so the scenes follow the card, not a tab — an
+ * earlier take filmed `?tab=blast`, which no longer exists.
  *
  * Prereqs: the dev stack is up (`../scripts/dev.sh`), `npm run setup` has
  * fetched Chromium, DEMO_REPO is INDEXED (`status: full` or `partial`), and
@@ -361,9 +366,13 @@ async function main() {
     const prUrl = `${BASE}/repos/${repo.id}/pulls/${PR_NUMBER}`;
 
     // ---- Scene 1: the tab, and what it was computed from -------------------
-    await page.goto(`${prUrl}?tab=blast`, { waitUntil: "networkidle" });
-    await sleep(1500);
-    await frame(page.getByText("CHANGED SYMBOLS", { exact: false }).first(), "start");
+    // Overview, not a tab of its own: the design puts Blast Radius in the
+    // right-hand card of the PR Brief, opposite Intent
+    // (`screen_pr_detail.jsx`). Filming `?tab=blast` would film a tab that no
+    // longer exists.
+    await page.goto(`${prUrl}?tab=overview`, { waitUntil: "networkidle" });
+    await sleep(1800);
+    await frame(page.getByText("BLAST RADIUS", { exact: false }).first(), "start");
     await beat(
       page,
       1,
@@ -375,8 +384,12 @@ async function main() {
     record(1, "blast-tab");
 
     // ---- Scene 2: the shared helper and its callers -------------------------
-    const heroCard = page.locator("div").filter({ hasText: new RegExp(`^${hero.name}`) }).last();
-    await frame(page.getByText(hero.name, { exact: true }).first(), "center");
+    // The design renders a symbol as `name()`, and only the FIRST one starts
+    // expanded — so the hero (most callers, hence first) is already open.
+    const heroHeader = page.locator("button", { hasText: `${hero.name}()` }).first();
+    await frame(heroHeader, "center");
+    if ((await heroHeader.getAttribute("aria-expanded")) !== "true") await heroHeader.click();
+    await sleep(500);
     // Asserted, not eyeballed: the criterion is TWO real callers on a shared
     // helper, and a caption claiming it over a one-caller card is exactly the
     // kind of still this repo's evidence postmortems are about.
@@ -394,7 +407,6 @@ async function main() {
     );
     await shot(page, "changed-symbol-callers");
     record(2, "changed-symbol-callers", `${hero.name}: ${hero.callers.length} callers`);
-    void heroCard;
 
     // ---- Scene 3: the link, and the URL it actually carries -----------------
     const link = page.getByRole("link", { name: `${heroCaller.file}:${heroCaller.line}` }).first();
@@ -438,23 +450,60 @@ async function main() {
     await page.bringToFront();
     await sleep(800);
 
-    // ---- Scene 5: routes, and how far away they are -------------------------
-    await frame(page.getByText("HTTP ROUTES THIS CHANGE TOUCHES", { exact: false }).first(), "start");
+    // ---- Scene 5: the routes, nested under the symbol they hang off ---------
+    //
+    // The chain IS the layout — symbol → callers → routes — so the scene has to
+    // expand the symbol the routes belong to rather than scroll to a section of
+    // their own. `via` is the changed file a route was reached from, which is
+    // how the card decides where each chip goes.
+    const routeHost = map.symbols.find((s) => map.endpoints.some((e) => e.via === s.file));
+    if (!routeHost) {
+      throw new Error(
+        `No changed symbol on #${PR_NUMBER} hosts any of the ${map.endpoints.length} endpoint(s); ` +
+          "the nesting scene would film an empty card.",
+      );
+    }
+    const hostHeader = page.locator("button", { hasText: `${routeHost.name}()` }).first();
+    await frame(hostHeader, "center");
+    if ((await hostHeader.getAttribute("aria-expanded")) !== "true") await hostHeader.click();
+    await sleep(600);
+    const firstRoute = map.endpoints.find((e) => e.via === routeHost.file)!;
+    const routeChip = page.getByText(firstRoute.route, { exact: true }).first();
+    await routeChip.waitFor({ timeout: 15_000 });
+    if (!(await onScreen(routeChip))) await frame(routeChip, "center");
     const depths = [...new Set(map.endpoints.map((e) => e.depth))].sort();
     await beat(
       page,
       5,
-      depths.length > 1
-        ? "Routes in the changed files, and routes downstream of them — labelled apart, not pooled"
-        : "The HTTP routes this change touches, each traced back to the file it was found in",
-      5000,
+      `The routes hang off ${routeHost.name}() itself — expand the symbol and its downstream comes with it`,
+      5200,
     );
     await shot(page, "endpoints");
-    record(5, "endpoints", `depths: ${depths.join(", ")}`);
+    record(5, "endpoints", `${routeHost.name} hosts ${firstRoute.route}; depths: ${depths.join(", ")}`);
+
+    // ---- Scene 5b: the same map as a graph ---------------------------------
+    const graphTab = page.getByRole("button", { name: "graph" }).first();
+    if (await graphTab.count()) {
+      await frame(graphTab, "center");
+      await graphTab.click();
+      await page.getByRole("img", { name: "Blast radius graph" }).waitFor({ timeout: 15_000 });
+      await sleep(500);
+      await beat(page, "5b", "The same map as a node-link graph: the changed symbol, its callers, the routes", 4800);
+      await shot(page, "graph");
+      record(5.5, "graph");
+      await page.getByRole("button", { name: "tree" }).first().click();
+      await sleep(400);
+    } else {
+      skipped.push({
+        n: 5.5,
+        name: "graph",
+        why: "No changed symbol on this PR has a caller, so the card hides the Tree|Graph switch.",
+      });
+    }
 
     // ---- Scene 6: no index is not "no callers" ------------------------------
     if (pre.bare) {
-      await page.goto(`${BASE}/repos/${pre.bare.repo.id}/pulls/${pre.bare.pull.number}?tab=blast`, {
+      await page.goto(`${BASE}/repos/${pre.bare.repo.id}/pulls/${pre.bare.pull.number}?tab=overview`, {
         waitUntil: "networkidle",
       });
       await sleep(1800);
