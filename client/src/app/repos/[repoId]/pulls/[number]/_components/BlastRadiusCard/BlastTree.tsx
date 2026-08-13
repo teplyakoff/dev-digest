@@ -85,7 +85,15 @@ export function BlastTree({ symbols, endpoints, crons, repoFullName, sha }: Blas
                       caller={c}
                       repoFullName={repoFullName}
                       sha={sha}
-                      last={i === sym.callers.length - 1 && down.endpoints.length === 0}
+                      // `last` closes the vertical guide halfway down, so it
+                      // is true only when NOTHING follows in this subtree —
+                      // crons included, or a cron row hangs below a line that
+                      // has already stopped.
+                      last={
+                        i === sym.callers.length - 1 &&
+                        down.endpoints.length === 0 &&
+                        down.crons.length === 0
+                      }
                     />
                   ))
                 )}
