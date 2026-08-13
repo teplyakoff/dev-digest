@@ -142,8 +142,22 @@ function dedupeSymbols(syms: ExtractedSymbol[]): ExtractedSymbol[] {
 
 /**
  * Find references (call sites / usages) of `symbol` in a file's source.
- * Matches `sym(`, `new sym(`, `.sym(`, `<Sym`, and bare-identifier usage that
- * is NOT the declaration. Skips import lines and comment lines.
+ * Matches `sym(`, `new sym(`, `.sym(`, `<Sym`, and the symbol passed as a VALUE
+ * in an argument or assignment position. Skips import, comment and declaration
+ * lines.
+ *
+ * The value-position pattern was missing for three lessons while this docstring
+ * claimed it was here: `rows.map(toRepoDto)` is a caller of `toRepoDto` by any
+ * reading, and it matched none of the four regexes. Nothing catches a docstring
+ * that overstates a regex — typecheck, lint and every test passed identically
+ * either way.
+ *
+ * THIS EXTRACTOR IS NOT WHAT BLAST RADIUS READS. The persistent index is built
+ * by `adapters/astgrep/parseReferences` (`repo-intel/pipeline/full.ts`); this
+ * one backs the ripgrep fallback behind `container.codeIndex.references()`. The
+ * same gap existed on both sides and was found through the AST one, on real
+ * data. Fixed here too so the fallback does not quietly report fewer callers
+ * than the index for the same file.
  */
 export function extractReferences(content: string, symbol: string): ExtractedReference[] {
   // Reference search works on the *method/function name* — if the caller passes
@@ -155,6 +169,18 @@ export function extractReferences(content: string, symbol: string): ExtractedRef
   const memberCallRe = new RegExp(`\\.${escaped}\\s*\\(`); // .sym(
   const newRe = new RegExp(`new\\s+${escaped}\\b`); // new Sym
   const jsxRe = new RegExp(`<${escaped}[\\s/>]`); // <Sym
+  /**
+   * The symbol passed as a VALUE: `map(sym)`, `f(a, sym)`, `= sym;`, `[sym]`.
+   *
+   * DELIMITED ON BOTH SIDES, deliberately. The permissive version of this rule
+   * is "the bare identifier appears anywhere", and it would match the word
+   * inside an object shorthand, a type position and a re-export — turning a
+   * precision-first extractor into a noisy one, and every false caller here
+   * becomes a false claim on the blast map. Requiring an opening delimiter
+   * before and a closing one after keeps it to the shapes where an identifier
+   * genuinely IS the value being handed somewhere.
+   */
+  const valueRe = new RegExp(`[(,=[:]\\s*${escaped}\\s*[),\\];]`);
 
   const declRe = new RegExp(
     `(?:function\\s*\\*?\\s*|class\\s+|interface\\s+|type\\s+|enum\\s+|(?:const|let|var)\\s+)${escaped}\\b`,
@@ -167,7 +193,13 @@ export function extractReferences(content: string, symbol: string): ExtractedRef
     if (LINE_COMMENT.test(raw) || IMPORT_LINE.test(raw)) continue;
     const line = sanitizeLine(raw);
     if (declRe.test(line)) continue; // the declaration itself is not a reference
-    if (callRe.test(line) || memberCallRe.test(line) || newRe.test(line) || jsxRe.test(line)) {
+    if (
+      callRe.test(line) ||
+      memberCallRe.test(line) ||
+      newRe.test(line) ||
+      jsxRe.test(line) ||
+      valueRe.test(line)
+    ) {
       out.push({ toSymbol: symbol, line: i + 1 });
     }
   }
