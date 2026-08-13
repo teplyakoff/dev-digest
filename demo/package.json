@@ -12,7 +12,8 @@
     "record:conventions": "tsx record-conventions.ts",
     "record:intent": "tsx record-intent.ts",
     "record:smart-diff": "tsx record-smart-diff.ts",
-    "record:mcp": "tsx record-mcp.ts"
+    "record:mcp": "tsx record-mcp.ts",
+    "record:blast": "tsx record-blast.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

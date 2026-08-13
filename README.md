@@ -85,7 +85,7 @@ These are intentionally **not** in the starter — each lesson adds one back:
 | L01 | Run cost badge · severity filter on findings |
 | L02 | Skills in the product · Conventions extractor |
 | L03 | Intent layer · Smart Diff |
-| L04 | `devdigest-mcp` server ([`mcp/`](mcp/README.md), five stdio tools) · Blast Radius (reads `repo-intel`) — the MCP tool for it is a registered, honest stub: the API exposes no blast-radius route yet |
+| L04 | `devdigest-mcp` server ([`mcp/`](mcp/README.md), five stdio tools) · Blast Radius — `GET /pulls/:id/blast`, a Blast tab on the PR page, and `get_blast_radius` over the same route. Reads `repo-intel`'s persistent index; no model call on the main path |
 | L05 | Project Context Folder · Onboarding generator · PR Brief card |
 | L06 | Eval pipeline · Secret/Phantom gates · Plan Verifier · Export to CI |
 | L07 | Multi-agent review · Run Trace / Live Log · Persistent memory · per-agent stats |

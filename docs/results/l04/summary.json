@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-08-12T19:54:04.719Z",
+  "recorded_at": "2026-08-13T06:26:05.521Z",
   "inspector": "@modelcontextprotocol/inspector@2.2.0 (spawned by this recorder)",
   "server": "mcp/bin/devdigest-mcp (stdio)",
   "api": "http://localhost:3001",
@@ -31,11 +31,10 @@
     {
       "tool": "get_blast_radius",
       "args": {
-        "repo": "teplyakoff/dev-digest",
-        "path": "server/src/modules/repos/routes.ts"
+        "pull_request": "teplyakoff/dev-digest#4"
       },
-      "first_line": "Tool Error",
-      "chars": 618
+      "first_line": "teplyakoff/dev-digest#4 — 19 changed symbol(s), 7 caller(s), 17 endpoint(s) across 7 changed file(s). Showing 15. Index at 96acaee.",
+      "chars": 3037
     }
   ],
   "not_executed": [

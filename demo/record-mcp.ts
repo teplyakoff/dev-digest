@@ -8,12 +8,17 @@
  * visible in the protocol sidebar the whole time.
  *
  * FREE, unlike `record` and `record:conventions`. Every tool it executes is
- * read-only: `list_agents`, `get_findings`, `get_conventions`, and
- * `get_blast_radius` (which is *supposed* to fail — it is the unimplemented
- * slot, and the error is the evidence). `run_agent_on_pull_request` is opened
- * so its form and its cost warning are on screen, and deliberately NOT
- * executed: filming is not where a review budget gets spent, and a run recorded
- * live would be a different run from the one the evidence cites.
+ * read-only: `list_agents`, `get_findings`, `get_conventions` and
+ * `get_blast_radius`. `run_agent_on_pull_request` is opened so its form and its
+ * cost warning are on screen, and deliberately NOT executed: filming is not
+ * where a review budget gets spent, and a run recorded live would be a
+ * different run from the one the evidence cites.
+ *
+ * `get_blast_radius` used to be filmed FAILING — it was the unimplemented slot,
+ * and the error was the evidence. L04 gave it a server route, so the shot now
+ * has to prove the opposite: real callers, cited by file and line. If it ever
+ * comes back red on an indexed repository, the recorder is telling the truth
+ * and something upstream broke.
  *
  * Re-runnable: it spawns its own Inspector on a free port and kills it in a
  * `finally`, so nothing is left listening. It writes nothing to the DevDigest
@@ -271,9 +276,11 @@ interface ToolCall {
 /**
  * Open a tool, fill what it needs, run it, and return what came back.
  *
- * `expectError` is not a convenience — `get_blast_radius` is *meant* to fail,
- * and a recorder that treated every non-empty result as a pass would film the
- * unimplemented slot answering correctly and call it a success.
+ * `expectError` is not a convenience. It exists because a recorder that treats
+ * every non-empty result as a pass cannot tell an answer from an error message,
+ * and it is still load-bearing in the other direction now that every filmed
+ * call is supposed to SUCCEED: a red `get_blast_radius` panel would be filmed,
+ * captioned and shipped as evidence unless something asserts otherwise.
  */
 async function runTool(
   page: Page,
@@ -463,10 +470,10 @@ async function main() {
     await beat(page, 8, "get_conventions — the house rules, each citing the file it was inferred from", 4600);
     await shot(page, "call-get-conventions");
 
-    // 9 — the slot that is honest about being empty
-    calls.push(await runTool(page, "get_blast_radius", { repo: REPO_NAME, path: "server/src/modules/repos/routes.ts" }, { expectError: true }));
-    await beat(page, 9, "get_blast_radius is registered and NOT implemented — it says so instead of guessing", 5000);
-    await shot(page, "call-blast-radius-error");
+    // 9 — the impact map, from the code index
+    calls.push(await runTool(page, "get_blast_radius", { pull_request: `${REPO_NAME}#${PR_NUMBER}` }));
+    await beat(page, 9, "get_blast_radius — changed symbols, their callers by file:line, and the routes downstream", 5200);
+    await shot(page, "call-blast-radius");
 
     // 10 — the one that costs money, opened and left alone
     await page.locator(`button:has-text("${COSTLY_TOOL}")`).first().click();

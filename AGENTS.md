@@ -44,7 +44,7 @@ vendored into `client/src/vendor/shared`.
 - `mcp/bin/devdigest-mcp` — the stdio MCP server. **Not** started by `dev.sh`
   (`scripts/` never mentions `mcp`); the client spawns it, and `.mcp.json` in
   the root is auto-discovered so every session here has the five tools. That
-  costs a measured 1 871 tokens in each one — `claude --strict-mcp-config` opts
+  costs a measured 1 936 tokens in each one — `claude --strict-mcp-config` opts
   out. Needs the API on :3001. See `mcp/README.md`.
 - `cd demo && npm run record` — records a video of the real review loop. Unlike
   `e2e`, this triggers a real run and **spends money**; see `demo/README.md`.

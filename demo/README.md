@@ -9,6 +9,8 @@ Five recorders, each producing a captioned video plus one PNG per scene:
 | `npm run record:conventions` | the L02 homework: the Conventions Extractor's candidate queue, evidence links and skill merge → the API Contract Reviewer control experiment, with and without skills | **real money** (one extraction) |
 | `npm run record:intent` | the L03 Intent Layer: the empty card → a real review deriving the intent, with both model calls labelled by role in the Live Log → the reuse on a second trigger → `derive_intent` beside `review_file` in the trace → the model registry → stale and re-derive | **real money** (two reviews + two classifier calls) |
 | `npm run record:smart-diff` | the L03 homework Smart Diff: original order → one toggle to grouped-by-role → the summary strip and large-PR banner → Core logic first, the lock-file last and collapsed → a finding's badge, gutter rail and severity tag on its own line → click it and land on that finding's card in Agent runs → Back, still in Smart order | free |
+| `npm run record:mcp` | the L04 `devdigest-mcp` stdio server through the MCP Inspector: a disconnected STDIO card → the handshake → the capabilities it really advertises → the five tools and their annotations → four read-only `tools/call` round-trips with the JSON-RPC traffic visible → the costly tool opened and deliberately not run | free |
+| `npm run record:blast` | the L04 homework Blast Radius: the tab and the commit it was computed at → a shared helper with its callers by `file:line` → the link's URL asserted → **followed into github.com**, landing on the call site → routes in changed files vs routes downstream → an unindexed repo's degraded state → the API's own log line showing index reads and `llm_calls: 0` | free |
 
 These are **demo recorders, not tests.** They exist to produce shareable evidence
 that the app works against a real stack; `../e2e` is what actually asserts
@@ -32,6 +34,14 @@ reads five endpoints and there is no `POST` anywhere in the file, so no code pat
 can start a billed run. It lives here only because its output is a video. What it
 *does* need is a target that already carries findings anchored to rendered lines,
 since it creates none; its preflight refuses to launch the browser otherwise.
+
+`record:blast` is read-only in the same way, and it is the only recorder that
+leaves localhost. Scene 4 clicks a caller's `file:line` link and follows it into
+github.com, asserting the URL it lands on. That is on purpose: "the `file:line`
+is clickable and opens the right line" is an acceptance criterion, and a
+recorder that screenshots the link and stops has filmed an `<a>` tag. The cost
+is that a take needs network; the payoff is a frame showing the call site
+itself, highlighted, at the commit the line number came from.
 
 ## Setup (once)
 

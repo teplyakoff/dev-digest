@@ -24,13 +24,19 @@ how to put one in a PR: `README.md`.
   `run_agent_on_pull_request` is opened but deliberately never run. Unlike every
   other recorder it films a *third-party* UI, and it spawns and kills its own
   Inspector, so nothing needs to be running on :6274 first.
+- `npm run record:blast` — the L04 homework Blast Radius. **Free** — the feature
+  makes no model call at all, and this recorder triggers no review. It is the
+  only recorder that leaves localhost: scene 4 follows a `file:line` link into
+  github.com and asserts where it landed, because filming the `<a>` tag would
+  prove the markup rather than the deep link. Its preflight refuses to launch
+  unless the target repo is indexed and the PR has a symbol with ≥2 callers.
 - `npm run typecheck`
 
 ## Map
 
 - `record.ts` — the review loop: one step per scene, each captioned.
 - `record-skills.ts` · `record-conventions.ts` · `record-intent.ts` ·
-  `record-smart-diff.ts` — one lab's feature each, same shape.
+  `record-smart-diff.ts` · `record-blast.ts` — one lab's feature each, same shape.
 - `record-mcp.ts` — the odd one out: it drives the MCP Inspector, not the
   DevDigest web app, so none of this repo's selectors apply and the Mantine
   workarounds in it are specific to that UI.
@@ -75,6 +81,12 @@ how to put one in a PR: `README.md`.
   own Inspector and reads the auth token from that process's stdout, because the
   token is generated per process and the URL cannot be hardcoded. A leftover
   Inspector from a manual session holds the port and the recording never starts.
+- **`record:blast` must not resize the popup it opens.** Scene 4 clicks a link
+  with `target="_blank"`; calling `setViewportSize` on the new page while its
+  first navigation is in flight ABORTS that navigation, and the page settles on
+  `chrome-error://chromewebdata/`. The assertion then fails and accuses a
+  perfectly good link. The popup inherits the context viewport anyway, so the
+  call was redundant as well as harmful.
 - **Dropdown items carry their hint inside the same `<button>`**, so an agent's
   accessible name is `"General Reviewer deepseek/deepseek-v4-flash"` — match by
   prefix, never `exact: true`. The trace drawer's tabs are passed as bare strings,

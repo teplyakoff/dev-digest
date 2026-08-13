@@ -6,9 +6,10 @@ grounded structured findings). Fastify 5 + Drizzle ORM over Postgres (pgvector).
 Adapters (LLM, GitHub, git, ast-grep, …) sit behind a DI container so they can be
 swapped for mocks in tests.
 
-> This is the **starter** module set. Later course lessons add their own modules
-> (skills, intent/smart-diff, blast, brief/context/onboarding, eval/ci/hooks,
-> memory, plugins, …) — each is a self-contained `modules/<name>/` plugin plus,
+> This started as the **starter** module set and lessons have been adding to it:
+> `skills`, `conventions`, `intent`, `smart-diff` and `blast` are here now, and
+> later ones bring brief/context/onboarding, eval/ci/hooks, memory and plugins.
+> Each is a self-contained `modules/<name>/` plugin plus,
 > usually, a slot it starts feeding the reviewer prompt. The DB schema already
 > contains **every** table; the unused ones simply sit empty until a lesson fills
 > them.
@@ -78,6 +79,8 @@ flowchart TB
   end
   subgraph Intel["Repo intelligence"]
     repoIntel["repo-intel<br/>/repos/:id/index-state · /resync"]
+    blast["blast<br/>/pulls/:id/blast"]
+    blast -.->|"reads the persistent index<br/>via container.repoIntel"| repoIntel
   end
   subgraph Platform["Platform"]
     settings["settings<br/>/settings · /providers"]
