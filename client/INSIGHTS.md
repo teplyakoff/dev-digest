@@ -209,6 +209,17 @@ _(no entries yet)_
   property here.** Companion to the 2026-08-08 scroll entry above: same hidden
   pane, same shape of wrong conclusion. (2026-08-10)
 
+- **A `file:line` deep link pinned to `pr.head_sha` is right in the demo and
+  wrong where it matters.** The Blast tab's caller line numbers are computed by
+  the server's indexer against `indexed_sha`, which is the repo's default branch
+  — NOT the PR head, which is branched from an older commit. A link built on
+  `head_sha` lands on whatever text now occupies that line number. The two agree
+  exactly when the caller's file is untouched between the two commits, which is
+  the common case and is why this ships: it verifies perfectly by hand on the
+  demo PR and breaks on a file that moved. Build the URL from the sha the
+  numbers came from — `BlastResponse.indexed_sha`, with `head_sha` only as a
+  fallback for the degraded path that has no links anyway. (2026-08-13)
+
 ## Codebase Patterns
 
 - **A route-local test's path to `messages/` is EIGHT levels up, and getting it
@@ -317,6 +328,26 @@ _(no entries yet)_
   `./agents`, and `reviews.ts` now imports `invalidatePrIntent` from `./intent`
   — as long as it is the NAMED INVALIDATOR that crosses, never the query key.
   (2026-08-10)
+
+- **A style spread in JSX is an inline style as far as `pnpm lint` is
+  concerned** — `style={{ ...s.chip, ...accentFor(depth) }}` is two
+  `no-restricted-syntax` errors ("Inline style object. Move it to this folder's
+  styles.ts"), not zero, and it type-checks and renders fine until lint runs.
+  The sanctioned shape is a function in `styles.ts` that returns the WHOLE
+  computed style: `chipStyle(depth)`, alongside the existing `swatchFor`
+  (`SmartDiffViewer/styles.ts`) and `toggleButtonFor` (`DiffTab/styles.ts`).
+  Same rule, same fix, and it also stops the object being a new reference every
+  render. (2026-08-13)
+
+- **`MonoLink` with no `href` renders a `<button>`, so "no URL available" must
+  not go through it at all.** The Blast tab has a real case: with no repo
+  `full_name` loaded there is no correct GitHub URL to build, and passing
+  `href={undefined}` would offer the reviewer a clickable affordance that does
+  nothing. Render a plain `<span className="mono">` with the same text instead —
+  the information is still there, the promise of a click is not. Extends the
+  2026-08-05 entry on `MonoLink` switching primitive by prop: that one is about
+  not wrapping it in `next/link`, this one is about not reaching for it when
+  there is no destination at all. (2026-08-13)
 
 ## Tool & Library Notes
 
@@ -494,6 +525,15 @@ _(no entries yet)_
   broken — see the `getComputedStyle` entry under *What Doesn't Work*; the
   `borderColor` shorthand change it produced was kept on its own merits, with the
   comment rewritten to say no misrender was ever observed.
+
+- **2026-08-13** — L04 homework, Blast Radius client lane. New `BlastTab`
+  (`_components/BlastTab/`, no `index.ts`) plus `lib/hooks/blast.ts`, which is
+  deliberately absent from the hooks barrel. The `blast` next-intl namespace
+  already existed in the starter and was extended rather than replaced. The tab
+  renders three states off `data.status` and never off array emptiness — the
+  whole point is that `degraded` and "no callers found" produce identical empty
+  arrays and mean opposite things, so `BlastTab.test.tsx` asserts that the
+  degraded state does NOT show the empty-result copy.
 
 ## Open Questions
 

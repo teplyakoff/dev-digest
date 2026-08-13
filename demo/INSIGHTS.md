@@ -28,6 +28,14 @@ would be obvious to anyone reading the code, don't write it.
   recorder only borrowed: the agent's ordered `skill_ids`, snapshotted before
   the first scene. (2026-08-03)
 
+- **When the criterion is "the link opens the right line", film the click, not
+  the link.** `record-blast.ts` reads the `href`, asserts it against the API
+  response, then clicks it, waits for the popup, and asserts the URL it landed
+  on before screenshotting. A recorder that stops at the link has filmed an
+  `<a>` tag. It makes the take need network — the only recorder here that leaves
+  localhost — and in exchange the evidence frame is the call site itself,
+  highlighted by GitHub, at the commit the line number came from. (2026-08-13)
+
 ## What Doesn't Work
 
 - Recording against a **seeded** PR produces a meaningless video: seeded file
@@ -194,6 +202,16 @@ would be obvious to anyone reading the code, don't write it.
   recorder here. Until one change fixes them all, delete old mp4s before a
   re-record, and pick the promote source by name rather than by glob.
   (2026-08-12)
+
+- **`setViewportSize` on a popup while its first navigation is in flight aborts
+  that navigation**, and the page settles on `chrome-error://chromewebdata/`.
+  `record-blast.ts` scene 4 clicks a `target="_blank"` link into github.com and
+  asserts where it landed; with the resize in place the assertion failed and
+  accused a link that was perfectly good — the same URL loaded fine via
+  `page.goto`, and the same click worked in a script without the resize. The
+  call was redundant as well as harmful: a popup already inherits the browser
+  context's viewport. Cost one take and a false accusation against the feature.
+  (2026-08-13)
 
 ## Codebase Patterns
 
@@ -399,6 +417,17 @@ would be obvious to anyone reading the code, don't write it.
   strand the port did. Pinning to `@2.2.0` also made the evidence reproducible,
   which is why the take was re-shot so `summary.json` names the version it was
   filmed against. Ten stills + a 62 s mp4 in `docs/results/l04/`.
+
+- **2026-08-13** — L04, `record-blast.ts` (7 scenes, free, read-only) and a
+  re-take of `record-mcp.ts`, whose shot 09 flipped from filming
+  `get_blast_radius` FAILING to filming it answering. That flip is worth noting
+  as a category: `expectError: true` existed because one tool was meant to fail,
+  and it stayed load-bearing in the opposite direction — without it a red result
+  panel would have been captioned and shipped as evidence. Two scenes are
+  data-dependent and are SKIPPED-and-reported rather than staged when their
+  precondition is absent: the degraded state needs an unindexed repo, and the
+  "no model was called" proof is a line on the API's stdout that no UI pane
+  renders, so it is drawn from a log file and labelled as such on screen.
 
 ## Open Questions
 
