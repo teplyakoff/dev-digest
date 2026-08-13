@@ -1,5 +1,6 @@
 import type {
   Agent,
+  BlastResponse,
   ConventionCandidate,
   FindingRecord,
   PrMeta,
@@ -135,6 +136,53 @@ export function makeCandidate(over: Partial<ConventionCandidate> = {}): Conventi
     confidence: 0.9,
     status: 'accepted',
     skill_id: null,
+    ...over,
+  };
+}
+
+/**
+ * A full impact map: two changed symbols, one of them called from two places,
+ * and two endpoints at different distances from the diff.
+ *
+ * Modelled on the real shape `demo/contract-break` produces — a shared DTO
+ * helper whose callers sit in the service next door, with the routes two hops
+ * out — so the assertions here describe something the demo actually renders.
+ */
+export function makeBlast(over: Partial<BlastResponse> = {}): BlastResponse {
+  return {
+    status: 'full',
+    reason: null,
+    changed_files: ['server/src/modules/repos/helpers.ts'],
+    symbols: [
+      {
+        name: 'toRepoDto',
+        file: 'server/src/modules/repos/helpers.ts',
+        kind: 'function',
+        callers: [
+          { file: 'server/src/modules/repos/service.ts', symbol: 'add', line: 92, rank: 0.9 },
+          { file: 'server/src/modules/repos/service.ts', symbol: 'list', line: 107, rank: 0.9 },
+        ],
+        callers_total: 2,
+      },
+      {
+        name: 'parseRepoUrl',
+        file: 'server/src/modules/repos/helpers.ts',
+        kind: 'function',
+        callers: [],
+        callers_total: 0,
+      },
+    ],
+    endpoints: [
+      {
+        route: 'POST /repos',
+        file: 'server/src/modules/repos/routes.ts',
+        depth: 2,
+        via: 'server/src/modules/repos/helpers.ts',
+      },
+    ],
+    crons: [],
+    indexed_sha: 'abc1234def5678',
+    counts: { symbols: 2, callers: 2, endpoints: 1 },
     ...over,
   };
 }

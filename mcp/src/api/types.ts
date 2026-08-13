@@ -1,5 +1,6 @@
 import type {
   Agent,
+  BlastResponse,
   ConventionSkillDraft,
   ConventionsView,
   PrDetail,
@@ -59,6 +60,14 @@ export interface ApiClient {
    * (`server/INSIGHTS.md:343-356`).
    */
   listReviews(pullId: string, signal?: AbortSignal): Promise<ReviewRecord[]>;
+
+  /**
+   * `GET /pulls/:id/blast` — the PR's impact map, read from the server's code
+   * index. ALWAYS a 200: "this repository is not indexed" arrives as
+   * `status: 'degraded'` with a `reason`, never as an error status, so a caller
+   * can tell "nothing calls this" apart from "nothing is known about this".
+   */
+  getBlast(pullId: string, signal?: AbortSignal): Promise<BlastResponse>;
 
   /** `GET /repos/:id/conventions` — `{ scan: null }` means never extracted. */
   getConventions(repoId: string, signal?: AbortSignal): Promise<ConventionsView>;

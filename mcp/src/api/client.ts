@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   Agent,
   ApiErrorBody,
+  BlastResponse,
   ConventionSkillDraft,
   ConventionsView,
   PrDetail,
@@ -72,6 +73,10 @@ export class HttpApiClient implements ApiClient {
 
   listReviews(pullId: string, signal?: AbortSignal): Promise<ReviewRecord[]> {
     return this.get(`/pulls/${enc(pullId)}/reviews`, z.array(ReviewRecord), 'the reviews', signal);
+  }
+
+  getBlast(pullId: string, signal?: AbortSignal): Promise<BlastResponse> {
+    return this.get(`/pulls/${enc(pullId)}/blast`, BlastResponse, 'the blast radius', signal);
   }
 
   getConventions(repoId: string, signal?: AbortSignal): Promise<ConventionsView> {

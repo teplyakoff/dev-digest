@@ -1,5 +1,6 @@
 import type {
   Agent,
+  BlastResponse,
   ConventionSkillDraft,
   ConventionsView,
   PrDetail,
@@ -38,6 +39,13 @@ export interface FakeApiData {
   reviews: Record<string, ReviewRecord[]>;
   /** repo id → conventions view. */
   conventions: Record<string, ConventionsView>;
+  /**
+   * pull id → its impact map. Absent means the DEGRADED map below, not a
+   * throw: the real route answers 200 for an unindexed repository, and a
+   * double that threw instead would let a handler ship without ever having
+   * been exercised on the state most repositories are actually in.
+   */
+  blast: Record<string, BlastResponse>;
   /** repo id → the merged skill draft. */
   skillDrafts: Record<string, ConventionSkillDraft>;
   /**
@@ -52,6 +60,22 @@ export interface FakeApiData {
   failures: Partial<Record<MethodName, ApiError>>;
 }
 
+/**
+ * What the server answers for a repository it has never indexed: a well-formed
+ * map that computed nothing, with the reason spelled out.
+ */
+const DEGRADED_BLAST: BlastResponse = {
+  status: 'degraded',
+  reason:
+    'This repository has not been indexed yet, so nothing is known about who calls this code.',
+  changed_files: [],
+  symbols: [],
+  endpoints: [],
+  crons: [],
+  indexed_sha: null,
+  counts: { symbols: 0, callers: 0, endpoints: 0 },
+};
+
 const EMPTY: FakeApiData = {
   repos: [],
   pulls: {},
@@ -59,6 +83,7 @@ const EMPTY: FakeApiData = {
   agents: [],
   reviews: {},
   conventions: {},
+  blast: {},
   skillDrafts: {},
   runTicks: [],
   reviewRun: null,
@@ -117,6 +142,11 @@ export class FakeApiClient implements ApiClient {
   async listReviews(pullId: string): Promise<ReviewRecord[]> {
     this.record('listReviews', pullId);
     return this.data.reviews[pullId] ?? [];
+  }
+
+  async getBlast(pullId: string): Promise<BlastResponse> {
+    this.record('getBlast', pullId);
+    return this.data.blast[pullId] ?? DEGRADED_BLAST;
   }
 
   async getConventions(repoId: string): Promise<ConventionsView> {

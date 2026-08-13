@@ -6,7 +6,14 @@ would be obvious to anyone reading the code, don't write it.
 
 ## What Works
 
-_(no entries yet)_
+- **Measure the tool-list token cost by spawning the real server and
+  serialising `tools/list`, not by eyeballing the schemas.** ~30 lines of Node:
+  spawn `./bin/devdigest-mcp`, send `initialize`, then `notifications/initialized`,
+  then `tools/list`, and take `JSON.stringify(result.tools).length / 4`. Per-tool
+  numbers fall out of the same payload. The estimate that preceded the first
+  real measurement was 12% low, and `get_conventions` alone was out by 49% —
+  a `z.enum([...]) | 'all'` union serialises far larger than it reads.
+  (2026-08-13)
 
 ## What Doesn't Work
 
@@ -70,6 +77,26 @@ _(no entries yet)_
   comment above it is right and must stay; only the attribution is wrong.
   (2026-08-12)
 
+- **The Inspector command that gets passed around — `npx @modelcontextprotocol/inspector
+  tsx src/index.ts` — does not work in this package.** There is no
+  `mcp/src/index.ts`; the entrypoint is `src/main.ts`, and the thing to launch is
+  `./bin/devdigest-mcp`, which exists specifically so the server does not depend
+  on the client's working directory (the tsconfig `paths` to
+  `@devdigest/shared` only resolve with `mcp/` as the base). Use
+  `npx @modelcontextprotocol/inspector ./bin/devdigest-mcp`, or
+  `npm run record:mcp`, which spawns and kills its own Inspector. (2026-08-13)
+
+- **A tool that answers "nothing found" when the server said "nothing is known"
+  is worse than one that errors, because its reader is a model.** `GET
+  /pulls/:id/blast` returns `200 status:"degraded"` for an unindexed repository —
+  a well-formed body with empty arrays. Passing that straight through would let
+  a caller conclude nothing calls the changed code, which is a claim about the
+  repository that an absent index cannot support. `get_blast_radius` maps
+  `degraded` to `isError: true` carrying the server's own reason, and `partial`
+  to a normal answer with the caveat inline. This is the one rule that survived
+  from the file's stub era; `mcp/AGENTS.md` records it under _Do not touch_.
+  (2026-08-13)
+
 ## Codebase Patterns
 
 - **One row in `reviews` is one AGENT, not one review pass** — carried over from
@@ -131,7 +158,16 @@ _(no entries yet)_
 
 ## Session Notes
 
-_(no entries yet)_
+- **2026-08-13** — L04, `get_blast_radius` stopped being a stub. The route it
+  had been waiting for (`server/src/modules/blast/`) landed in the same lesson,
+  in the order the stub's own docstring prescribed: server route first, then the
+  body. Input moved from `repo` + `path` to `pull_request`, matching the route's
+  key. Cost: 221 → 275 tokens, and the five tools 1 871 → 1 936 against a hard
+  2 000 — 64 tokens of headroom, which will not absorb another filter on another
+  tool. The port change was four files as §4 requires (`api/types.ts`,
+  `api/client.ts`, `api/fake-client.ts`, and the fake's `FakeApiData` default),
+  and the fake answers the real degraded body rather than throwing, so the
+  handler's most common real-world state is actually exercised.
 
 ## Open Questions
 

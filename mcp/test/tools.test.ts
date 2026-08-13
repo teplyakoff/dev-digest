@@ -8,7 +8,15 @@ import { getConventions } from '../src/tools/get-conventions.js';
 import { getFindings } from '../src/tools/get-findings.js';
 import { listAgents } from '../src/tools/list-agents.js';
 import type { ToolExtra } from '../src/tools/types.js';
-import { makeAgent, makeCandidate, makeFinding, makePr, makeRepo, makeReview } from './fixtures.js';
+import {
+  makeAgent,
+  makeBlast,
+  makeCandidate,
+  makeFinding,
+  makePr,
+  makeRepo,
+  makeReview,
+} from './fixtures.js';
 
 function ctx(data: Partial<FakeApiData> = {}): { deps: Deps; api: FakeApiClient; extra: ToolExtra } {
   const api = new FakeApiClient(data);
@@ -298,22 +306,130 @@ describe('get_conventions', () => {
   });
 });
 
+/**
+ * This block used to assert the opposite — that the tool ALWAYS failed and
+ * never called the API — because there was no blast-radius route to call. There
+ * is one now (`GET /pulls/:id/blast`), so the stub's promise has been kept:
+ * "add the route on the server, then replace this body."
+ *
+ * What did NOT change is the principle underneath it. An unindexed repository
+ * still comes back as an error, because "no callers found" is a claim about the
+ * code and an absent index has not earned it.
+ */
 describe('get_blast_radius', () => {
+  const PR_ARG = { pull_request: 'acme/payments-api#482' };
+
+  function blastCtx(map = makeBlast()) {
+    return ctx({
+      repos: [makeRepo()],
+      pulls: { 'repo-1': [makePr({ id: 'pr-1', number: 482 })] },
+      blast: { 'pr-1': map },
+    });
+  }
+
   it('is registered and visible, not hidden', () => {
     expect(TOOLS.map((t) => t.name)).toContain('get_blast_radius');
   });
 
-  it('ALWAYS fails, invents nothing, and points at what does work', async () => {
-    const { deps, extra } = ctx({});
-    const res = await getBlastRadius.handler(
-      { repo: 'acme/payments-api', path: 'server/src/auth.ts' },
-      deps,
-      extra,
+  it('reports each changed symbol with its callers, cited by file and line', async () => {
+    const { deps, extra } = blastCtx();
+    const res = await getBlastRadius.handler(PR_ARG, deps, extra);
+
+    expect(res.isError).toBeFalsy();
+    const out = text(res);
+    expect(out).toContain('acme/payments-api#482');
+    expect(out).toContain('toRepoDto');
+    expect(out).toContain('server/src/modules/repos/service.ts:92');
+    expect(out).toContain('server/src/modules/repos/service.ts:107');
+    // Read through the same route the UI renders.
+    expect((deps.api as FakeApiClient).calls).toContain('getBlast(pr-1)');
+  });
+
+  it('distinguishes an endpoint the PR changes from one it merely reaches', async () => {
+    const { deps, extra } = blastCtx(
+      makeBlast({
+        endpoints: [
+          { route: 'POST /repos', file: 'routes.ts', depth: 0, via: 'routes.ts' },
+          { route: 'GET /repos/:id', file: 'routes.ts', depth: 2, via: 'helpers.ts' },
+        ],
+      }),
     );
+    const out = text(await getBlastRadius.handler(PR_ARG, deps, extra));
+    expect(out).toContain('POST /repos — routes.ts (in a changed file)');
+    expect(out).toContain('2 hop(s) downstream of helpers.ts');
+  });
+
+  it('ERRORS on an unindexed repository instead of reporting "no callers"', async () => {
+    // The fake answers the server's real degraded body when it holds no map.
+    const { deps, extra } = ctx({
+      repos: [makeRepo()],
+      pulls: { 'repo-1': [makePr({ id: 'pr-1', number: 482 })] },
+    });
+    const res = await getBlastRadius.handler(PR_ARG, deps, extra);
+
     expect(res.isError).toBe(true);
-    expect(text(res)).toMatch(/not implemented/i);
-    expect(text(res)).toContain('get_findings');
-    // It must not have called the API at all.
-    expect((deps.api as FakeApiClient).calls).toEqual([]);
+    expect(text(res)).toMatch(/not been indexed/i);
+    // THE ASSERTION THAT MATTERS: an absence of data must never be phrased as a
+    // finding about the code, because the reader is another model.
+    expect(text(res)).not.toMatch(/no callers found/i);
+    expect(text(res)).toMatch(/resync|re-?analyze/i);
+  });
+
+  it('carries the caveat when the index is incomplete, and still answers', async () => {
+    const { deps, extra } = blastCtx(
+      makeBlast({ status: 'partial', reason: 'The index for this repository is incomplete.' }),
+    );
+    const res = await getBlastRadius.handler(PR_ARG, deps, extra);
+    expect(res.isError).toBeFalsy();
+    expect(text(res)).toContain('INCOMPLETE: The index for this repository is incomplete.');
+    expect(text(res)).toContain('toRepoDto');
+  });
+
+  it('filters to one symbol, and says so when that symbol is not in the diff', async () => {
+    const { deps, extra } = blastCtx();
+    const hit = text(await getBlastRadius.handler({ ...PR_ARG, symbol: 'toRepoDto' }, deps, extra));
+    expect(hit).toContain('toRepoDto');
+    expect(hit).not.toContain('parseRepoUrl');
+    // The header counts the FILTERED symbols' callers. Quoting the PR-wide
+    // total beside one symbol invites attributing all of them to it.
+    expect(hit).toContain('1 changed symbol(s), 2 caller(s)');
+
+    const { deps: d2, extra: e2 } = blastCtx();
+    const miss = await getBlastRadius.handler({ ...PR_ARG, symbol: 'nope' }, d2, e2);
+    expect(miss.isError).toBe(true);
+    // Naming what IS there beats a bare "not found" — the caller can retry.
+    expect(text(miss)).toContain('toRepoDto');
+  });
+
+  it('says the server capped the list, and only when it actually did', async () => {
+    const capped = blastCtx(makeBlast({ counts: { symbols: 63, callers: 2, endpoints: 1 } }));
+    expect(text(await getBlastRadius.handler(PR_ARG, capped.deps, capped.extra))).toContain(
+      'The server capped this at 2 of 63',
+    );
+
+    const whole = blastCtx();
+    expect(text(await getBlastRadius.handler(PR_ARG, whole.deps, whole.extra))).not.toContain(
+      'capped',
+    );
+
+    // With `symbol` set the short list is the FILTER's doing, so calling it a
+    // server cap would blame the wrong thing.
+    const filtered = blastCtx(makeBlast({ counts: { symbols: 63, callers: 2, endpoints: 1 } }));
+    const out = text(
+      await getBlastRadius.handler(
+        { ...PR_ARG, symbol: 'toRepoDto' },
+        filtered.deps,
+        filtered.extra,
+      ),
+    );
+    expect(out).not.toContain('capped');
+  });
+
+  it('rejects an unknown argument rather than ignoring it', async () => {
+    const { deps, extra } = blastCtx();
+    const res = await getBlastRadius.handler({ ...PR_ARG, path: 'src/auth.ts' }, deps, extra);
+    // The tool is PR-keyed now; a `path` is the old stub's argument, and
+    // silently dropping it would answer a question nobody asked.
+    expect(res.isError).toBe(true);
   });
 });

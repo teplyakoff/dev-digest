@@ -158,7 +158,7 @@ relative `command` with an absolute path if that client will not run one:
 | `get_findings` | Findings for a PR, filterable by severity / category / path / status | read |
 | `get_conventions` | A repo's extracted conventions, with the evidence line each cites | read |
 | `run_agent_on_pull_request` | Runs one agent (or all) and **blocks** until the runs settle | **writes, calls GitHub and an LLM, spends money** |
-| `get_blast_radius` | Always fails. See below | — |
+| `get_blast_radius` | What else a PR can reach: changed symbols → callers → downstream endpoints and crons | read |
 
 Every identifier is flexible: a GitHub URL, `owner/repo` plus a number, or a
 UUID. On a miss the error lists the candidates it actually saw, so the model can
@@ -185,21 +185,32 @@ On timeout it returns `isError: true` **with the run ids**. It never cancels the
 runs — `POST /runs/:id/cancel` frees the executor but does not abort the request
 in flight, so a cancel would bill the run and throw the result away.
 
-### `get_blast_radius` always returns an error, on purpose
+### `get_blast_radius` errors instead of reporting an empty map
 
-There is no HTTP endpoint for blast radius. The facade exists
-(`server/src/modules/repo-intel/service.ts`) but `repo-intel/routes.ts` registers
-only `/repos/:id/index-state` and `/repos/:id/resync`. The tool is registered and
-visible so its absence is *reported* rather than silent, and it invents nothing.
-Implementing it needs a new server route first — that is a later lesson.
+It reads `GET /pulls/:id/blast` — the same route the web client's Blast tab
+renders, so the two cannot disagree. The server computes that map from its
+persistent code index and calls no model, which is why this tool is cheap enough
+to run before a review rather than after one.
+
+It was a registered stub through most of L04, on the grounds that a visibly
+unimplemented tool reports its own absence while a hidden one is
+indistinguishable from a caller who never thought to ask. The route landed in
+the same lesson and the body was replaced, in that order.
+
+**What survives from the stub is the rule, not the failure.** The route answers
+`200` with `status: "degraded"` for a repository that has never been indexed,
+and this tool turns that into `isError: true` carrying the server's own reason.
+That is deliberate: the reader here is another model, and "no callers found"
+is a claim about the code that an absent index has not earned. A `partial`
+index answers normally, with the caveat inline.
 
 ## Token cost
 
 <a id="token-cost"></a>
 
 Tool definitions are injected into the **system prompt of every chat that loads
-them**, so the five cost **1 871 measured tokens** — serialised `tools/list` from
-the running server, 7 481 characters at ~4 chars/token, against an earlier
+them**, so the five cost **1 936 measured tokens** — serialised `tools/list` from
+the running server, 7 745 characters at ~4 chars/token, against an earlier
 estimate of ~1 650.
 
 Because `.mcp.json` is committed and auto-discovered, that is charged to **every**
@@ -216,9 +227,15 @@ Measured per tool, from the same payload:
 | `run_agent_on_pull_request` | **499** | ~550 | the only `outputSchema` |
 | `get_findings` | **467** | ~405 | seven filters |
 | `get_conventions` | **424** | ~285 | the `ConventionStatus \| 'all'` union costs more than a plain enum |
-| `list_agents` | **261** | ~225 | |
-| `get_blast_radius` | **221** | ~185 | |
-| | **1 871** | ~1 650 | |
+| `get_blast_radius` | **275** | ~185 | was 221 as a stub; a real schema and a real description cost 54 more |
+| `list_agents` | **260** | ~225 | |
+| | **1 936** | ~1 650 | |
+
+**64 tokens of headroom, and that is the whole story of this table.** L04 spent
+54 of them turning `get_blast_radius` from a stub into a working tool, which was
+worth it; what is left will not absorb another filter on another tool. The next
+change that needs room takes it from `get_conventions` (424 tokens for one
+read, the worst ratio here) rather than from the budget.
 
 Budget: **2 000 tokens**. Going over is a defect, not a fact of life. What holds
 it there, strongest first: exactly five tools; `instructions` omitted; exactly

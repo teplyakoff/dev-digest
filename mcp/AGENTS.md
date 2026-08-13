@@ -6,7 +6,7 @@ database pool, no `Container`, no secrets, and no model.
 
 The from-scratch runbook and the token cost are in `README.md` — do not restate
 them here. The short version: `.mcp.json` in the repo root is auto-discovered,
-so every session in this repo carries the five tools and pays 1 871 tokens for
+so every session in this repo carries the five tools and pays 1 936 tokens for
 them; `claude --strict-mcp-config` is the opt-out. `./scripts/dev.sh` does not
 start this server and never has — the MCP client spawns it over stdio.
 
@@ -34,8 +34,10 @@ on `client/`.
 | composition root | `src/main.ts`, `src/server.ts`, `src/config.ts`, `src/deps.ts` |
 
 `list_agents` and `get_blast_radius` have **no** ring-2 service on purpose: one
-client call and a projection, and a constant. A service that only forwards is
-§13's own antipattern.
+client call and a projection each. A service that only forwards is §13's own
+antipattern. (`get_blast_radius` earned that shape twice over: it was a constant
+while it was a stub, and it is still one call and one projection now that it
+reads `GET /pulls/:id/blast` — the server does the graph walk.)
 
 `fake-client.ts` lives in `src/`, not `test/` — §12: a test double is production
 code, and both it and `client.ts` `implements ApiClient` so a client-shape change
@@ -69,10 +71,15 @@ vendored copy. `zod` is self-pinned in `tsconfig.json` for the same reason
 
 ## Do not touch
 
-- `src/tools/get-blast-radius.ts`'s honest failure. It is a stub because the
-  server exposes **no HTTP route** for blast radius (the facade exists at
-  `server/src/modules/repo-intel/service.ts`; `repo-intel/routes.ts` registers
-  only `index-state` and `resync`). Implementing it needs a new route first.
+- `src/tools/get-blast-radius.ts`'s **degraded-is-an-error** branch. The
+  server's `GET /pulls/:id/blast` answers `200` with `status: "degraded"` when a
+  repository has no index; this tool must return `isError: true` there, never an
+  empty map. The caller is a model, and "no callers found" is a claim about the
+  code that an unindexed repository cannot support.
+
+  This entry used to say the whole file was a stub and not to be implemented,
+  because the server exposed no blast route. L04 added `modules/blast/`, so that
+  reason expired — the rule that outlived it is the one above.
 
 ## Read when
 

@@ -19,7 +19,8 @@ export const TOOLS: readonly ToolDescriptor[] = [
   getFindings,
   getConventions,
   runAgentOnPullRequest,
-  // Registered although it always fails: a visibly unimplemented tool reports
-  // its own absence, a hidden one is indistinguishable from never asking.
+  // Was registered while it was an honest stub, so its absence was visible
+  // rather than indistinguishable from never asking. It is real now — it reads
+  // `GET /pulls/:id/blast`, the same route the Blast tab renders.
   getBlastRadius,
 ];
