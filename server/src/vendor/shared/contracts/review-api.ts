@@ -147,3 +147,133 @@ export type PrIntentView = z.infer<typeof PrIntentView>;
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;
 export type SmartDiffResponse = z.infer<typeof SmartDiffResponse>;
+
+// ---------------------------------------------------------------------------
+// Blast radius — `GET /pulls/:id/blast`.
+//
+// SEPARATE FROM `BlastRadius` in `brief.ts`, deliberately. That one is a PR
+// Brief building block with a `summary` string a model writes; this one is the
+// index read, and it has no summary because nothing here is written by a model.
+// Merging them would put a field on the wire that the route can only ever send
+// empty, and the first reader to fill it would be reaching for an LLM call this
+// feature exists to avoid.
+// ---------------------------------------------------------------------------
+
+/**
+ * `full` — the index covers the repo and the answer is complete.
+ * `partial` — the index exists but is known incomplete (the indexer hit its
+ *   budget, or the repo was too large), so absence of a caller proves nothing.
+ * `degraded` — there is no usable index; nothing was computed.
+ *
+ * Three states, not a boolean, because `partial` and `degraded` call for
+ * different words on screen: one says "this list may be short", the other says
+ * "there is no list". Collapsing them is how an empty result starts reading as
+ * a fact about the code.
+ */
+export const BlastStatus = z.enum(['full', 'partial', 'degraded']);
+export type BlastStatus = z.infer<typeof BlastStatus>;
+
+/** One call site of a changed symbol, in a file that is not the declaration. */
+export const BlastCallerRef = z.object({
+  file: z.string(),
+  /** The enclosing top-level symbol at that line, or the file's basename. */
+  symbol: z.string(),
+  line: z.number().int(),
+  /** `file_rank` of the caller's file — what the ordering is by. */
+  rank: z.number(),
+});
+export type BlastCallerRef = z.infer<typeof BlastCallerRef>;
+
+/**
+ * A symbol declared in a changed file, with its callers.
+ *
+ * `callers_total` is separate from `callers.length` so a capped list can say
+ * "20 of 47" rather than silently presenting the cap as the whole truth.
+ */
+export const BlastSymbolNode = z.object({
+  name: z.string(),
+  file: z.string(),
+  kind: z.string(),
+  callers: z.array(BlastCallerRef),
+  callers_total: z.number().int(),
+});
+export type BlastSymbolNode = z.infer<typeof BlastSymbolNode>;
+
+/**
+ * An HTTP route named in a file this PR changes, or in one that (transitively)
+ * imports such a file.
+ *
+ * `depth` is hops along the reverse import graph, and the two ends of it are
+ * different KINDS of claim, not just different distances:
+ *
+ *  - `0` — the route is named in a changed file. The indexer's extractor does
+ *    not distinguish declaring a route from calling one, so this covers both a
+ *    server `app.get('/repos')` and a client `api.get('/repos')`. Both are
+ *    genuinely "HTTP surface this diff touches", which is why they share a
+ *    bucket; neither is a graph result.
+ *  - `1`–`2` — the declaring file imports a changed file, directly or through
+ *    one module. This IS the graph result, and it weakens with distance.
+ *
+ * It is on the wire because a UI that cannot tell those apart states the weakest
+ * of them with the confidence of the strongest.
+ */
+export const BlastEndpointRef = z.object({
+  /** As extracted by the indexer, e.g. `GET /repos/:id`. */
+  route: z.string(),
+  /** The file the route string was found in. */
+  file: z.string(),
+  depth: z.number().int(),
+  /** The changed file this was reached from (itself, at depth 0). */
+  via: z.string(),
+});
+export type BlastEndpointRef = z.infer<typeof BlastEndpointRef>;
+
+/** Same shape as an endpoint, for scheduled jobs. */
+export const BlastCronRef = z.object({
+  name: z.string(),
+  file: z.string(),
+  depth: z.number().int(),
+  via: z.string(),
+});
+export type BlastCronRef = z.infer<typeof BlastCronRef>;
+
+/**
+ * `GET /pulls/:id/blast` — what else this diff can reach.
+ *
+ * Every field is read from the persistent `repo-intel` index. No model is
+ * called on this path, and the response carries no free-text explanation,
+ * because there is nothing here that was explained rather than looked up.
+ */
+export const BlastResponse = z.object({
+  status: BlastStatus,
+  /** Why the status is not `full`. Null when it is. */
+  reason: z.string().nullable(),
+  /** The PR's changed files, as the map was computed over them. */
+  changed_files: z.array(z.string()),
+  symbols: z.array(BlastSymbolNode),
+  endpoints: z.array(BlastEndpointRef),
+  crons: z.array(BlastCronRef),
+  /** The commit the index was last built at — what the map is true of. */
+  indexed_sha: z.string().nullable(),
+  /**
+   * TOTALS FOR THE WHOLE MAP, which is not the same as the length of the arrays
+   * above and is the entire reason this object exists.
+   *
+   * `symbols` is capped before it ships, so `counts.symbols` can exceed
+   * `symbols.length`; a consumer compares the two to say "showing 50 of 63"
+   * rather than presenting a cap as the total. `counts.callers` likewise counts
+   * every caller in the map, including those of symbols the cap dropped.
+   *
+   * This is the same promise `callers_total` makes one level down, and it was
+   * briefly broken here: the counts were computed AFTER the slice, so a
+   * truncated list reported its own length and nothing anywhere said it was
+   * short. That is precisely the failure the feature exists to prevent — a cap
+   * that reads as a fact about the code.
+   */
+  counts: z.object({
+    symbols: z.number().int(),
+    callers: z.number().int(),
+    endpoints: z.number().int(),
+  }),
+});
+export type BlastResponse = z.infer<typeof BlastResponse>;

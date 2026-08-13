@@ -86,6 +86,37 @@ export interface BlastResult {
   reason?: DegradedReason;
 }
 
+/**
+ * One file that (transitively) imports a changed file, with the precomputed
+ * facts that make it interesting to a reviewer.
+ *
+ * `depth` is hops along the REVERSE import graph: 1 = imports a changed file
+ * directly, 2 = imports something that does. It is carried rather than
+ * flattened because "this endpoint is two hops away" and "this endpoint is in a
+ * file that imports the change" are different claims, and a UI that cannot tell
+ * them apart overstates the second.
+ *
+ * `via` is the CHANGED file this dependent was reached from, at every depth —
+ * a depth-2 hop inherits its parent's origin rather than naming its parent, so
+ * the field always answers "which part of this diff put you on the map" without
+ * a second walk. It said "or the depth-1 file it came through deeper down" for
+ * one review round, which the implementation and its test both contradicted.
+ */
+export interface DependentRow {
+  file: string;
+  depth: number;
+  via: string;
+  endpoints: string[];
+  crons: string[];
+}
+
+/** Precomputed per-file facts, as the indexer wrote them. */
+export interface FileFactsRow {
+  file: string;
+  endpoints: string[];
+  crons: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Read-model rows.
 // ---------------------------------------------------------------------------
@@ -145,6 +176,22 @@ export interface RepoIntel {
 
   // --- Reads --------------------------------------------------------------
   getBlastRadius(repoId: string, changedFiles: string[]): Promise<BlastResult>;
+  /**
+   * Reverse-import-graph dependents of `files`, breadth-first, capped at
+   * `depth` hops (default `BFS_DEPTH`). Pure read over `file_edges` +
+   * `file_facts` — no clone, no parse. `[]` when degraded, per the contract at
+   * the top of this file.
+   */
+  getDependents(repoId: string, files: string[], depth?: number): Promise<DependentRow[]>;
+  /**
+   * Precomputed endpoints/crons for the given files themselves — the depth-0
+   * companion to `getDependents`, which by construction excludes its own input.
+   *
+   * A PR that edits a `routes.ts` changes those routes DIRECTLY; without this
+   * read they would be missing from an impact map entirely, because the file
+   * declaring them is the changed file and can never be its own dependent.
+   */
+  getFileFacts(repoId: string, files: string[]): Promise<FileFactsRow[]>;
   getRepoMap(repoId: string, tokenBudget?: number): Promise<RepoMapResult>;
   getFileRank(repoId: string, paths: string[]): Promise<FileRankRow[]>;
   getSymbolsInFiles(repoId: string, paths: string[]): Promise<SymbolRow[]>;

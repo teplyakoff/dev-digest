@@ -40,6 +40,8 @@ import type {
   BlastCallerRow,
   BlastChangedSymbol,
   BlastResult,
+  DependentRow,
+  FileFactsRow,
   FileRankRow,
   IndexResult,
   IndexState,
@@ -392,11 +394,95 @@ export class RepoIntelService implements RepoIntel {
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers: capPerSymbol(callers),
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,
     };
+  }
+
+  /**
+   * Reverse-import-graph dependents, breadth-first, `depth` hops (default
+   * `BFS_DEPTH` = 2).
+   *
+   * DIRECTION, because it is the one thing that is easy to get backwards and
+   * silently plausible when you do: `file_edges` is written
+   * `fromFile IMPORTS toFile` (`pipeline/full.ts`), so the dependents of a
+   * changed file are the rows whose `toFile` IS that file. Walking `fromFile`
+   * instead would return the changed file's own dependencies — a list that
+   * looks equally reasonable on screen and answers the opposite question.
+   *
+   * Why it is separate from `getBlastRadius` rather than folded into it:
+   * `getBlastRadius`'s endpoints come from the files that CALL a changed
+   * symbol, which is a reference-level fact and stops at one hop. Module-level
+   * reachability is a different graph with a different depth, and a consumer
+   * that wants "which routes sit downstream of this change" needs the second
+   * one. Both are cheap, indexed reads; neither touches the clone.
+   */
+  async getDependents(
+    repoId: string,
+    files: string[],
+    depth: number = BFS_DEPTH,
+  ): Promise<DependentRow[]> {
+    if (!this.container.config.repoIntelEnabled) return [];
+    if (files.length === 0 || depth < 1) return [];
+
+    // Seed the walk with the changed files themselves. They are `seen` from the
+    // start so the traversal can never report a changed file as its own
+    // dependent — a circular import between two changed files would otherwise
+    // produce exactly that.
+    const seen = new Set(files);
+    // file → the changed file it was reached from, kept as the walk proceeds so
+    // a depth-2 hop inherits its parent's origin instead of naming its parent.
+    const originOf = new Map<string, string>();
+    for (const f of files) originOf.set(f, f);
+
+    const found: Array<{ file: string; depth: number; via: string }> = [];
+    let frontier = files;
+
+    for (let hop = 1; hop <= depth && frontier.length > 0; hop += 1) {
+      const edges = await this.repo.getReverseEdges(repoId, frontier);
+      const next: string[] = [];
+      for (const e of edges) {
+        if (seen.has(e.fromFile)) continue;
+        seen.add(e.fromFile);
+        const via = originOf.get(e.toFile) ?? e.toFile;
+        originOf.set(e.fromFile, via);
+        found.push({ file: e.fromFile, depth: hop, via });
+        next.push(e.fromFile);
+      }
+      frontier = next;
+    }
+    if (found.length === 0) return [];
+
+    // One facts read for every hop at once. Files with no endpoints and no
+    // crons have no `file_facts` row at all (`replaceFileFacts` only persists
+    // rows that have one), so the default below is the common case, not an
+    // error path.
+    const facts = await this.repo.getFileFacts(
+      repoId,
+      found.map((f) => f.file),
+    );
+    const byFile = new Map(facts.map((f) => [f.filePath, f]));
+
+    return found.map((f) => ({
+      file: f.file,
+      depth: f.depth,
+      via: f.via,
+      endpoints: byFile.get(f.file)?.endpoints ?? [],
+      crons: byFile.get(f.file)?.crons ?? [],
+    }));
+  }
+
+  /**
+   * Endpoints/crons the given files declare THEMSELVES. Pure read over
+   * `file_facts`; `[]` when the flag is off, per the degraded contract.
+   */
+  async getFileFacts(repoId: string, files: string[]): Promise<FileFactsRow[]> {
+    if (!this.container.config.repoIntelEnabled) return [];
+    if (files.length === 0) return [];
+    const rows = await this.repo.getFileFacts(repoId, files);
+    return rows.map((r) => ({ file: r.filePath, endpoints: r.endpoints, crons: r.crons }));
   }
 
   /**
@@ -739,6 +825,34 @@ const JUNK_PATH_PATTERNS = [
 function isJunkPath(path: string): boolean {
   const lower = path.toLowerCase();
   return JUNK_PATH_PATTERNS.some((p) => lower.includes(p));
+}
+
+/**
+ * Cap the caller fan-out at `MAX_CALLERS_PER_SYMBOL` **per changed symbol**,
+ * keeping the highest-ranked callers of each.
+ *
+ * This used to be `callers.slice(0, MAX_CALLERS_PER_SYMBOL)` over the flat,
+ * rank-sorted list — which is a different limit wearing the same constant's
+ * name. The constant is documented as a "caller fan-out cap per changed symbol"
+ * (`constants.ts`), and a flat slice does not deliver that: a PR changing five
+ * symbols got 20 rows across all five, so a symbol whose callers all sit in
+ * low-ranked files rendered as having NO callers. That reads as a fact about
+ * the code ("nothing calls this") when it is a fact about the slice.
+ *
+ * The input is already sorted by rank DESC, and the grouping below preserves
+ * that order within each symbol; the returned list is re-sorted globally so the
+ * highest-ranked caller still leads whatever the grouping did.
+ */
+function capPerSymbol(callers: BlastCallerRow[]): BlastCallerRow[] {
+  const perSymbol = new Map<string, number>();
+  const kept: BlastCallerRow[] = [];
+  for (const c of callers) {
+    const n = perSymbol.get(c.viaSymbol) ?? 0;
+    if (n >= MAX_CALLERS_PER_SYMBOL) continue;
+    perSymbol.set(c.viaSymbol, n + 1);
+    kept.push(c);
+  }
+  return kept.sort((a, b) => b.rank - a.rank);
 }
 
 /** Enclosing top-level (bare-name) symbol for a line, from persistent rows. */

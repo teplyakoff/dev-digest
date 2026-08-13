@@ -436,6 +436,33 @@ export class RepoIntelRepository {
       .where(eq(t.fileEdges.repoId, repoId));
   }
 
+  /**
+   * One level of the REVERSE import graph: the files that import any of
+   * `toFiles`.
+   *
+   * `getEdges` above reads the whole graph and is right for a global pass
+   * (rank, critical paths); this is the diff-scoped read blast needs, and the
+   * difference matters at request time — a 5 000-file repo has tens of
+   * thousands of edges, of which a blast query wants the handful pointing at
+   * the ~10 changed files. Filtering that in JS would mean shipping the whole
+   * graph out of Postgres on every page load.
+   *
+   * ONE QUERY PER LEVEL, not per file: the caller passes a whole BFS frontier
+   * and `inArray` turns it into a single `= ANY($2)`. Two levels of traversal
+   * are therefore two round-trips, whatever the fan-out.
+   *
+   * `toFile` comes back alongside `fromFile` so the caller can tell WHICH
+   * changed file a dependent reached — the same row otherwise loses the edge it
+   * arrived on, and "why is this file here" becomes unanswerable.
+   */
+  async getReverseEdges(repoId: string, toFiles: string[]): Promise<IndexerEdgeRow[]> {
+    if (toFiles.length === 0) return [];
+    return this.db
+      .select({ fromFile: t.fileEdges.fromFile, toFile: t.fileEdges.toFile })
+      .from(t.fileEdges)
+      .where(and(eq(t.fileEdges.repoId, repoId), inArray(t.fileEdges.toFile, toFiles)));
+  }
+
   /** `{path, percentile}` for the given paths (smart-diff / run-executor). */
   async getFileRankFor(repoId: string, paths: string[]): Promise<FileRankRow[]> {
     if (paths.length === 0) return [];
