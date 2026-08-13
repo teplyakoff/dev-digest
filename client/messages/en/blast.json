@@ -1,4 +1,6 @@
 {
+  "title": "Blast radius",
+  "subtitle": "What else this diff can reach — read from the code index, not from a model.",
   "stat": {
     "symbols": "symbols",
     "callers": "callers",
@@ -14,5 +16,46 @@
   "graph": {
     "empty": "No downstream callers to graph.",
     "ariaLabel": "Blast radius graph"
-  }
+  },
+  "counts": {
+    "symbols": "{count, plural, one {# symbol} other {# symbols}}",
+    "callers": "{count, plural, one {# caller} other {# callers}}",
+    "endpoints": "{count, plural, one {# endpoint} other {# endpoints}}",
+    "crons": "{count, plural, one {# cron job} other {# cron jobs}}"
+  },
+  "callersOf": "{count, plural, =0 {no callers} one {# caller} other {# callers}}",
+  "callersCapped": "showing {shown} of {total}",
+  "indexedAt": "Indexed at {sha}",
+  "changedIn": "declared in {file}",
+  "sections": {
+    "symbols": "Changed symbols",
+    "endpoints": "HTTP routes this change touches",
+    "crons": "Scheduled jobs that can reach this change"
+  },
+  "depth": {
+    "direct": "in a changed file",
+    "one": "1 hop downstream",
+    "many": "{count} hops downstream"
+  },
+  "via": "via {file}",
+  "empty": {
+    "noCallers": "Nothing else in the indexed code calls the symbols this PR changes.",
+    "noCallersHint": "That is an answer, not a gap — the index covers this repository at {sha}.",
+    "noEndpoints": "No HTTP route is named in these files, and nothing that imports them declares one either."
+  },
+  "partial": {
+    "title": "Partial map"
+  },
+  "degraded": {
+    "title": "No impact map for this pull request",
+    "action": "Re-analyze repository",
+    "pending": "Re-analyzing…",
+    "started": "Re-indexing started. This runs in the background — reopen this tab in a minute."
+  },
+  "error": {
+    "title": "Couldn’t load the impact map",
+    "body": "The blast radius endpoint did not answer. Retry, or reload the page."
+  },
+  "openInGithub": "Open {file} at line {line} on GitHub",
+  "symbolsCapped": "showing {shown} of {total} changed symbols"
 }
