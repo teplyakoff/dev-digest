@@ -181,7 +181,15 @@ export function PrDetailView() {
       />
 
       <div style={s.body}>
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && (
+          <OverviewTab
+            prId={prId}
+            prBody={pr.body}
+            headSha={pr.head_sha}
+            repoId={repoId}
+            repoFullName={repoFullName}
+          />
+        )}
 
         {tab === "findings" && (
           <FindingsTab
@@ -207,8 +215,11 @@ export function PrDetailView() {
               // A settled run (done OR failed) must appear in "Run history"
               // immediately, with no page reload.
               invalidateRuns.history();
-              // The run derived the intent as shared pre-work, so the card may
-              // be showing a state the run has already replaced.
+              // The run derived the intent as shared pre-work, so the Overview
+              // card may be showing a state the run has already replaced. That
+              // tab is unmounted while this fires — the invalidation is what
+              // makes it refetch on the way back rather than serve the
+              // pre-run value from cache.
               invalidateRuns.intent();
               // The run produced findings, and Smart Diff joins EVERY stored
               // review's findings onto the file list — so its badges and line

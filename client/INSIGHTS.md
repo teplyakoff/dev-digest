@@ -192,6 +192,34 @@ _(no entries yet)_
   target's expanded text is longer than its neighbours' while `getComputedStyle`
   on the first card reports `boxShadow: none`. (2026-08-08)
 
+- **`getComputedStyle` in this browser pane returns the PRE-TRANSITION value,
+  forever, for any property with a CSS `transition` — and it reads as a
+  confirmed bug in the component.** The pane runs with
+  `document.visibilityState === "hidden"`, so transitions are queued and never
+  advance. `FindingCard` carries `transition: … border-color .12s, box-shadow
+  .12s`, so deep-linking `?finding=<id>` measured the focus ring on the WRONG
+  card: `getComputedStyle(target).borderTopColor` was `rgb(42,42,42)` while
+  `target.style.borderColor` — the specified value React had just written — said
+  `var(--warn)`. An hour went into "the focus ring never moves", a fix was
+  written for it, and nothing was broken. The disambiguation is two lines:
+  `el.style.cssText` (what React set) versus `getComputedStyle(el)` (what this
+  pane will admit to), and if they disagree, set `el.style.transition = "none"`
+  and re-read — the values snap to correct immediately, which is the proof.
+  **Rule: never conclude anything from `getComputedStyle` on a transitioned
+  property here.** Companion to the 2026-08-08 scroll entry above: same hidden
+  pane, same shape of wrong conclusion. (2026-08-10)
+
+- **A `file:line` deep link pinned to `pr.head_sha` is right in the demo and
+  wrong where it matters.** The Blast tab's caller line numbers are computed by
+  the server's indexer against `indexed_sha`, which is the repo's default branch
+  — NOT the PR head, which is branched from an older commit. A link built on
+  `head_sha` lands on whatever text now occupies that line number. The two agree
+  exactly when the caller's file is untouched between the two commits, which is
+  the common case and is why this ships: it verifies perfectly by hand on the
+  demo PR and breaks on a file that moved. Build the URL from the sha the
+  numbers came from — `BlastResponse.indexed_sha`, with `head_sha` only as a
+  fallback for the degraded path that has no links anyway. (2026-08-13)
+
 ## Codebase Patterns
 
 - **A route-local test's path to `messages/` is EIGHT levels up, and getting it
@@ -275,6 +303,52 @@ _(no entries yet)_
   deleted review or `kind: summary` — which is the designed fallback, not a bug.
   (2026-07-31)
 
+- **Verifying Smart Diff needs a PR whose findings' `file` actually exists in
+  `pr_files`, and the obvious candidate usually fails that.** `/pulls/:id/smart-diff`
+  joins findings onto files BY PATH, so a PR whose stored file list does not
+  contain a finding's path renders zero badges and zero line rails — on a PR the
+  UI simultaneously advertises as having 13 findings, which reads as a broken
+  client. Measured: `teplyakoff/dev-digest` #5 shows "Files changed 178" but has
+  100 `pr_files` rows, and all six finding paths were absent from them, so the
+  endpoint returned `core 52 files, 0 findings`. Check before picking a fixture:
+  `select f.file, exists(select 1 from pr_files pf where pf.pr_id=… and
+  pf.path=f.file) from findings f join reviews rv on rv.id=f.review_id where
+  rv.pr_id=…`. #2 (`scripts/notify-review-done.ts`, 19 findings on one file,
+  5 CRITICAL) is the good fixture — mixed severities on a single file also make
+  it the one that can tell "most severe" apart from "first in the array".
+  (2026-08-10)
+
+- **A new `lib/hooks/<domain>.ts` must NOT be re-exported from `hooks/index.ts`.**
+  The barrel has five `export *` lines baselined in `eslint-suppressions.json`;
+  a sixth is a fresh `no-restricted-syntax` error ("No new barrel files —
+  frontend-architecture §12") and `pnpm lint` fails, which is the baseline
+  working as designed rather than something to re-baseline. Import the module
+  directly (`@/lib/hooks/intent`). Cross-domain reach between hook modules is
+  fine and has precedent — `skills.ts` imports `invalidateAgents` from
+  `./agents`, and `reviews.ts` now imports `invalidatePrIntent` from `./intent`
+  — as long as it is the NAMED INVALIDATOR that crosses, never the query key.
+  (2026-08-10)
+
+- **A style spread in JSX is an inline style as far as `pnpm lint` is
+  concerned** — `style={{ ...s.chip, ...accentFor(depth) }}` is two
+  `no-restricted-syntax` errors ("Inline style object. Move it to this folder's
+  styles.ts"), not zero, and it type-checks and renders fine until lint runs.
+  The sanctioned shape is a function in `styles.ts` that returns the WHOLE
+  computed style: `chipStyle(depth)`, alongside the existing `swatchFor`
+  (`SmartDiffViewer/styles.ts`) and `toggleButtonFor` (`DiffTab/styles.ts`).
+  Same rule, same fix, and it also stops the object being a new reference every
+  render. (2026-08-13)
+
+- **`MonoLink` with no `href` renders a `<button>`, so "no URL available" must
+  not go through it at all.** The Blast tab has a real case: with no repo
+  `full_name` loaded there is no correct GitHub URL to build, and passing
+  `href={undefined}` would offer the reviewer a clickable affordance that does
+  nothing. Render a plain `<span className="mono">` with the same text instead —
+  the information is still there, the promise of a click is not. Extends the
+  2026-08-05 entry on `MonoLink` switching primitive by prop: that one is about
+  not wrapping it in `next/link`, this one is about not reaching for it when
+  there is no destination at all. (2026-08-13)
+
 ## Tool & Library Notes
 
 - **`next build` runs ESLint through its own runner, which does NOT read
@@ -344,6 +418,20 @@ _(no entries yet)_
   data happens to produce exactly one. Nothing type-checks it: a missing plural
   arm is a runtime string, not an error. Grep `"{count}` in `messages/` when
   adding a counted noun. (2026-08-08)
+
+- **`borderColor` IS a shorthand, and pairing it with `borderLeftColor` makes
+  React warn on every rerender.** `FindingCard/styles.ts` carried a comment
+  saying "All-longhand (never mix `border` shorthand with `borderLeft`…)" while
+  the line below it did exactly that with the colour shorthand — so the author
+  knew the rule, fixed `border`, and missed `borderColor`. The tell is in this
+  suite's own output: "Updating a style property during rerender (borderColor)
+  when a conflicting property is set (borderLeftColor) can lead to styling bugs",
+  printed by `FindingsPanel.test.tsx` and read as noise for months. Write all
+  four (`borderTopColor` / `borderRightColor` / `borderBottomColor` /
+  `borderLeftColor`). Note jsdom does not model the collision, so no rendering
+  assertion can fail on it — the guard that works is structural, and
+  `FindingCard.test.tsx` now asserts `s.card(...)` has no `borderColor` key.
+  (2026-08-10)
 
 ## Recurring Errors & Fixes
 
@@ -419,6 +507,33 @@ _(no entries yet)_
   that could not be observed in either available environment — see the two
   entries under *What Doesn't Work*; the honest outcome is that every other link
   of the chain is confirmed in the live app and the scroll is not.
+
+- **2026-08-10** — L04 mentor-feedback pass on the L03 work. Three items: the
+  Smart Diff file-header findings badge went nowhere (it called `setOpen(true)`,
+  so the most prominent finding affordance was the only one that did not
+  navigate — it now routes to the file's `mostSevere` finding, the same rule that
+  colours a line's rail); `IntentCard` moved from `FindingsTab` to `OverviewTab`,
+  which owns the hooks so the card stays presentational; and the hooks were
+  renamed and split out to `lib/hooks/intent.ts` as `usePullIntent` /
+  `useRecalculateIntent`, mirroring the server's `modules/intent/`. The badge
+  needed its own accessible name (`diffViewer.openFileFindings`) — reusing
+  `openFinding` gave two buttons the identical name whenever the badge and a line
+  tag pointed at the same finding. The whole chain was confirmed in the live app
+  on PR #2 at three different card positions (index 0, 1 and 2), which matters
+  because index 0 is the false positive the 2026-08-08 entry warns about. The
+  session's real cost was an hour spent "fixing" a focus ring that was never
+  broken — see the `getComputedStyle` entry under *What Doesn't Work*; the
+  `borderColor` shorthand change it produced was kept on its own merits, with the
+  comment rewritten to say no misrender was ever observed.
+
+- **2026-08-13** — L04 homework, Blast Radius client lane. New `BlastTab`
+  (`_components/BlastTab/`, no `index.ts`) plus `lib/hooks/blast.ts`, which is
+  deliberately absent from the hooks barrel. The `blast` next-intl namespace
+  already existed in the starter and was extended rather than replaced. The tab
+  renders three states off `data.status` and never off array emptiness — the
+  whole point is that `degraded` and "no callers found" produce identical empty
+  arrays and mean opposite things, so `BlastTab.test.tsx` asserts that the
+  degraded state does NOT show the empty-result copy.
 
 ## Open Questions
 

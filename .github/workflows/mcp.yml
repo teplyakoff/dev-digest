@@ -1,0 +1,57 @@
+# mcp suite — the local stdio MCP server (@devdigest/mcp).
+# Five tools over stdio in front of the REST API. Hermetic: the HTTP client is
+# replaced by FakeApiClient, so there is no API, no database and no spend.
+# Uses npm (package-lock.json), like every package that is not server/ or client/.
+#
+# Two cross-package paths are in the filter because both are aliased INTO this
+# package at type-check time and neither lives under mcp/:
+#   server/src/vendor/shared/**   → @devdigest/shared (the Zod contracts)
+#   reviewer-core/src/prompt.ts   → wrapUntrusted, imported by sub-path
+# A contract change that breaks this package would otherwise land green.
+name: mcp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mcp/**'
+      - 'server/src/vendor/shared/**'
+      - 'reviewer-core/src/prompt.ts'
+      - '.github/workflows/mcp.yml'
+  pull_request:
+    paths:
+      - 'mcp/**'
+      - 'server/src/vendor/shared/**'
+      - 'reviewer-core/src/prompt.ts'
+      - '.github/workflows/mcp.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - run: npm test

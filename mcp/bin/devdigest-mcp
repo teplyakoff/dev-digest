@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#
+# Launcher for the DevDigest MCP server.
+#
+# Its whole job is to make the server independent of the CLIENT's working
+# directory. An MCP client spawns this with whatever cwd it feels like; the
+# server's tsconfig `paths` (@devdigest/shared → ../server/src/vendor/shared,
+# @devdigest/reviewer-core/* → ../reviewer-core/src) only resolve when tsx runs
+# with mcp/ as its base. So resolve our own directory and exec from there.
+#
+# `exec` matters too: the MCP client talks JSON-RPC over this process's stdio
+# and signals its termination. A wrapper that stayed alive as a parent would put
+# a shell between the client and the server on both.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [ ! -x "$ROOT/node_modules/.bin/tsx" ]; then
+  # stderr, never stdout: stdout is the protocol channel.
+  echo "devdigest-mcp: dependencies are missing — run 'cd $ROOT && npm install'" >&2
+  exit 1
+fi
+
+cd "$ROOT"
+exec "$ROOT/node_modules/.bin/tsx" "$ROOT/src/main.ts" "$@"

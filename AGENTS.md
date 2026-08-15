@@ -17,13 +17,14 @@ Node ≥22 · TypeScript 5.7 · Zod 3 · Vitest 2
 Fastify 5 · Drizzle 0.38 · Postgres 16 + pgvector — `server/`
 Next.js 15 · React 19 · Tailwind 4 · TanStack Query — `client/`
 
-## Layout — five standalone packages, NOT a workspace
+## Layout — six standalone packages, NOT a workspace
 
 | Path | Package | Manager |
 |---|---|---|
 | `server/` | `@devdigest/api` (:3001) | **pnpm** |
 | `client/` | `@devdigest/web` (:3000) | **pnpm** |
 | `reviewer-core/` | `@devdigest/reviewer-core` (engine, no I/O) | **npm** |
+| `mcp/` | `@devdigest/mcp` (stdio MCP server over the API) | **npm** |
 | `e2e/` | `@devdigest/e2e` (browser flows) | **npm** |
 | `demo/` | `@devdigest/demo` (screencast recorder) | **npm** |
 
@@ -40,6 +41,11 @@ vendored into `client/src/vendor/shared`.
 - `./scripts/dev.sh` — full local boot (Postgres → migrate → seed → API + web).
   Flags: `--no-seed` · `--no-client` · `--db-only`.
 - `./scripts/e2e.sh` — hermetic e2e on alternate ports; never touches the dev DB.
+- `mcp/bin/devdigest-mcp` — the stdio MCP server. **Not** started by `dev.sh`
+  (`scripts/` never mentions `mcp`); the client spawns it, and `.mcp.json` in
+  the root is auto-discovered so every session here has the five tools. That
+  costs a measured 1 936 tokens in each one — `claude --strict-mcp-config` opts
+  out. Needs the API on :3001. See `mcp/README.md`.
 - `cd demo && npm run record` — records a video of the real review loop. Unlike
   `e2e`, this triggers a real run and **spends money**; see `demo/README.md`.
 

@@ -1,18 +1,42 @@
 {
+  "title": "Blast radius",
   "stat": {
     "symbols": "symbols",
     "callers": "callers",
     "endpoints": "endpoints",
-    "crons": "cron/jobs"
+    "crons": "cron"
   },
   "view": {
     "tree": "tree",
     "graph": "graph"
   },
-  "callerCount": "{count} callers",
-  "noDownstream": "{count} changed symbol(s), no downstream callers found.",
+  "callerCount": "{count, plural, =0 {no callers} one {# caller} other {# callers}}",
   "graph": {
-    "empty": "No downstream callers to graph.",
-    "ariaLabel": "Blast radius graph"
-  }
+    "ariaLabel": "Blast radius graph",
+    "subject": "Drill-in on {symbol} — its callers, and the routes downstream of them.",
+    "legendSymbol": "● changed symbol",
+    "legendCallers": "● callers",
+    "legendEndpoints": "● endpoints affected"
+  },
+  "callersCapped": "showing {shown} of {total}",
+  "indexedAt": "Indexed at {sha}",
+  "empty": {
+    "noCallers": "Nothing else in the indexed code calls the symbols this PR changes.",
+    "noCallersForSymbol": "Nothing in the indexed code calls this symbol."
+  },
+  "partial": {
+    "title": "Partial map"
+  },
+  "degraded": {
+    "title": "No impact map for this pull request",
+    "action": "Re-analyze repository",
+    "pending": "Re-analyzing…",
+    "started": "Re-indexing started. This runs in the background — reopen this page in a minute."
+  },
+  "error": {
+    "title": "Couldn’t load the impact map",
+    "body": "The blast radius endpoint did not answer. Retry, or reload the page."
+  },
+  "symbolsCapped": "showing {shown} of {total} changed symbols",
+  "elsewhere": "Reached from changed files with no tracked symbol"
 }

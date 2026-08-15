@@ -172,6 +172,46 @@ export function handler(req) {
     const refs = parseReferences('src/A.tsx', src);
     expect(refs.find((r) => r.toSymbol === 'div')).toBeUndefined();
   });
+
+  /**
+   * Found on real data, not by reading the code. Blast radius reported
+   * `toRepoDto` with one caller while `repos/service.ts` calls it three times;
+   * the missing one is `rows.map(toRepoDto)`, where the symbol is the ARGUMENT
+   * and `map` is the only thing being invoked.
+   */
+  it('records a function passed as an argument, not only the one being invoked', () => {
+    const src = `
+import { toRepoDto } from './helpers';
+export function list(rows) {
+  return rows.map(toRepoDto);
+}
+`;
+    const refs = parseReferences('src/service.ts', src);
+    const ref = refs.find((r) => r.toSymbol === 'toRepoDto');
+    expect(ref).toBeDefined();
+    expect(ref!.line).toBe(4);
+    // The invoked head is still recorded — this adds, it does not replace.
+    expect(refs.find((r) => r.toSymbol === 'map')).toBeDefined();
+  });
+
+  it('attributes a nested call’s arguments to its own line, not the outer call’s', () => {
+    const src = `
+import { inner, payload } from './m';
+export function run() {
+  return outer(
+    inner(payload),
+  );
+}
+`;
+    const refs = parseReferences('src/x.ts', src);
+    // `payload` is an argument of `inner(...)` on line 5, not of `outer(` on 4.
+    expect(refs.find((r) => r.toSymbol === 'payload')!.line).toBe(5);
+  });
+
+  it('still records an import-line identifier as no reference at all', () => {
+    const src = `import { toRepoDto } from './helpers';\n`;
+    expect(parseReferences('src/x.ts', src)).toEqual([]);
+  });
 });
 
 describe('parseImports', () => {

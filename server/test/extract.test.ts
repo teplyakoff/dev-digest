@@ -75,6 +75,29 @@ export function handler(req) {
     const decl = `export function rateLimit(req) { return true; }`;
     expect(extractReferences(decl, 'rateLimit').length).toBe(0);
   });
+
+  /**
+   * The gap this closes was found on real data, not by reading the code: blast
+   * radius reported `toRepoDto` with ONE caller when `repos/service.ts` calls it
+   * three times, because the third is `rows.map(toRepoDto)` — the symbol passed
+   * as a value, never invoked on that line. The docstring had claimed this shape
+   * was covered since the extractor was written.
+   */
+  it('finds the symbol passed as a VALUE, not just invoked', () => {
+    expect(extractReferences('return rows.map(toRepoDto);', 'toRepoDto').length).toBe(1);
+    expect(extractReferences('register(CLONE_JOB_KIND, handleClone);', 'handleClone').length).toBe(1);
+    expect(extractReferences('const fn = toRepoDto;', 'toRepoDto').length).toBe(1);
+    expect(extractReferences('const all = [toRepoDto];', 'toRepoDto').length).toBe(1);
+  });
+
+  it('stays precision-first: an unrelated word that merely contains the name is not a reference', () => {
+    // Substring, not identifier — `toRepoDtoList` is a different symbol.
+    expect(extractReferences('return rows.map(toRepoDtoList);', 'toRepoDto').length).toBe(0);
+    // Property access on something else is that other thing's reference.
+    expect(extractReferences('return x.toRepoDto;', 'toRepoDto').length).toBe(0);
+    // The import line stays excluded, value-position delimiters or not.
+    expect(extractReferences("import { toRepoDto } from './helpers';", 'toRepoDto').length).toBe(0);
+  });
 });
 
 describe('extractEndpoints / extractCrons', () => {

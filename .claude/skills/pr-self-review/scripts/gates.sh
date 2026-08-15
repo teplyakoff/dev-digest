@@ -120,14 +120,14 @@ else
 fi
 
 # ------------------------------------------------------------- package hygiene
-# Five packages, two managers (AGENTS.md layout table). Running the wrong one
+# Six packages, two managers (AGENTS.md layout table). Running the wrong one
 # writes a second lockfile that nothing installs from and CI never sees.
 
 WRONG_LOCK=""
 for p in server client; do
   [ -f "$p/package-lock.json" ] && WRONG_LOCK="$WRONG_LOCK $p/package-lock.json(npm in a pnpm package)"
 done
-for p in reviewer-core e2e demo; do
+for p in reviewer-core mcp e2e demo; do
   [ -f "$p/pnpm-lock.yaml" ] && WRONG_LOCK="$WRONG_LOCK $p/pnpm-lock.yaml(pnpm in an npm package)"
 done
 [ -n "$(git ls-files '*yarn.lock')" ] && WRONG_LOCK="$WRONG_LOCK yarn.lock"
@@ -138,7 +138,7 @@ else
 fi
 
 LOCK_DRIFT=""
-for p in server client reviewer-core e2e demo; do
+for p in server client reviewer-core mcp e2e demo; do
   touched "^$p/package\.json$" || continue
   # A dependency edit looks like a version-ish value. `version`, `engines` and
   # `packageManager` change without touching the lockfile, so they are exempt.
@@ -159,8 +159,20 @@ fi
 # Source trees only. seed.ts, migrate.ts, scripts/ and demo/ are CLIs — console
 # output is their job.
 
-DEBUG='console\.(log|debug)\(|debugger;|(it|test|describe)\.only\(|fdescribe\(|xit\(|\.skip\('
-if hits=$(added_hits "^(server|client|reviewer-core)/src/[^$TAB]*$TAB.*($DEBUG)" "/(seed|migrate)\.ts$TAB") && [ -n "$hits" ]; then
+# `xit\(` carries a word boundary because unanchored it also matches
+# `process.exit(` — a legitimate line in `server/src/server.ts` and in any CLI
+# entry point. That false FAIL was always reachable here; it only became visible
+# when `mcp` joined the list above, and a gate that fails on correct code is the
+# one thing the header of this file forbids.
+#
+# It must be `\bxit\(` and NOT `[^A-Za-z]xit\(`: every line grep sees here is
+# `path<TAB>content`, the TAB is consumed by the literal separator in the
+# pattern below, so a character class has nothing left to match against a
+# `xit(` sitting at column 0 of the source line — which is exactly how a
+# top-level skipped test in a colocated `client/src/**/*.test.tsx` is written.
+# `\b` matches there (TAB→`x` is a boundary) and still rejects `exit(`.
+DEBUG='console\.(log|debug)\(|debugger;|(it|test|describe)\.only\(|fdescribe\(|\bxit\(|\.skip\('
+if hits=$(added_hits "^(server|client|reviewer-core|mcp)/src/[^$TAB]*$TAB.*($DEBUG)" "/(seed|migrate)\.ts$TAB") && [ -n "$hits" ]; then
   gate debug-leftovers FAIL "console/debugger/only/skip in shipped source"
   echo "$hits" | sed 's/^/        /'
 else
@@ -292,12 +304,12 @@ if [ "$MODE" = fast ]; then
   gate lint SKIP "--fast"
   gate typecheck SKIP "--fast"
 else
-  for p in server client reviewer-core; do pkg_script "$p" lint "lint:$p"; done
-  for p in server client reviewer-core e2e demo; do pkg_script "$p" typecheck "typecheck:$p"; done
+  for p in server client reviewer-core mcp; do pkg_script "$p" lint "lint:$p"; done
+  for p in server client reviewer-core mcp e2e demo; do pkg_script "$p" typecheck "typecheck:$p"; done
 fi
 
 if [ "$MODE" = full ]; then
-  for p in server client reviewer-core; do pkg_script "$p" test "test:$p"; done
+  for p in server client reviewer-core mcp; do pkg_script "$p" test "test:$p"; done
 fi
 
 # ------------------------------------------------------------------- verdict

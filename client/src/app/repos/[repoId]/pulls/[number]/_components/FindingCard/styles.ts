@@ -4,12 +4,29 @@ import type { CSSProperties } from "react";
 export const s = {
   card: (focused: boolean, sevColor: string, muted: boolean): CSSProperties => ({
     borderRadius: 8,
-    // All-longhand (never mix `border` shorthand with `borderLeft` — React warns
-    // about updating shorthand + non-shorthand on the same rerender).
+    // ALL FOUR COLOUR LONGHANDS.
+    //
+    // This used to say `borderColor: focused ? … : "var(--border)"` next to
+    // `borderLeftColor`. The comment above it claimed "all-longhand", but
+    // `borderColor` IS a shorthand — it writes all four sides — so it collided
+    // with the `borderLeftColor` beside it, and React said so on every rerender:
+    // "Updating a style property during rerender (borderColor) when a
+    // conflicting property is set (borderLeftColor) can lead to styling bugs."
+    // That warning was in this repo's own test output, being read as noise.
+    //
+    // NO MISRENDER WAS EVER OBSERVED FROM IT — the focus ring was checked in the
+    // live app and moves to the deep-linked card correctly, both before and
+    // after this change. So this closes a hazard React names, not a reported
+    // bug, and it is expected to be visually identical. Do not reintroduce the
+    // shorthand: `FindingCard.test.tsx` asserts the style object never carries a
+    // `borderColor` key, because jsdom does not model the collision and no
+    // rendering assertion here could fail on it.
     borderStyle: "solid",
-    borderColor: focused ? sevColor : "var(--border)",
     borderWidth: 1,
     borderLeftWidth: 3,
+    borderTopColor: focused ? sevColor : "var(--border)",
+    borderRightColor: focused ? sevColor : "var(--border)",
+    borderBottomColor: focused ? sevColor : "var(--border)",
     borderLeftColor: sevColor,
     background: "var(--bg-elevated)",
     overflow: "hidden",

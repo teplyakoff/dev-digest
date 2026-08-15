@@ -28,6 +28,14 @@ would be obvious to anyone reading the code, don't write it.
   recorder only borrowed: the agent's ordered `skill_ids`, snapshotted before
   the first scene. (2026-08-03)
 
+- **When the criterion is "the link opens the right line", film the click, not
+  the link.** `record-blast.ts` reads the `href`, asserts it against the API
+  response, then clicks it, waits for the popup, and asserts the URL it landed
+  on before screenshotting. A recorder that stops at the link has filmed an
+  `<a>` tag. It makes the take need network — the only recorder here that leaves
+  localhost — and in exchange the evidence frame is the call site itself,
+  highlighted by GitHub, at the commit the line number came from. (2026-08-13)
+
 ## What Doesn't Work
 
 - Recording against a **seeded** PR produces a meaningless video: seeded file
@@ -144,6 +152,67 @@ would be obvious to anyone reading the code, don't write it.
   — a reader can verify code against the app, but a stated cause is taken on
   trust. (2026-08-08)
 
+- **Detecting a tool failure by matching the payload text fails on payloads that
+  talk about failure.** `record-mcp.ts` classified an MCP Inspector result as an
+  error with `/is not implemented/i` on the rendered text. It passed on
+  `get_blast_radius`, whose whole point is that message — and then failed a
+  perfectly good `get_conventions` call, because one of this repo's own extracted
+  conventions contains the words "not implemented". The fix is to ask the UI what
+  it rendered, not the string: the Inspector paints a distinct `Tool Error` leaf
+  element, so `errorBadge && panel.contains(errorBadge)` is the test. Generalises
+  past Playwright — any classifier that greps content it does not control will
+  eventually meet content that quotes its own keywords. (2026-08-12)
+
+- **`waitUntil: "networkidle"` can never settle against a UI that holds an event
+  stream open.** `page.goto(inspectorUrl, { waitUntil: "networkidle" })` times
+  out at 30 s every time — the MCP Inspector keeps a long-lived connection for
+  its protocol sidebar, so the network is never idle and there is nothing to wait
+  for. Nothing in the error says so; it reads like a slow page. Use
+  `domcontentloaded` plus a wait for one element you know that screen has
+  (`getByText("Disconnected")` here). Applies to any streaming UI, this app's own
+  SSE surfaces included. (2026-08-12)
+
+- **Anchoring on "the first `<pre>`" works until the call fails.** The Inspector
+  renders a successful tool result in a `pre.mantine-Code-root`, but an error as
+  a text block with no code element — so `locator("pre.mantine-Code-root").first()`
+  then resolves to a *hidden* request frame in the protocol sidebar and waits out
+  its full timeout on a call that answered in 14 ms. The log is the tell:
+  `123 × locator resolved to hidden <pre …>`. Anchor on the panel instead — find
+  the `Results` heading, walk up to the container with real text — because that
+  structure is the same for both outcomes. (2026-08-12)
+
+- **A Mantine `SegmentedControl` label is on screen, has `innerText`, and is
+  "not visible" to Playwright.** Every locator click on the Inspector's
+  Servers/Tools switcher timed out at 20 s while a DOM dump showed
+  `segmented: ["Servers", "Tools", "Protocol", "Console"]` and `openDialogs: 0` —
+  the modal-still-open theory was wrong. Mantine hides the real `<input>` and
+  drives it from React state, so `.click()` on the visible span does nothing and
+  `.check()` on the hidden input is refused. Read the rect in `page.evaluate` and
+  click the point with `page.mouse.click` — a real mouse event lands on the
+  control underneath. Same treatment worked for `.mantine-Switch-track`.
+  (2026-08-12)
+
+- **Each take leaves its own `.mp4` behind, and the promote step then matches
+  more than one.** The startup sweep removes only Playwright's raw
+  `page@*.webm`, so `recordings/<lab>/` accumulates one
+  `devdigest-<name>-<stamp>.mp4` per attempt; `cp recordings/x/devdigest-*.mp4
+  docs/results/<lab>/devdigest-x.mp4` then fails with the genuinely unhelpful
+  `cp: …: Not a directory`, which is what cp says when a glob handed it two
+  sources. `record-conventions.ts:283` has the identical loop, so this is every
+  recorder here. Until one change fixes them all, delete old mp4s before a
+  re-record, and pick the promote source by name rather than by glob.
+  (2026-08-12)
+
+- **`setViewportSize` on a popup while its first navigation is in flight aborts
+  that navigation**, and the page settles on `chrome-error://chromewebdata/`.
+  `record-blast.ts` scene 4 clicks a `target="_blank"` link into github.com and
+  asserts where it landed; with the resize in place the assertion failed and
+  accused a link that was perfectly good — the same URL loaded fine via
+  `page.goto`, and the same click worked in a script without the resize. The
+  call was redundant as well as harmful: a popup already inherits the browser
+  context's viewport. Cost one take and a false accusation against the feature.
+  (2026-08-13)
+
 ## Codebase Patterns
 
 - This package is deliberately **not** part of `../e2e`. `e2e` is deterministic,
@@ -255,6 +324,18 @@ would be obvious to anyone reading the code, don't write it.
   "ignored" list the preview renders, which an opaque committed `.zip` would
   defeat. (2026-08-03)
 
+- **`tsx` compiles with esbuild's `keepNames`, and the helper it injects does not
+  exist inside `page.evaluate`.** A named inner function — `const leaf = (t) =>
+  …` — is emitted as `__name(leaf, "leaf")`, but the browser context only ever
+  receives the function source, so the evaluate dies with
+  `page.evaluate: ReferenceError: __name is not defined` pointing at column 17 of
+  a one-line eval. Nothing in the message names tsx, esbuild or the helper.
+  Anonymous inline arrows are unaffected, which is why most `evaluate` calls in
+  this package never hit it. Rule for anything running in the page: no named
+  function declarations or function-valued `const`s inside the callback — inline
+  the helper, or pass the code as a string. Affects every recorder here, since
+  all of them run under `tsx`. (2026-08-12)
+
 ## Recurring Errors & Fixes
 
 - `OpenRouter returned no choices for Review: Input too long: N input tokens,
@@ -321,6 +402,32 @@ would be obvious to anyone reading the code, don't write it.
   generalises past this package: the user caught the scope error, not the tests
   and not the recorder's own assertions, because every assertion passed. A
   recorder can only check the claims it was told to make.
+
+- **2026-08-12** — L04, `record-mcp.ts`: the first recorder here that films a
+  **third-party** UI (the MCP Inspector) rather than this repo's web app, so none
+  of the accumulated selector knowledge applied and four takes were lost to four
+  different mechanisms, all written up above. Free, unlike most of this package:
+  the four tools it executes are read-only and `run_agent_on_pull_request` is
+  opened but never run, which keeps the house rule that filming is not where a
+  review budget gets spent. It also spawns and kills its own Inspector, so the
+  prereq list is "the API on :3001, and nothing on :6274". Two `pr-self-review`
+  MEDIUMs came out of it and were fixed in the same session: the package was
+  fetched with a floating `npx -y <name>`, and the start-up timeout killed only
+  the `npx` pid while the teardown killed the group — the one path that could
+  strand the port did. Pinning to `@2.2.0` also made the evidence reproducible,
+  which is why the take was re-shot so `summary.json` names the version it was
+  filmed against. Ten stills + a 62 s mp4 in `docs/results/l04/`.
+
+- **2026-08-13** — L04, `record-blast.ts` (7 scenes, free, read-only) and a
+  re-take of `record-mcp.ts`, whose shot 09 flipped from filming
+  `get_blast_radius` FAILING to filming it answering. That flip is worth noting
+  as a category: `expectError: true` existed because one tool was meant to fail,
+  and it stayed load-bearing in the opposite direction — without it a red result
+  panel would have been captioned and shipped as evidence. Two scenes are
+  data-dependent and are SKIPPED-and-reported rather than staged when their
+  precondition is absent: the degraded state needs an unindexed repo, and the
+  "no model was called" proof is a line on the API's stdout that no UI pane
+  renders, so it is drawn from a log file and labelled as such on screen.
 
 ## Open Questions
 

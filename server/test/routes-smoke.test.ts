@@ -77,4 +77,15 @@ describe('routes (no DB)', () => {
     expect(res.json().error.code).toBe('validation_error');
     await app.close();
   });
+
+  // Same argument for `/pulls/:id/blast`, and it also proves the module is
+  // registered at all: a 404 here would mean the plugin never made it into
+  // `modules/index.ts`, which nothing else in the Docker-free suite would catch.
+  it('GET /pulls/:id/blast rejects a non-uuid id with a 422', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({ method: 'GET', url: '/pulls/not-a-uuid/blast' });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
 });

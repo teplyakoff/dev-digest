@@ -221,6 +221,41 @@ would be obvious to anyone reading the code, don't write it.
   `import * as t from '../../db/schema.js'` in the new file, run `pnpm lint`,
   expect an error naming `no-restricted-imports`, then revert. (2026-08-08)
 
+- **`POST /pulls/:id/review` has never been synchronous, and its own contract
+  docstring said it was — for three lessons, through every gate.**
+  `vendor/shared/contracts/review-api.ts` claimed the persisted reviews "are
+  also returned once the (synchronous) run completes". `modules/reviews/service.ts`
+  fires `void this.executor.executeRuns(...).catch(...)` and returns
+  immediately, so `reviews` on that response is **always `[]`**. Nothing catches
+  a wrong comment: typecheck, lint and every test pass identically whether the
+  prose is true or false, and the web client never noticed because it refetches
+  on SSE. It cost a whole L04 design premise — a blocking MCP tool built on that
+  sentence would have reported zero findings on every PR — and was corrected on
+  2026-08-12. When a contract comment describes RUNTIME behaviour rather than
+  shape, read the handler before building on it; the field stays because a
+  caller finding `[]` needs to know that is by design. (2026-08-12)
+
+- **`adapters/codeindex/extract.ts` is NOT what the persistent index reads, and
+  fixing a recall bug there changes nothing you can see.** The index is built by
+  `adapters/astgrep/parseReferences` (`repo-intel/pipeline/full.ts:164-165`);
+  `extract.ts` backs the ripgrep fallback behind `container.codeIndex.references()`.
+  Both had the same gap and an hour went into the wrong one first — the tests
+  went green, the reindex ran, and the blast map was unchanged, because nothing
+  on the read path had been touched. Fix the AST one when the symptom is in the
+  index; fix both when the symptom is a docstring that overstates a regex.
+  (2026-08-13)
+
+- **`POST /repos/:id/resync` on an unchanged HEAD with a current
+  `indexer_version` is a no-op, so it cannot be used to pick up an extractor
+  change.** `runIncremental` reindexes what the diff base says moved, and
+  forces a full pass only when `state.indexerVersion !== INDEXER_VERSION`
+  (`pipeline/incremental.ts:85`). Same sha + same version = nothing re-parsed,
+  and the response is still `{"status":"accepted"}` with a fresh `jobId`, so it
+  looks like work happened. To force a rebuild during development:
+  `UPDATE repo_index_state SET indexer_version = <old> WHERE repo_id = …`, then
+  resync. In production the version bump in `constants.ts` is what does it.
+  (2026-08-13)
+
 ## Codebase Patterns
 
 - The Zod contracts are **vendored twice — `server/src/vendor/shared/**` and
@@ -363,6 +398,38 @@ would be obvious to anyone reading the code, don't write it.
   implementation detail, not PR order and not alphabetical order; a plan that
   claims otherwise is wrong, and one did. If an ordering actually matters, sort
   explicitly at the point of use rather than trusting the read. (2026-08-08)
+
+- **`RepoIntel.getBlastRadius` has two branches with wildly different costs, and
+  the caller cannot tell which one it got.** `tryPersistentBlast` is pure SQL;
+  the fallback below it re-reads the clone and re-parses every caller file with
+  tree-sitter (`repo-intel/service.ts:299-303`). Which one runs depends on
+  `config.repoIntelEnabled` AND on `repo_index_state.status` being `full` or
+  `partial` — and the return shape is identical either way. Any consumer with a
+  latency budget (an HTTP handler, anything on a page load) must therefore check
+  `getIndexState` ITSELF before calling, and degrade rather than hope. That is
+  what `modules/blast/service.ts:assertPersistentPath` does, and its conditions
+  are a deliberate copy of the facade's; if the two drift, the endpoint silently
+  starts parsing the repository on every request. (2026-08-13)
+
+- **Reference recall is allowed to be generous because `resolveReferences` is
+  the precision gate, not the extractor.** `parseReferences` now records every
+  bare identifier passed as a call ARGUMENT — including local variables — which
+  looks alarming until you read `repository.ts:resolveReferences`: a reference
+  only gets a `decl_file` when the referencing file imports a module that
+  EXPORTS that exact name, uniquely, and `getResolvedCallers` filters on
+  `decl_file`. An unresolved row is table bulk, never a false caller on a map.
+  Tighten the extractor only if row volume becomes a real problem; do not
+  tighten it in the name of precision, which lives elsewhere. (2026-08-13)
+
+- **A cap documented "per X" and applied to the flat list is a different limit
+  wearing the same name, and it reads as a fact about the code.**
+  `MAX_CALLERS_PER_SYMBOL = 20` is described in `repo-intel/constants.ts` as a
+  per-changed-symbol fan-out cap and was applied as `callers.slice(0, 20)` over
+  every symbol's callers at once. A PR touching five symbols got 20 rows total,
+  so a symbol whose callers all sat in low-ranked files rendered with NONE — and
+  "nothing calls this" is exactly the claim a reviewer acts on. Nothing catches
+  this: the type is right, the constant is right, the number of rows is
+  plausible. `capPerSymbol` in `repo-intel/service.ts` is the fix. (2026-08-13)
 
 ## Tool & Library Notes
 
@@ -520,6 +587,17 @@ would be obvious to anyone reading the code, don't write it.
   entries above. A review pass also found that `classify.ts` sat outside every
   lint ring glob, which was fixed by extending the glob list and proved by
   planting a forbidden import and watching `pnpm lint` fail.
+
+- **2026-08-13** — L04 homework, Blast Radius server lane. New `modules/blast/`
+  (`GET /pulls/:id/blast`), `RepoIntel.getDependents` (reverse `file_edges` BFS,
+  one query per hop) and `RepoIntel.getFileFacts`. The three things worth
+  remembering all came from RUNNING it against PR #4, after 323 tests were
+  green: the changed file that declares the routes is excluded from its own
+  dependents by construction (hence the depth-0 read); `parseReferences` missed
+  `rows.map(toRepoDto)` so a helper with three call sites reported one caller;
+  and the endpoint extractor cannot tell `app.get('/x')` from `api.get('/x')`,
+  which turned out to be signal rather than noise on a contract-break PR.
+  `INDEXER_VERSION` 2 → 3, because a v2 index is not wrong, it is short.
 
 ## Open Questions
 

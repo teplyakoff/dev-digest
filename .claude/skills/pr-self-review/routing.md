@@ -21,9 +21,11 @@ is a decision, not an oversight.
 | `engine` | `reviewer-core/src/**` | [onion-architecture](../onion-architecture/SKILL.md) §ring 0, [typescript-expert](../typescript-expert/SKILL.md) | yes |
 | `server-adapters` | `server/src/adapters/**` | [onion-architecture](../onion-architecture/SKILL.md) §4, [security](../security/SKILL.md) | yes |
 | `server-tests` | `server/test/**` | [onion-architecture](../onion-architecture/SKILL.md) §12 | no — HIGH ceiling |
+| `mcp` | `mcp/src/**` | [onion-architecture](../onion-architecture/SKILL.md) §9/§10, [typescript-expert](../typescript-expert/SKILL.md) | yes |
+| `mcp-tests` | `mcp/test/**` | [onion-architecture](../onion-architecture/SKILL.md) §12 | no — HIGH ceiling |
 | `package-config` | `*/eslint.config.*`, `*/next.config.*`, `*/vitest.config.*`, `*/tsconfig*.json`, `*/package.json` | the package's own skill ([next-best-practices](../next-best-practices/SKILL.md) or [fastify-best-practices](../fastify-best-practices/SKILL.md)), [security](../security/SKILL.md) | yes |
 | `security-sweep` | every changed source file matching a trigger in §3 | [security](../security/SKILL.md) | yes |
-| `infra` | `.github/**`, `scripts/*.sh`, `docker-compose.yml`, `.claude/**` | [security](../security/SKILL.md) | yes |
+| `infra` | `.github/**`, `scripts/*.sh`, `*/bin/**`, `docker-compose.yml`, `.claude/**`, `.mcp.json`, `**/*.mcp.json` | [security](../security/SKILL.md) | yes |
 | `light` | `e2e/**`, `demo/**` | — read the diff, report obvious breakage only | no — HIGH ceiling |
 | — skipped — | `docs/**`, `*.md`, `**/INSIGHTS.md`, lockfiles, `_assets/**`, `**/migrations/meta/**`, generated output | — | — |
 
@@ -31,6 +33,27 @@ is a decision, not an oversight.
 other checks even do: an ESLint rule dropped from `server/eslint.config.js` or
 `eslint: { ignoreDuringBuilds }` flipped in `next.config.mjs` silently disarms a
 whole gate, and the diff that does it looks like three tidy lines.
+
+The `mcp` group exists because `mcp/src/**` matched no row at all when the
+package landed, and a file in no group is reviewed by nothing. It is a stdio
+transport adapter over the REST API, so the rules that apply are
+`onion-architecture` §9 (*"jobs, streams and CLIs are transport too"* — a tool
+handler is a route handler) and §10 (adapters translate errors; library errors
+never travel inward). **Never `frontend-architecture`.**
+
+`mcp-tests` exists for the same reason and takes §12 (test doubles are
+production code, assert on recorded output rather than call counts), mirroring
+`server-tests`. Two neighbouring paths are covered by widening `infra` rather
+than by rows of their own: `*/bin/**`, because a package launcher is an
+executable script that no `src` group matches, and any MCP registration,
+because a committed server definition is a supply-chain surface for every
+clone — this repo's own `.mcp.json` is auto-discovered by Claude Code, so it
+runs `mcp/bin/devdigest-mcp` in every session opened here. Both the root
+dotfile and any `*.mcp.json` elsewhere are listed, because a leading-dot name
+is not reliably matched by a `*` glob and this row is read, not executed. This
+does **not** settle `reviewer-core/test/**`, which is still in no group — that
+one is recorded as an open question in the root `INSIGHTS.md` and belongs to
+its own change.
 
 **The boundary between the two placement skills is not negotiable.**
 `frontend-architecture` never runs on `server/` or `reviewer-core/`;

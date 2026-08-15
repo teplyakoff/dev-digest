@@ -432,6 +432,31 @@ export function parseReferences(file: string, source: string): ParsedReference[]
       const prop = rightmostName(fn);
       if (prop) push(prop, lineOf(n));
     }
+
+    /**
+     * A function PASSED AS A VALUE is a caller too — `rows.map(toRepoDto)`,
+     * `jobs.register(KIND, handleClone)`. Until this loop existed, only the
+     * invoked head of a call was recorded, so a helper used as a callback was
+     * invisible to blast radius: `repos/service.ts` calls `toRepoDto` three
+     * times, the map reported one, and the missing one was the `.map()`.
+     *
+     * PRECISION COMES FROM RESOLUTION, NOT FROM THIS FILTER, which is what
+     * makes the broad rule safe. Every identifier argument is recorded here,
+     * including local variables — and `resolveReferences` only sets `decl_file`
+     * when the referencing file imports a module that EXPORTS that exact name,
+     * uniquely. An unresolved row never becomes a caller, so the cost of being
+     * generous here is table rows, not false claims on the map.
+     *
+     * Direct children only: nested calls are visited by this same loop on their
+     * own `call_expression`, and descending would attribute an inner call's
+     * arguments to the outer line.
+     */
+    const args = getField(n, 'arguments');
+    if (args) {
+      for (const arg of args.children()) {
+        if (arg.kind() === 'identifier') push(arg.text(), lineOf(n));
+      }
+    }
   }
 
   for (const n of root.findAll({ rule: { kind: 'new_expression' } })) {

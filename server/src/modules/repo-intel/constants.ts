@@ -24,8 +24,15 @@ export const MAX_CALLERS_PER_SYMBOL = 20;
  *
  * v2 (T3): graph + decl_file resolution + file_rank + repo-map landed, so every
  * T2 `partial` index must be rebuilt to gain the rank-driven data.
+ *
+ * v3 (L04): `extractReferences` gained the value-position pattern it had always
+ * claimed — `rows.map(toRepoDto)` is now a reference. The change is pure RECALL,
+ * so a v2 index is not wrong, it is short: it under-reports callers, and the
+ * shortfall is invisible on the read side (fewer rows looks exactly like fewer
+ * callers). That is precisely the kind of drift a version bump exists to force,
+ * because nobody re-indexes on a hunch that a number might be low.
  */
-export const INDEXER_VERSION = 2;
+export const INDEXER_VERSION = 3;
 
 // --- [T2] Full-index limits (documented now, enforced in the pipeline) ------
 export const MAX_INDEXED_FILES = 5000;
