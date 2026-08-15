@@ -99,6 +99,20 @@ describe('list_agents', () => {
     expect(text(await listAgents.handler(undefined, deps, extra))).toContain('General Reviewer');
   });
 
+  /*
+   * The projection is the contract, so the field that is NOT there needs a test
+   * as much as the fields that are — nothing else fails when someone adds
+   * `${a.provider}/` back into the head line while making it read better.
+   */
+  it('never projects the agent’s provider', async () => {
+    const { deps, extra } = ctx({
+      agents: [makeAgent({ provider: 'openrouter', model: 'deepseek/deepseek-v4-flash' })],
+    });
+    const out = text(await listAgents.handler({ enabled_only: false }, deps, extra));
+    expect(out).toContain('deepseek/deepseek-v4-flash');
+    expect(out).not.toContain('openrouter');
+  });
+
   it('includes the prompt on request, wrapped as untrusted', async () => {
     const { deps, extra } = ctx({ agents: [makeAgent()] });
     const out = text(await listAgents.handler({ include_prompt: true }, deps, extra));
@@ -137,12 +151,19 @@ describe('get_findings', () => {
       pulls: { 'repo-1': [makePr()] },
       reviews: {
         'pr-1': [
-          // Three agents, one PR. The newest row has ZERO findings — the exact
-          // shape that made `reviews.find(...)` report 0 on a PR that had 13
-          // (server/INSIGHTS.md:343-356).
-          makeReview({ id: 'rev-3', agent_name: 'API Contract Reviewer', findings: [] }),
+          // Three agents, one PR, ONE run each — so every distinct `agent_id`
+          // must survive `all_runs: false`. The newest row has ZERO findings:
+          // the exact shape that made `reviews.find(...)` report 0 on a PR that
+          // had 13 (server/INSIGHTS.md:343-356).
+          makeReview({
+            id: 'rev-3',
+            agent_id: 'agent-3',
+            agent_name: 'API Contract Reviewer',
+            findings: [],
+          }),
           makeReview({
             id: 'rev-2',
+            agent_id: 'agent-2',
             agent_name: 'Test Quality Reviewer',
             findings: [
               makeFinding({ id: 'f-2', severity: 'CRITICAL', category: 'security', file: 'server/src/auth.ts' }),
@@ -150,6 +171,7 @@ describe('get_findings', () => {
           }),
           makeReview({
             id: 'rev-1',
+            agent_id: 'agent-1',
             agent_name: 'General Reviewer',
             findings: [makeFinding({ id: 'f-1' })],
           }),
@@ -227,6 +249,170 @@ describe('get_findings', () => {
       ),
     );
     expect(out).toContain('Showing 1 from offset 1');
+  });
+
+  /*
+   * `all_runs`. The two axes this tool has to keep apart: union ACROSS AGENTS
+   * always, take the newest run WITHIN one agent by default. Every test below
+   * pins one half against the other.
+   */
+
+  /** One agent, two runs — the re-run found nothing where the first found a CRITICAL. */
+  const rerun = () =>
+    ctx({
+      repos: [makeRepo()],
+      pulls: { 'repo-1': [makePr()] },
+      reviews: {
+        'pr-1': [
+          makeReview({
+            id: 'rev-1b',
+            run_id: 'run-2',
+            created_at: '2026-08-11T12:00:00.000Z',
+            findings: [],
+          }),
+          makeReview({
+            id: 'rev-1a',
+            run_id: 'run-1',
+            created_at: '2026-08-11T10:00:00.000Z',
+            findings: [makeFinding({ id: 'f-old', title: 'Superseded finding' })],
+          }),
+        ],
+      },
+    });
+
+  it('hides an agent’s superseded run by default, and says how many it hid', async () => {
+    const { deps, extra } = rerun();
+    const out = text(await getFindings.handler({ pull_request: 'acme/payments-api#482' }, deps, extra));
+    expect(out).not.toContain('Superseded finding');
+    // A shrunken total must never read as "reviewed and clean" with no caveat.
+    expect(out).toContain('1 superseded review row(s) not counted');
+    expect(out).toContain('all_runs: true');
+    // …and "reviewed, found nothing" is not the same answer as "never reviewed".
+    expect(out).not.toMatch(/Nothing has reviewed/);
+  });
+
+  it('returns the superseded run under all_runs: true', async () => {
+    const { deps, extra } = rerun();
+    const out = text(
+      await getFindings.handler(
+        { pull_request: 'acme/payments-api#482', all_runs: true },
+        deps,
+        extra,
+      ),
+    );
+    expect(out).toContain('Superseded finding');
+    expect(out).toContain('1 matching finding(s) of 1 total');
+    expect(out).not.toContain('superseded review row(s) not counted');
+  });
+
+  it('picks the newest run by created_at, not by the order the API returned', async () => {
+    const { deps, extra } = ctx({
+      repos: [makeRepo()],
+      pulls: { 'repo-1': [makePr()] },
+      reviews: {
+        'pr-1': [
+          // Deliberately OLDEST FIRST — the opposite of `reviewsForPull`'s own
+          // `createdAt DESC`, so a handler that trusted arrival order fails here.
+          makeReview({
+            id: 'rev-old',
+            created_at: '2026-08-11T10:00:00.000Z',
+            findings: [makeFinding({ id: 'f-old', title: 'Superseded finding' })],
+          }),
+          makeReview({
+            id: 'rev-new',
+            created_at: '2026-08-11T12:00:00.000Z',
+            findings: [makeFinding({ id: 'f-new', title: 'Current finding' })],
+          }),
+        ],
+      },
+    });
+    const out = text(await getFindings.handler({ pull_request: 'acme/payments-api#482' }, deps, extra));
+    expect(out).toContain('Current finding');
+    expect(out).not.toContain('Superseded finding');
+  });
+
+  it('dedupes per agent, never across them', async () => {
+    const { deps, extra } = base();
+    // A second run of ONE of the three agents must not evict the other two.
+    const { deps: d2, extra: e2 } = ctx({
+      repos: [makeRepo()],
+      pulls: { 'repo-1': [makePr()] },
+      reviews: {
+        'pr-1': [
+          makeReview({
+            id: 'rev-2b',
+            agent_id: 'agent-2',
+            agent_name: 'Test Quality Reviewer',
+            created_at: '2026-08-11T12:00:00.000Z',
+            findings: [makeFinding({ id: 'f-2b', title: 'Re-run finding' })],
+          }),
+          makeReview({
+            id: 'rev-2a',
+            agent_id: 'agent-2',
+            agent_name: 'Test Quality Reviewer',
+            created_at: '2026-08-11T10:00:00.000Z',
+            findings: [makeFinding({ id: 'f-2a', title: 'Superseded finding' })],
+          }),
+          makeReview({
+            id: 'rev-1',
+            agent_id: 'agent-1',
+            agent_name: 'General Reviewer',
+            created_at: '2026-08-11T09:00:00.000Z',
+            findings: [makeFinding({ id: 'f-1', title: 'Other agent finding' })],
+          }),
+        ],
+      },
+    });
+    const out = text(await getFindings.handler({ pull_request: 'acme/payments-api#482' }, d2, e2));
+    expect(out).toContain('2 agent(s)');
+    expect(out).toContain('Re-run finding');
+    expect(out).toContain('Other agent finding');
+    expect(out).not.toContain('Superseded finding');
+    // The untouched fixture still unions all three of its agents.
+    expect(
+      text(await getFindings.handler({ pull_request: 'acme/payments-api#482' }, deps, extra)),
+    ).toContain('3 agent(s)');
+  });
+
+  it('keeps every orphaned review row instead of collapsing them into one', async () => {
+    // A deleted agent leaves `agent_id` AND `agent_name` null. Keying those
+    // together would silently drop all but the newest orphan.
+    const { deps, extra } = ctx({
+      repos: [makeRepo()],
+      pulls: { 'repo-1': [makePr()] },
+      reviews: {
+        'pr-1': [
+          makeReview({
+            id: 'rev-x',
+            agent_id: null,
+            agent_name: null,
+            created_at: '2026-08-11T12:00:00.000Z',
+            findings: [makeFinding({ id: 'f-x', title: 'Orphan one' })],
+          }),
+          makeReview({
+            id: 'rev-y',
+            agent_id: null,
+            agent_name: null,
+            created_at: '2026-08-11T10:00:00.000Z',
+            findings: [makeFinding({ id: 'f-y', title: 'Orphan two' })],
+          }),
+        ],
+      },
+    });
+    const out = text(await getFindings.handler({ pull_request: 'acme/payments-api#482' }, deps, extra));
+    expect(out).toContain('Orphan one');
+    expect(out).toContain('Orphan two');
+    expect(out).not.toContain('superseded review row(s) not counted');
+  });
+
+  it('rejects an unknown argument rather than ignoring it', async () => {
+    const { deps, extra } = base();
+    const res = await getFindings.handler(
+      { pull_request: 'acme/payments-api#482', allRuns: true },
+      deps,
+      extra,
+    );
+    expect(res.isError).toBe(true);
   });
 });
 

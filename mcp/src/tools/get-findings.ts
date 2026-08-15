@@ -20,6 +20,10 @@ export const GetFindingsInput = z
       .enum(['open', 'accepted', 'dismissed', 'all'])
       .default('open')
       .describe('Action state. Default open = neither accepted nor dismissed.'),
+    all_runs: z
+      .boolean()
+      .default(false)
+      .describe('Include superseded runs. Default false = each agent’s newest run only.'),
     limit: z.number().int().min(1).max(100).default(20).describe('Max findings returned.'),
     offset: z.number().int().min(0).default(0).describe('Skip this many matches first.'),
     response_format: z
@@ -72,16 +76,37 @@ async function run(
       status: input.status,
       limit: input.limit,
       offset: input.offset,
+      allRuns: input.all_runs,
     },
     deps.api,
     deps.resolver,
     signal,
   );
 
+  /*
+   * Whenever a superseded run was left out, say so in the same breath as the
+   * number it was left out of. A total that quietly shrank is indistinguishable
+   * from an agent that found less, and this is the tool a model reaches for to
+   * decide whether a pull request is clean.
+   */
+  const hidden =
+    page.hiddenRuns > 0
+      ? ` Newest run per agent — ${page.hiddenRuns} superseded review row(s) not counted; ` +
+        'pass all_runs: true for the full history.'
+      : '';
+
   if (page.total === 0) {
+    if (page.agents.length === 0) {
+      return textResult(
+        `${page.label}: no findings recorded. Nothing has reviewed this pull request yet — ` +
+          'run run_agent_on_pull_request first.',
+      );
+    }
+    // Reviewed, and clean — which is a different answer from "never reviewed",
+    // and more different still when older runs are sitting behind `all_runs`.
     return textResult(
-      `${page.label}: no findings recorded. Nothing has reviewed this pull request yet — ` +
-        'run run_agent_on_pull_request first.',
+      `${page.label}: ${page.agents.length} agent(s) reviewed it and recorded no findings ` +
+        `(${page.agents.join(', ')}).${hidden}`,
     );
   }
   if (page.matched === 0) {
@@ -91,14 +116,14 @@ async function run(
         `${input.severity ? `, severity=${input.severity}` : ''}` +
         `${input.category ? `, category=${input.category}` : ''}` +
         `${input.path_contains ? `, path_contains=${input.path_contains}` : ''}). ` +
-        'Try status: "all".',
+        `Try status: "all".${hidden}`,
     );
   }
 
   const header =
     `${page.label} — ${page.matched} matching finding(s) of ${page.total} total, from ` +
     `${page.agents.length} agent(s): ${page.agents.join(', ')}. ` +
-    `Showing ${page.items.length} from offset ${input.offset}.`;
+    `Showing ${page.items.length} from offset ${input.offset}.${hidden}`;
 
   const body = page.items
     .map((f) => {

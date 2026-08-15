@@ -30,7 +30,7 @@ export const listAgents: ToolDescriptor = {
   config: {
     title: 'List review agents',
     description: [
-      'List the DevDigest review agents in this workspace: name, provider, model, enabled, and how',
+      'List the DevDigest review agents in this workspace: name, model, enabled, and how',
       'many skills each has linked. Use it first to choose `agent` for run_agent_on_pull_request,',
       'or to find which agent produced a finding.',
       'Do NOT use this to edit an agent or read its version history — neither is exposed here.',
@@ -70,8 +70,17 @@ async function run(
   }
 
   const lines = agents.map((a) => {
+    /*
+     * `a.provider` is deliberately NOT projected, and re-adding it is the
+     * regression `test/tools.test.ts` pins. It is deployment configuration —
+     * which vendor this workspace happens to route through — and nothing the
+     * caller can act on: no tool here selects a provider, `run_agent_on_pull_request`
+     * takes an agent name or id, and the model string already says which family
+     * answers. Leaking it only widens what a tool result tells a reader about
+     * how this workspace is wired.
+     */
     const head =
-      `${a.name} — ${a.provider}/${a.model} · ${a.enabled ? 'enabled' : 'disabled'}` +
+      `${a.name} — ${a.model} · ${a.enabled ? 'enabled' : 'disabled'}` +
       ` · ${a.skills_count ?? 0} skill(s) · strategy ${a.strategy} · id ${a.id}`;
     const desc = a.description.trim().length > 0 ? `\n  ${clamp(a.description, 200)}` : '';
     // An agent's system prompt is configuration its owner wrote, so the REVIEW
