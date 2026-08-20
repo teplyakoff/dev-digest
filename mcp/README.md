@@ -256,7 +256,7 @@ the running server, 7 868 characters at ~4 chars/token, against an earlier
 estimate of ~1 650.
 
 Because `.mcp.json` is committed and auto-discovered, that is charged to **every**
-session in this repo — `planner`, `researcher` and the review agents included,
+session in this repo — `implementation-planner`, `researcher` and the review agents included,
 none of which can call these tools. That is the deliberate trade: the tools are
 always there, and the price is always paid. `claude --strict-mcp-config` is the
 per-session opt-out, and it is worth reaching for when a session is not about

@@ -135,9 +135,13 @@ fails quietly rather than loudly** (`AGENTS.md` — *Layout*).
 | `server/` integration | pnpm | `cd server && pnpm exec vitest run .it.test` — real Postgres via testcontainers, self-skips without Docker |
 | `reviewer-core/` | **npm, not pnpm** | `cd reviewer-core && npm test` · `npm run typecheck` |
 
-Invoke the server split with `pnpm exec vitest run …` and never rely on a
-committed `test:unit` script: `server/package.json` is `skip-worktree`, so the
-local file diverges from the committed one (`TESTING.md` — *Conventions*).
+Invoke the server split with `pnpm exec vitest run …` and never reach for a
+`test:unit` script — **there is none.** `server/package.json` commits one test
+script, `test`, and it is a bare `vitest run` that sweeps in both lanes
+(`TESTING.md` — *Conventions*). `.claude/skills/pr-self-review/scripts/gates.sh
+--unit --only server` writes the exclude out for you and reports one line per
+gate instead of a full reporter; use it when you want the whole package checked
+rather than the file you just wrote.
 
 `relation ... does not exist` means migrations have not been applied — they do
 not run on boot. `cd server && pnpm db:migrate`.

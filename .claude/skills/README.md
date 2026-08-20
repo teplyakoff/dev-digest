@@ -18,6 +18,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [typescript-expert](typescript-expert/SKILL.md) | Full-stack | Type-level programming, performance, tooling, migrations |
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
+| [acceptance-criteria](acceptance-criteria/SKILL.md) | Shared | One definition of a well-formed criterion — EARS patterns, the six quality tests, `AC-N`/`NFR-N` numbering, the four verification kinds |
 | [engineering-insights](engineering-insights/SKILL.md) | Shared | Reads a package's `INSIGHTS.md` at session start; appends what was learned at the end |
 | [pr-self-review](pr-self-review/SKILL.md) | Shared | Gates a pull request on the local diff — runs the CI gates, routes the change set to the skills above, blocks `gh pr create` on a critical finding |
 
@@ -46,7 +47,7 @@ Skills are modular packages that extend the AI agent with specialized knowledge 
 | Type | Scope | Loaded | Purpose |
 |------|-------|--------|---------|
 | **Rules** (`.mdc`) | Project conventions | Always or by file pattern | Persistent guardrails |
-| **Commands** (`.md`) | User actions | On `/command` invocation | Slash commands |
+| **Commands** (`.md`) | User actions | On `/command` invocation | Slash commands — see [`.claude/COMMANDS.md`](../COMMANDS.md) |
 | **Skills** (`.md`) | Domain knowledge | On-demand by agent | Specialized knowledge |
 | **Agents** (`.md`) | Workflows | Via Task tool | Subagent orchestration — see [`.claude/agents/README.md`](../agents/README.md) |
 
