@@ -43,6 +43,35 @@ here. Here is for what has no package at all.
   of reading and it is written by the only party that knows which decisions
   were close. (2026-08-12)
 
+
+- **`gates.sh` is the cheapest verification interface an agent has, and it took a
+  `--unit` flag to make it usable as one.** A passing `pnpm exec vitest run
+  --exclude '**/*.it.test.ts'` on `server/` prints **51 lines**; the same run
+  through `gates.sh` prints **one** (`GATE  test:server  PASS`), and a failing one
+  costs twelve plus a path to the full log under
+  `.devdigest/pr-self-review/logs/`. It also picks the manager per package, so an
+  agent stops choosing between pnpm and npm — a wrong choice there fails quietly.
+  `--full` could not serve this: `server`'s `test` script is a bare `vitest run`
+  that sweeps in every `*.it.test.ts` and the testcontainers behind them, so
+  `--unit` excludes exactly that, and only for `server`, the one package with a
+  DB-backed suite. `implementer` phase 3 is now one `gates.sh --unit --only <pkg>`
+  call instead of a four-row table of per-package commands. (2026-08-20)
+
+- **Read a skill by section, not by file — and the anchor form is per skill,
+  because the numbering is not uniform.**
+  `awk 'f && /^## /{exit} /^## 12\./{f=1} f'` over `onion-architecture/SKILL.md`
+  returns 26 lines of 408. The skills a plan reaches for most are the large ones
+  — `react-testing-library` 603, `typescript-expert` 431, `frontend-architecture`
+  420, `onion-architecture` 408 — and two per step, re-sent every turn, is the
+  largest single line item in `implementer`'s budget. The trap: **only
+  `onion-architecture` and `frontend-architecture` use numbered headings.**
+  `security`, `zod`, `react-testing-library`, `typescript-expert` and
+  `react-best-practices` use text headings (`## A06 — Insecure Design`), so a
+  rule demanding `§N` universally would not resolve. `implementation-planner`
+  therefore cites a path plus an anchor that *resolves* — `§N` where it exists,
+  the heading verbatim otherwise — which costs it nothing, because it already
+  read that section to write the binding rule. (2026-08-20)
+
 ## What Doesn't Work
 
 - **A subagent whose `tools` allowlist omits `Skill` cannot invoke any skill in
@@ -204,6 +233,64 @@ here. Here is for what has no package at all.
   a port check answers a different question than the one being asked.
   (2026-08-12)
 
+- **A `PreToolUse` path guard written with `grep` is bypassable, and the payload
+  that proves it looks harmless.** `spec-write-guard.sh` restricts `spec-creator`
+  to `*/docs/specs/*.md`. The obvious build is to copy `pr-guard.sh`, whose
+  header argues at length that "a guard with a dependency is a guard that stops
+  guarding" and matches the whole stdin payload with `grep`. That reasoning does
+  not transfer. `pr-guard.sh` asks *does this text contain a command*, which is a
+  whole-payload question; a path guard asks *what is the value of
+  `.tool_input.file_path`*, which is a structural one. Tested during the build:
+  `{"agent_type":"spec-creator","tool_input":{"file_path":"server/src/x.ts",
+  "content":"see client/docs/specs/06-a.md"}}` — a `grep` for an allowed path
+  passes it, and the write lands in `server/src/`. The `jq` version blocks it.
+  Copy the *question shape*, not the neighbouring hook's dependency policy.
+  (2026-08-20)
+
+- **You cannot restrict a subagent by restricting its parent, so `Agent(...)` is
+  a privilege boundary, not a containment one.** `spec-creator` has no `Bash` on
+  purpose and its writes are confined by `spec-write-guard.sh`, which keys on
+  `agent_type`. Giving it `Agent(researcher)` hands it a subagent that **does**
+  carry `Bash` — and a spawned subagent runs under its own `agent_type`, so
+  neither the missing shell nor the write hook reaches inside it. The hook has no
+  way to ask who spawned whom; nothing in the input carries a parent. Every
+  read-only or path-confined agent that gains `Agent(...)` therefore gains
+  whatever its child can do, silently. The rule written into both spawning agents
+  is "delegate a question, never an action", and that is prose with no enforcement
+  behind it. Do not describe such an agent as sandboxed. (2026-08-20)
+
+- **Auditing for the *absence* of something with a substring `grep` reports the
+  opposite of the truth.** Checking whether any spec had ever stated an
+  accessibility requirement, `grep -ri aria */docs/specs/*.md` returned 8 files —
+  it was matching `va`**`ria`**`nt`. With `-w`, the real answer is **zero**, and
+  the same for `accessibility`, `a11y`, `WCAG`, `keyboard` and `screen reader`.
+  The failure mode is one-directional and nasty: a false hit while hunting for a
+  gap makes the gap disappear, and the finding reads as "already covered". When
+  the conclusion is "this is missing", the search that established it needs word
+  boundaries and needs to be re-run before the claim is written down. (2026-08-20)
+
+
+- **A `README.md` in `.claude/commands/` becomes a slash command.** Writing one
+  there registered `/README` in the same turn — listed, invocable, and doing
+  nothing. Every `.md` in that directory is a command and there is no
+  documentation-file exemption. `.claude/skills/` looks symmetrical and is not: a
+  skill is a *directory* containing `SKILL.md`, so a loose `README.md` beside
+  them is inert, which is exactly why the mistake is easy to make in that
+  direction. The map for the commands therefore lives at `.claude/COMMANDS.md`,
+  one level up from what it describes. (2026-08-20)
+
+- **`server/package.json` is NOT `skip-worktree`, and citing that as the reason
+  to write the vitest lane out by hand no longer holds.** `git ls-files -v`
+  reports `H` for `server/`, `client/` and `reviewer-core/`. The *rule* survives
+  — invoke `pnpm exec vitest run --exclude '**/*.it.test.ts'` rather than a named
+  script — but for a different and durable reason: `server/package.json` commits
+  exactly one test script, `test`, a bare `vitest run`, so there is no
+  `test:unit` or `test:integration` to call. `TESTING.md` and
+  `.claude/agents/test-writer.md` both carried the stale justification and now
+  state the real one with the old one named beside it. A rule that outlives its
+  stated reason is more dangerous than a wrong rule: the next reader re-derives
+  the reason, finds it false, and drops the rule. (2026-08-20)
+
 ## Codebase Patterns
 
 - **A review subagent that needs two skills in one pass takes no `Skill` tool —
@@ -309,6 +396,140 @@ here. Here is for what has no package at all.
   cheap to repeat and useful in each place. The argument for it belongs in the
   package README, once. (2026-08-12)
 
+- **A subagent cannot hold a dialogue, so any agent whose job includes "ask the
+  user" is two-pass — and the pass-1 report is the only carrier between them.**
+  `spec-creator` runs six categories of clarification questions past a human
+  before writing a spec. A single-pass agent physically cannot: it gets one
+  isolated context and returns one final message, so "ask clarifying questions"
+  silently degrades into "list assumptions". The shape that works: pass A
+  researches, returns a numbered question set, **writes no file**; the caller
+  collects answers; pass B is invoked with the answers *and the verbatim pass A
+  report*. Pass B does not remember pass A — an invocation carrying answers but
+  not the report re-derives the analysis from scratch and quietly produces
+  different findings, which is why `spec-creator.md` phase 0 stops rather than
+  proceeding. Anything expensive discovered in pass A (there, a design bundle
+  read) must be *in* the report or it is lost. (2026-08-20)
+
+- **Two agents can own the same output path and nothing in this repo will tell
+  you.** `doc-writer` already routed `<package>/docs/specs/NN-slug.md` when
+  `spec-creator` was added for the same destination; the collision was found by
+  reading `doc-writer.md`, not by any check. Nothing downstream catches it —
+  `routing.md` §1 puts `docs/**` and `*.md` on the *skipped* row, so
+  `/pr-self-review` never looks, and an agent file is not a review input either
+  (it is in no cache key). Adding an agent therefore includes a manual sweep of
+  every existing agent's *Where it may write* table for the paths the new one
+  claims, and resolving the overlap in **both** files — here `doc-writer` kept
+  only status edits on an existing spec and gained a deny-row, while
+  `spec-creator` took authorship. Two agents quietly claiming one path is
+  discovered at the moment they disagree. (2026-08-20)
+
+- **The `AC` chain now runs end to end, and each link treats the artefact above
+  it as fixed.** `spec-creator` numbers acceptance criteria; `planner` binds
+  `S<n> → AC-<n> → test_name` and carries a *Traceability* table; `plan-verifier`
+  grades coverage from **the spec's** `AC` list with `COVERED` / `CLAIMED` /
+  `DEFERRED` / `UNCOVERED`. Two rules make it work rather than just look tidy.
+  Coverage is read from the spec and never from the plan's own table — deriving
+  the list from the plan makes the pass tautological, since a criterion the plan
+  forgot cannot be missing from a list built out of the plan. And `CLAIMED` is
+  kept distinct from `COVERED`, because a matrix whose test column is
+  aspirational reads exactly like a satisfied one. Step ids stayed `S<n>` rather
+  than the `T<n>` of the source illustration: 32 `### S<n>` headings already
+  exist in `docs/plans/` and `plan-verifier` keys its rows on them. **This
+  settles the Open Question added earlier the same day** — that the traceability
+  the spec format was designed for stopped at the spec. (2026-08-20)
+
+- **`planner` is now `implementation-planner`, and the rename is the smaller half
+  of the change.** Every earlier entry in this file naming `planner` means this
+  agent; the file is `.claude/agents/implementation-planner.md` and the old
+  frontmatter name no longer resolves. What actually moved is the boundary: it
+  plans **how**, never **what**. It may not write under `*/docs/specs/`, may not
+  draft or reword an `AC`, and may not answer a spec's `[NEEDS CLARIFICATION]`;
+  requirement-level defects are reported and routed to `spec-creator` by name
+  instead of being quietly repaired inside a step. The reason is not tidiness —
+  a plan that fixes a requirement forks the requirements, and `plan-verifier`
+  grading the change set against the plan cannot tell which fork the caller
+  approved. Note the asymmetry in how the two directions are held:
+  `spec-creator` is kept out of every other directory by
+  `spec-write-guard.sh`, while the reverse boundary rests on prose in
+  `implementation-planner.md` — it has `Bash`, so a redirect is the hole, and
+  there is no hook watching it. (2026-08-20)
+
+- **An agent that must put a question to a human is two-pass, and this repo now
+  has two of them.** `implementation-planner` joined `spec-creator`: pass A
+  returns a requirements review, numbered `R-N` recommendations and the
+  single-agent/multi-agent gate; pass B takes the chosen mode and writes the
+  plan. It skips the stop when the invocation already names the mode and nothing
+  blocking came up, which is the escape hatch that keeps a one-file fix from
+  costing two round-trips. The mode is asked rather than assumed because it
+  changes the plan's **shape**: multi-agent needs steps grouped into tracks whose
+  file sets are disjoint, since `implementer` and `test-writer` both write and
+  two parallel tracks sharing a file collide. Deciding that at run time means
+  discovering it as a conflict. (2026-08-20)
+
+- **When three agents need the same definition, extract the definition rather
+  than syncing three copies.** `spec-creator` writes acceptance criteria,
+  `implementation-planner` reviews them before planning, `plan-verifier` grades
+  them afterwards — and all three had grown their own wording of "well-formed",
+  which is how the same row ends up judged three ways. The wording now lives once
+  in `.claude/skills/acceptance-criteria/SKILL.md`: five EARS patterns with the
+  Ukrainian keywords, six quality tests, `AC-N`/`NFR-N` numbering, four
+  verification kinds. **All three read it by path, none invokes it** — none of
+  them has the `Skill` tool, and all three have `Read`, which is the
+  `architecture-reviewer` mechanism reused. Note what stayed behind: each agent
+  keeps the repo-specific half (where a performance number actually comes from,
+  that `*.it.test.ts` is mandatory here) and delegates only the general
+  definition. Extract the shared vocabulary, not the local knowledge.
+  (2026-08-20)
+
+- **`INSIGHTS.md` is read scoped to the packages in play, and sweeping all of
+  them is a mistake rather than diligence.** Written into `spec-creator` phase 1
+  after the files got large: the routing table in
+  `.claude/skills/engineering-insights/references/entry-quality.md` already says
+  which file a package maps to, `repo-intel` routes to `server/INSIGHTS.md`, and
+  work under `.claude/`, `docs/` or `scripts/` routes to the root file. The cost
+  of over-reading is not just tokens — an entry pulled in from a package the
+  feature never touches is a constraint that does not apply, and it shapes a
+  criterion anyway. (2026-08-20)
+
+
+- **A `PreToolUse` hook on `Write|Edit` confines the `Write` tool and nothing
+  else, so an agent that also has `Bash` is only half-confined.**
+  `.claude/hooks/plan-write-guard.sh` restricts `implementation-planner` to
+  `docs/plans/*.md`, but `>`, `tee` and `sed -i` are not `Write` or `Edit` and the
+  hook never sees them. `spec-creator` has no `Bash` at all, so its confinement is
+  complete; the planner's is enforced for one tool and prose for the other, and
+  both halves are stated in its own `## Bash` section. Do not describe an agent
+  holding both a path hook and a shell as sandboxed — and when adding a guard,
+  decide first which of those two shapes you are building. (2026-08-20)
+
+- **`plan-verifier` has to run twice, because its two halves have different
+  dependencies.** Phases 1–4 grade whether the plan's steps landed and need no
+  test to exist; phase 5 grades `COVERED` against `CLAIMED`, and `COVERED`
+  requires the named test to exist and pass. A single pass is therefore wrong in
+  one direction whichever end it sits at: before `test-writer` every coverage row
+  reads `CLAIMED`, a column of noise shaped exactly like a finding; after
+  `architecture-reviewer` a `NOT MET` step surfaces only once the tests and the
+  architectural review have already been paid for. The split is pass ① straight
+  after the code (phases 1–4, coverage explicitly deferred) and pass ② at the end
+  on the delta. Pass ② is cheap only if handed `git diff <pass-1-head>..HEAD`
+  plus the pass ① report — a verdict it cannot see is one it may not inherit.
+  (2026-08-20)
+
+- **The `commit` link of `AC → step → test → commit` had no author, because no
+  agent commits.** `implementer`, `test-writer` and `doc-writer` are all barred
+  from `git commit` on purpose, which left the last hop as the only one nothing
+  in the chain could fill. It is closed by convention rather than by an agent:
+  root `AGENTS.md` — *Commits* — puts `Plan:` and `Steps:` trailers on plan work,
+  and `git log --format='%(trailers:key=Steps,valueonly)'` reads them (git 2.54;
+  commits without them return an empty field, so existing history degrades
+  quietly). `plan-verifier` treats a trailer as **corroborating, never
+  substitutive** — it is an author's claim about their own work, the kind that
+  agent's rules already discount, so a `MET` still needs `path:line`. What the
+  trailers buy is the reverse direction: a commit claiming `Steps: S4` whose diff
+  touches nothing S4 named is a disagreement invisible from the diff alone.
+  Nothing enforces them — no `commit-msg` hook, and deliberately not a `gates.sh`
+  gate, because a false FAIL there teaches people to bypass gates. (2026-08-20)
+
 ## Tool & Library Notes
 
 - **A `PreToolUse` hook *can* be scoped to one subagent — read the read-only
@@ -362,6 +583,41 @@ here. Here is for what has no package at all.
   a cache flush hides that the newly-routed files have never actually been
   reviewed. If you want a genuine flush it is `rm -rf .git/devdigest/cache`,
   which `report-format.md` already documents. (2026-08-12)
+
+- **Whether a `PreToolUse` hook should fail open or fail closed follows from its
+  matcher's blast radius, not from a house style.** `pr-guard.sh` matches `Bash`,
+  so it runs on every shell call in every session and a bug in it would brick the
+  session — it allows anything it cannot answer. `spec-write-guard.sh` matches
+  `Write|Edit` but exits 0 immediately unless `agent_type` is `spec-creator`, so
+  its blast radius is one agent; past that gate it blocks anything it cannot
+  verify, including a missing `file_path` and a missing `jq`. Both are correct
+  and they read as contradictory in the same directory, so each header says which
+  it is and why. Decide the radius first, then the failure direction.
+  (2026-08-20)
+
+- **A new `.claude/agents/<name>.md` is picked up mid-session — no restart.**
+  Writing `spec-creator.md` produced a system message announcing the new agent
+  type to the running session within the same turn, meaning a frontmatter error
+  surfaces immediately rather than at the next launch. Only *registration* was
+  observed this way; the agent was not invoked, so nothing here says a
+  mid-session pickup is fully equivalent to a fresh start. (2026-08-20)
+
+
+- **`.claude/skills/security/SKILL.md` is written against Express + MongoDB +
+  Mongoose + JWT, and this repo is Fastify + Drizzle + Postgres with no
+  authentication layer at all.** Its MongoDB operator-injection and `jwt.decode()`
+  sections describe code that does not exist here, and most of A01/A07 with them
+  — verified: `server/src/app.ts` registers `helmet` (:89), `cors` with an
+  explicit `config.webOrigin` (:90) and a rate limit (:96, skipped when
+  `nodeEnv === 'test'`), and there is no auth hook anywhere in `server/src`. An
+  agent built on this skill will manufacture findings to fill the empty
+  categories unless told not to, so `.claude/agents/security-reviewer.md` carries
+  the mismatch as an explicit non-negotiable and starts from this repo's own
+  surfaces instead: the `INJECTION_GUARD` slots (`reviewer-core/src/prompt.ts:25`
+  and `:213`), the GitHub PAT set as a URL *password* in
+  `server/src/modules/repos/helpers.ts`, and the argv form `spawn(rg, [...])` at
+  `server/src/adapters/codeindex/ripgrep.ts:60`, which is **not** command
+  injection and must not be flagged as one. (2026-08-20)
 
 ## Recurring Errors & Fixes
 
@@ -460,6 +716,79 @@ _(no entries yet)_
   mechanism itself behaved exactly as designed: committing nothing, changing
   three files, and watching the fingerprint invalidate the round-1 token.
 
+- **2026-08-20** — Built `spec-creator` (`.claude/agents/spec-creator.md`), the
+  eighth agent and the first one whose write path is enforced rather than
+  promised: `.claude/hooks/spec-write-guard.sh`, registered on `Write|Edit` in
+  `.claude/settings.json`, confines it to `<package>/docs/specs/*.md`. Chosen
+  over the agent's own `hooks:` frontmatter because that form is skipped unless
+  workspace trust was accepted. Verified against nine payloads (other agent,
+  main session, valid spec, absolute path, source file, root `docs/specs/`,
+  `..` traversal, missing path, spoofed path in `content`). Agent design settled
+  by asking the user four questions rather than assuming: two-pass agent over
+  skill, per-package filename with repo-global `SPEC-NN`, two new template
+  sections for design analysis, Ukrainian body with the given headings. Spec
+  authorship moved off `doc-writer`, and the four `docs/specs/README.md` files
+  gained the template convention. The agent has not been run end to end.
+
+- **2026-08-20** — Renamed `planner` to `implementation-planner` and narrowed it
+  to implementation only: new *Non-negotiables 8* (plans how, never what), a
+  rewritten phase 0 that refuses an outcome-less request to `spec-creator`
+  instead of inventing one, a new phase 2 (requirements review → `R-N`
+  recommendations → the single-agent/multi-agent gate, folded into one block and
+  one round), and three new report sections — *Execution*, *Requirements review*,
+  *Recommendations*. The rename had already been applied across `.claude/`;
+  what it left behind was mechanical damage the longer name caused — a
+  misaligned composition diagram and eight prose lines past the ~80-column wrap,
+  all in `.claude/agents/README.md`. References in `docs/plans/L03-*.md` and
+  `L04-mcp-server.md` still say `planner` and were left alone as historical lab
+  records. None of the three agents has been run since.
+
+- **2026-08-20** — Follow-up on the entry above: the `planner` references in
+  `docs/plans/L03-agents.md`, `L03-intent-layer.md`, `L03-smart-diff.md` and
+  `L04-mcp-server.md` **were** renamed after all, on the maintainer's call, so
+  the sentence above saying they were left as historical records is superseded.
+  The three "Produced by the … agent" lines carry a parenthetical naming the old
+  id, because the fact that a plan was produced under a different agent name is
+  part of what those files record. Renaming inside a prose paragraph is not a
+  free `sed`: `implementation-planner` is 15 characters longer than `planner`,
+  so five paragraphs re-flowed past the ~80-column wrap and had to be rewrapped
+  by hand — the same mechanical damage the rename did to
+  `.claude/agents/README.md`.
+
+- **2026-08-20** — Extended `spec-creator` on four axes: `Agent(researcher)` with
+  parallel fan-out and a one-question-per-brief rule; scoped `INSIGHTS.md`
+  reading; a `## Traceability` section binding every `AC`/`NFR` to
+  unit/integration/e2e/manual plus a test-name handle, which closes the spec's
+  end of `AC → step → test → commit`; and numbered `NFR-N` with thresholds that
+  can be failed. Phase 6 grew into a real final self-check across four groups,
+  reported as a pass/fail line. Also applied the earlier analysis: the `SPEC-NN`
+  allocation race is now reported rather than silently resolved, a cross-package
+  feature is written as both files in one pass, pass A carries a literal marker
+  line, phase 1 checks for contradiction with existing specs, size past ~12 KB is
+  reported because the file is re-read into every review, and `security/SKILL.md`
+  is read by path on the `routing.md` §3 triggers. Extracted
+  `.claude/skills/acceptance-criteria/SKILL.md` and wired all three consuming
+  agents to it. Still open and still a product call: this repo has no
+  accessibility skill, so `spec-creator` writes the requirement and flags the
+  missing standard rather than pretending one exists. Nothing was run.
+
+
+- **2026-08-20** — Audited the SDD pipeline end to end, then applied the result in
+  three rounds. Round one: the post-`implementer` fan-out in
+  `.claude/agents/README.md` was wrong on three edges — a reviewer racing
+  `test-writer`'s writes, a single `plan-verifier` pass, `doc-writer` inside the
+  fan-out — so it became a sequence with the verifier split in two; `gates.sh`
+  gained `--unit` and `implementer` phase 3 collapsed to one call; skill
+  citations gained resolving anchors. Round two: `.claude/commands/` with
+  `/sdd-spec`, `/sdd-plan` and `/sdd-build`; `plan-write-guard.sh` plus `Write`
+  for `implementation-planner`, tested across 11 payloads and cross-checked
+  against `spec-write-guard.sh` so neither guard reaches the other's agent or
+  folder; three small corrections. Round three: `security-reviewer` — the eighth
+  agent, and the only one that may decline its own pass — and the commit-trailer
+  convention. Verified locally throughout: `gates.sh --unit` green on every
+  package, guard exit codes asserted payload by payload, and every `path:line`
+  cited in the new agent read back from the file it names. Nothing was committed.
+
 ## Open Questions
 
 - `reviewer-core/test/**` matches **no group** in
@@ -502,3 +831,22 @@ _(no entries yet)_
   that the gate, not the prose, is the authority. Note the fix invalidates every
   cached group reviewed against `pr-self-review`'s own files, so it belongs in
   its own change.
+
+- The spec template numbers acceptance criteria `AC-1…AC-N` so a plan can bind
+  `T1 … → AC-1 → test_facts` and `plan-verifier` can grade an
+  `AC → task → test → commit` matrix. Neither agent knows about `AC` ids:
+  `planner.md` writes steps that name files, and `plan-verifier.md` enumerates
+  plan items, not criteria. So the traceability the spec format was designed for
+  currently stops at the spec. Settles by updating both agents, or by deciding
+  the matrix lives only in the plan.
+
+- `.claude/skills/security/SKILL.md` is a general-purpose OWASP file for a stack
+  this repo does not run — Express, MongoDB, Mongoose, JWT — and roughly half its
+  body can never apply here. `security-reviewer` bridges the gap inside its own
+  prompt, which works but pays for the mismatch on every run and leaves the same
+  trap for `/pr-self-review`, which routes the identical file. Settles by a
+  maintainer call: fork a repo-specific security skill, add a DevDigest section
+  to this one and mark the rest as reference, or accept the bridging. Note that
+  editing a `SKILL.md` **does** invalidate the cached findings of every group
+  reviewed against it — the cache key hashes skill blobs, unlike `routing.md` and
+  `gates.sh` — so it belongs in its own change.
