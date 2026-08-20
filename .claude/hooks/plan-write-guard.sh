@@ -74,13 +74,28 @@ esac
 # normal case — agents resolve paths against the project root — and matching
 # `*/docs/plans/*.md` instead would silently bless `server/docs/plans/x.md`,
 # a folder this repo does not have and should not acquire by accident.
+#
+# The root is derived from THIS SCRIPT's own location, and that choice is the
+# whole point. `git rev-parse --show-toplevel` answers for the hook PROCESS's
+# CWD, which is not necessarily this project: `server/clones/` holds real git
+# repositories cloned from arbitrary user-supplied URLs, and run from inside
+# one, that lookup returns the clone — so `<clone>/docs/plans/evil.md`
+# normalised to `docs/plans/evil.md` and passed. Reproduced before this line
+# existed. CLAUDE_PROJECT_DIR is accepted as a second candidate only so that a
+# symlinked invocation still normalises; it is not relied on, because whether it
+# reaches a hook's environment is not something this guard should assume.
+self_root="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." 2> /dev/null && pwd -P)"
+
 rel="$path"
-root="$(git rev-parse --show-toplevel 2> /dev/null || true)"
-if [ -n "$root" ]; then
+for prefix in "$self_root" "${CLAUDE_PROJECT_DIR:-}"; do
+  [ -n "$prefix" ] || continue
   case "$rel" in
-    "$root"/*) rel="${rel#"$root"/}" ;;
+    "$prefix"/*)
+      rel="${rel#"$prefix"/}"
+      break
+      ;;
   esac
-fi
+done
 rel="${rel#./}"
 
 case "$rel" in

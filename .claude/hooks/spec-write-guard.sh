@@ -61,11 +61,45 @@ case "$path" in
     ;;
 esac
 
-# `*/docs/specs/*.md` — the leading `*/` is load-bearing: it requires a package
-# prefix, so a bare `docs/specs/x.md` is blocked. There is no root `docs/specs/`
-# in this repo, and inventing one is a routing mistake, not a new convention.
-case "$path" in
-  */docs/specs/*.md)
+# Resolve the destination against THIS repository before matching anything.
+#
+# The earlier version matched `*/docs/specs/*.md` against the raw path, which
+# confined the SHAPE of the destination and not its location: a `case` glob's
+# `*` matches slashes, so `/tmp/evil/docs/specs/01-x.md` and
+# `server/clones/<owner>/<repo>/docs/specs/01-x.md` both passed. The second is
+# the one that matters — `server/clones/` holds repositories this product clones
+# from arbitrary user-supplied URLs, so it is the one tree here whose contents
+# an outsider influences, and a guard that cannot tell it from the project is
+# not holding the boundary it exists for.
+#
+# The root is derived from this script's own location. Not from the process CWD
+# (`git rev-parse` there answers for whatever repo the CWD happens to sit in,
+# including a clone) and not from an env var alone (which may or may not reach a
+# hook's environment). CLAUDE_PROJECT_DIR is accepted as a second candidate only
+# so that a symlinked invocation still normalises.
+self_root="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." 2> /dev/null && pwd -P)"
+
+rel="$path"
+for prefix in "$self_root" "${CLAUDE_PROJECT_DIR:-}"; do
+  [ -n "$prefix" ] || continue
+  case "$rel" in
+    "$prefix"/*)
+      rel="${rel#"$prefix"/}"
+      break
+      ;;
+  esac
+done
+rel="${rel#./}"
+
+# An absolute path that matched no prefix stays absolute and falls through to
+# BLOCKED below — which is the correct answer for anything outside this repo.
+#
+# The package prefix is now an explicit allowlist rather than a `*/`, because
+# `*` matches slashes and `server/clones/<owner>/<repo>/docs/specs/x.md` is a
+# package prefix as far as a glob is concerned. This is the list the BLOCKED
+# message below has always promised; it just was not the list being enforced.
+case "$rel" in
+  server/docs/specs/*.md | client/docs/specs/*.md | reviewer-core/docs/specs/*.md | e2e/docs/specs/*.md | mcp/docs/specs/*.md | demo/docs/specs/*.md)
     exit 0
     ;;
 esac
@@ -74,6 +108,7 @@ cat >&2 <<MSG
 spec-write-guard: BLOCKED.
 
   attempted: $path
+  resolved:  $rel
 
 spec-creator may write only to <package>/docs/specs/<NN>-<slug>.md — one of
 server/, client/, reviewer-core/, e2e/, mcp/, demo/. That includes the folder's
