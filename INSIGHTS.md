@@ -72,6 +72,18 @@ here. Here is for what has no package at all.
   the heading verbatim otherwise — which costs it nothing, because it already
   read that section to write the binding rule. (2026-08-20)
 
+- **When a finding lands on one file, probe every sibling that does the same job
+  — before fixing anything.** The `/pr-self-review` pass on `f253548`'s parent
+  found a root-resolution bug in `.claude/hooks/plan-write-guard.sh` and, in the
+  same report, asserted that `spec-write-guard.sh` "has no equivalent exposure".
+  Four `printf '<payload>' | guard; echo $?` lines proved the opposite: the older
+  guard's exposure was **wider**, allowing a write anywhere on the filesystem.
+  The non-exposure claim had been reasoned from reading the code; the probe took
+  under a minute and was already in hand from reproducing the first bug. The rule
+  that falls out: a security finding describes a *class*, and the class is what
+  you test the neighbours for. The cheapest moment is before the fix, while the
+  reproduction harness still exists. (2026-08-20)
+
 ## What Doesn't Work
 
 - **A subagent whose `tools` allowlist omits `Skill` cannot invoke any skill in
@@ -290,6 +302,30 @@ here. Here is for what has no package at all.
   state the real one with the old one named beside it. A rule that outlives its
   stated reason is more dangerous than a wrong rule: the next reader re-derives
   the reason, finds it false, and drops the rule. (2026-08-20)
+
+- **A `PreToolUse` path guard that constrains the SHAPE of a path instead of its
+  LOCATION reads as working and allows writes anywhere on disk.**
+  `spec-write-guard.sh` matched `*/docs/specs/*.md` against the raw
+  `.tool_input.file_path`. A `case` glob's `*` matches slashes, so the leading
+  `*/` never meant "one package directory" — it meant "anything at all", and
+  both `/tmp/evil/docs/specs/01-x.md` and
+  `server/clones/<owner>/<repo>/docs/specs/01-x.md` returned exit 0. The second
+  is the one that matters: `server/clones/` holds repositories this product
+  clones from arbitrary user-supplied URLs, so it is the only tree here whose
+  contents an outsider influences, and a guard that cannot tell it from the
+  project is not holding the boundary it exists for.
+  `plan-write-guard.sh` had the same class by a different route — it resolved the
+  root with `git rev-parse --show-toplevel`, which answers for the hook
+  **process's** CWD, so run from inside a clone it normalised
+  `<clone>/docs/plans/evil.md` to `docs/plans/evil.md` and passed.
+  The shape that works, in both: derive the root from `${BASH_SOURCE[0]}` — never
+  the CWD, never an env var alone — normalise the destination to a repo-relative
+  path, let anything that will not normalise fall through to BLOCKED, and spell
+  the allowed prefixes out as a literal alternation rather than a `*/`. Fixed in
+  `f253548`, with 30 payloads asserting it. This does not supersede the
+  2026-08-20 entry on `Write|Edit` hooks not reaching `Bash`: that one is about
+  which *tools* a guard sees, this one about which *paths* it accepts, and a
+  guard can be wrong in both ways at once. (2026-08-20)
 
 ## Codebase Patterns
 
