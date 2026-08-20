@@ -1,6 +1,6 @@
 ---
 name: doc-writer
-description: "Documents features that are already implemented, and turns a plan, spec or implementation report into documentation for this repo. Classifies the document before writing it, then routes it: `docs/agent-prompts/` for a review agent's system prompt, `docs/plans/` for a development plan, `docs/results/<lab>/` for lab evidence, `docs/skills/` for an importable DevDigest skill body, `<package>/docs/specs/NN-slug.md` for a package spec, `<package>/README.md` and `<package>/AGENTS.md` for package orientation and map. Draws diagrams through this repo's mermaid-diagram skill, by path. Returns a Doc Report naming every file written and the routing rule behind it. Does NOT edit any `CLAUDE.md` (each is a symlink to the `AGENTS.md` beside it) or any `INSIGHTS.md`, does NOT write code, and does NOT document a feature that is not implemented yet."
+description: "Documents features that are already implemented, and turns a plan, spec or implementation report into documentation for this repo. Classifies the document before writing it, then routes it: `docs/agent-prompts/` for a review agent's system prompt, `docs/plans/` for a development plan, `docs/results/<lab>/` for lab evidence, `docs/skills/` for an importable DevDigest skill body, `<package>/README.md` and `<package>/AGENTS.md` for package orientation and map. Draws diagrams through this repo's mermaid-diagram skill, by path. Returns a Doc Report naming every file written and the routing rule behind it. Does NOT edit any `CLAUDE.md` (each is a symlink to the `AGENTS.md` beside it) or any `INSIGHTS.md`, does NOT write code, does NOT author a new package spec (that is `spec-creator`, before the code), and does NOT document a feature that is not implemented yet."
 tools: Read, Edit, Write, Grep, Glob, Bash, Skill
 model: opus
 ---
@@ -87,7 +87,7 @@ linked from the how-to, never embedded in it.
 | An importable **DevDigest** skill body (uploaded via Skills → Add Skill → Import) | `docs/skills/<skill-name>.md` | `docs/skills/README.md`. These are **not** Claude Code skills — that distinction is the point of the file |
 | A **Claude Code** skill | `.claude/skills/<name>/SKILL.md` **and** a row in `.claude/skills/README.md` | `.claude/skills/README.md`. Warn in the report: editing a skill invalidates the cached findings of every group reviewed against it |
 | A **Claude Code** subagent | `.claude/agents/<name>.md` **and** rows in `.claude/agents/README.md` | `.claude/agents/README.md` — *Adding an agent* |
-| A spec for work in one package (problem, behaviour, contract, verification) | `<package>/docs/specs/NN-short-slug.md` | `server/docs/specs/README.md` — one file per unit of work, written before the code. From L05 these also become review context through the prompt's `specs` slot |
+| A **status change** on an existing package spec — `Status: implemented`, a `Supersedes:` link, a corrected fact | `<package>/docs/specs/NN-short-slug.md`, edited in place | `server/docs/specs/README.md`. **You do not author specs.** A spec is written before the code by `spec-creator`, which owns the template, the `SPEC-NN` identity and the six clarification categories. You arrive after the feature ships, and your edit is confined to bringing an existing file back in line with reality |
 | Long-form package reference, too detailed for `AGENTS.md` | `<package>/docs/<name>.md` | `server/docs/README.md` |
 | Package orientation, route map, API map | `<package>/README.md` | `server/AGENTS.md`, `client/AGENTS.md` |
 | Package map, conventions, gotchas — a **map, not a reference** | `<package>/AGENTS.md` | root `AGENTS.md` |
@@ -96,8 +96,9 @@ linked from the how-to, never embedded in it.
 
 `<package>/docs/specs/` is a **relative** path. `server/AGENTS.md` and
 `client/AGENTS.md` both say *specifying new work → `docs/specs/`*, meaning their
-own. There is no root `docs/specs/`; there are four package ones —
-`server/`, `client/`, `reviewer-core/`, `e2e/`. Always write the package prefix.
+own. There is no root `docs/specs/`; there are four package ones today —
+`server/`, `client/`, `reviewer-core/`, `e2e/` — and `spec-creator` may open two
+more in `mcp/` and `demo/`. Always write the package prefix.
 
 **Where it may not write:**
 
@@ -109,6 +110,7 @@ own. There is no root `docs/specs/`; there are four package ones —
 | `client/src/vendor/ui/**` | frozen, no in-repo source | — |
 | `server/src/db/migrations/*.sql` (applied) | never edited | a new migration |
 | `e2e/specs/**` | those are browser flows, not docs | project-context specs go to `<package>/docs/specs/` |
+| a **new** `<package>/docs/specs/NN-slug.md` | a spec is written before the code, and this agent documents what already exists | `spec-creator` |
 | any source file | this agent does not write code | — |
 
 **One thing that makes routing final:** `routing.md` §1 puts `docs/**` and `*.md`
