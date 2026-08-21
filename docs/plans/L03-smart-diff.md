@@ -23,9 +23,10 @@ Companion to [`L03-intent-layer.md`](L03-intent-layer.md) and
 | repo root | — | `scripts/verify-l03.sh` |
 | `reviewer-core/`, `e2e/` | — | untouched (see *Out of scope*) |
 
-Produced by the `planner` agent over two briefs gathered in the same session —
-a decode of the L02 design bundle and a repo pass — then extended with the
-mentor's `verify:l03` addendum. No model call is added anywhere in this change.
+Produced by the `implementation-planner` agent (named `planner` when this plan
+was written) over two briefs gathered in the same session — a decode of the L02
+design bundle and a repo pass — then extended with the mentor's `verify:l03`
+addendum. No model call is added anywhere in this change.
 
 ---
 

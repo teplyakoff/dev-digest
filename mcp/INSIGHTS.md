@@ -97,6 +97,16 @@ would be obvious to anyone reading the code, don't write it.
   from the file's stub era; `mcp/AGENTS.md` records it under _Do not touch_.
   (2026-08-13)
 
+- **`.mcp.json` silently accepts keys that do nothing, so "the client still
+  starts" proves nothing about a config key.** Probed it directly: three configs
+  in temp dirs — one plain, one with `"timeout"`, one with `"zzz_nonsense": true`
+  — and `claude mcp list` listed the server identically for all three
+  (`probe: /bin/echo hi - ⏸ Pending approval`). No warning, no validation error.
+  A misspelled or invented key is therefore indistinguishable from a working one
+  at runtime. Confirm a key against the docs before relying on it; `timeout` is
+  real (`https://code.claude.com/docs/en/mcp`), but nothing in the client would
+  have told us. (2026-08-15)
+
 ## Codebase Patterns
 
 - **One row in `reviews` is one AGENT, not one review pass** — carried over from
@@ -110,6 +120,25 @@ would be obvious to anyone reading the code, don't write it.
   titles and rationales, PR titles, convention evidence snippets — flows into
   the model that called the tool, which the guard never sees. Everything
   external is wrapped in `wrapUntrusted` on the way out. (2026-08-11)
+
+- **`reviews` rows vary on TWO axes, and "union every `kind: 'review'` row"
+  only settles one of them** — refines the 2026-08-11 entry above, which stays
+  correct as far as it goes. Rows are plain INSERTs
+  (`server/src/modules/reviews/repository/review.repo.ts:25` never upserts), so a
+  re-run APPENDS a row. Across agents, union — that is the 0-findings-on-a-13-
+  finding-PR bug. Within one agent, take the newest by `created_at`: an older row
+  is a verdict the agent has already replaced, and returning both double-counts
+  findings it has re-decided. `get_findings`' `all_runs: true` opts back into the
+  history. Key the dedupe `agent_id ?? name ?? row id` — a deleted agent leaves
+  BOTH id and name null, and keying those together collapses every orphaned
+  review in a PR's history into one. (2026-08-15)
+
+- **A default that drops rows must say how many it dropped.** `collectFindings`
+  returns `hiddenRuns` and every `get_findings` branch renders it, because a
+  total that quietly shrank is indistinguishable from an agent that found less —
+  and this is the tool a model reaches for to decide whether a PR is clean. The
+  same reasoning gave "reviewed and recorded no findings" its own message,
+  separate from "nothing has reviewed this pull request yet". (2026-08-15)
 
 ## Tool & Library Notes
 
@@ -152,6 +181,20 @@ would be obvious to anyone reading the code, don't write it.
   adding a member to an output enum, grep for the code that produces it before
   believing the schema. (2026-08-12)
 
+- **Progress notifications do NOT extend a per-server `timeout` in Claude Code —
+  supersedes the 2026-08-11 entry above**, which said a 15-minute blocking call
+  "is only viable because progress notifications reset the timeout". That holds
+  for an SDK client's `resetTimeoutOnProgress` deadline and for the client's idle
+  accounting; it does not hold for the `timeout` key in `.mcp.json`, which the
+  docs call a hard wall-clock limit per tool call that progress does not extend
+  (`https://code.claude.com/docs/en/mcp`). Three separate numbers, routinely
+  confused: `MCP_TIMEOUT` = server STARTUP; `MCP_TOOL_TIMEOUT` = the global
+  wall clock; per-server `timeout` = the same wall clock for one server, and it
+  wins. Values below 1000 are ignored. `.mcp.json` now sets `960000` against
+  `MAX_WAIT_SECONDS = 900` so this server's own deadline fires first and returns
+  the `run_id`s — a client abort returns none, and the runs are billed either
+  way. (2026-08-15)
+
 ## Recurring Errors & Fixes
 
 _(no entries yet)_
@@ -168,6 +211,22 @@ _(no entries yet)_
   `api/client.ts`, `api/fake-client.ts`, and the fake's `FakeApiData` default),
   and the fake answers the real degraded body rather than throwing, so the
   handler's most common real-world state is actually exercised.
+
+- **2026-08-15** — L05 opened on three mentor findings against L04, all three in
+  this package. (1) `.mcp.json` had no `timeout`; (2) `list_agents` projected
+  `a.provider`; (3) `get_findings` had no `all_runs`. Two things were worth more
+  than the fixes. First, the baseline measurement reproduced exactly — the
+  `tools/list` recipe in _What Works_ gave 1 936 / 7 745 chars before the change
+  and 1 967 / 7 868 after, so the 33-token cost of `all_runs` is measured, not
+  estimated, and headroom against the hard 2 000 halved from 64 to 33. Second,
+  the `all_runs` default forced the per-agent-vs-per-run distinction into the
+  open, and the existing fixture had been hiding it: all three review rows in
+  `test/tools.test.ts` carried the SAME `agent_id: 'agent-1'` with different
+  names, so a correct `agent_id` dedupe collapsed them to one and reproduced the
+  historic 0-findings bug. The fixture was wrong, not the dedupe. Still open and
+  untouched here: the _What Doesn't Work_ entry from 2026-08-12 about the header
+  crediting agents that found nothing — `all_runs: false` narrows it (fewer rows
+  reach `agents`) but does not fix it.
 
 ## Open Questions
 

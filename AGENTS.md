@@ -44,7 +44,7 @@ vendored into `client/src/vendor/shared`.
 - `mcp/bin/devdigest-mcp` — the stdio MCP server. **Not** started by `dev.sh`
   (`scripts/` never mentions `mcp`); the client spawns it, and `.mcp.json` in
   the root is auto-discovered so every session here has the five tools. That
-  costs a measured 1 936 tokens in each one — `claude --strict-mcp-config` opts
+  costs a measured 1 967 tokens in each one — `claude --strict-mcp-config` opts
   out. Needs the API on :3001. See `mcp/README.md`.
 - `cd demo && npm run record` — records a video of the real review loop. Unlike
   `e2e`, this triggers a real run and **spends money**; see `demo/README.md`.
@@ -95,3 +95,32 @@ entries, never overwrite existing ones. Do not skip this step.
 Before the work becomes a pull request run `/pr-self-review`. It gates
 `gh pr create` and `git push` on the result, so a blocked verdict is not a
 suggestion — see `.claude/skills/pr-self-review/SKILL.md`.
+
+## Commits
+
+Conventional Commits, as the log already does it: `type(scope): subject`,
+lowercase, imperative, no trailing period.
+
+**When the work implements a plan, add two trailers** — a blank line, then:
+
+```
+Plan: docs/plans/L05-repo-narrative.md
+Steps: S2, S3
+```
+
+`Plan:` is the path. `Steps:` is the `S<n>` ids **this commit** carries, not the
+plan's whole list. They are the last link of `AC → step → test → commit`, and the
+only one a machine can follow after the fact: `spec-creator` numbers the criteria,
+`implementation-planner` binds a step and a test to each, and `plan-verifier`
+grades the chain — but without a trailer its evidence stops at `path:line` and
+the commit column is filled in by hand or not at all.
+
+```bash
+git log --format='%h %s%n  %(trailers:key=Steps,valueonly,separator=%x2C)' <range>
+```
+
+No plan → no trailers, and that is the whole rule: absence means "this was not
+plan work", so do not write `Plan: none`. Nothing enforces this — there is no
+`commit-msg` hook and `gates.sh` deliberately stays out of it, because a false
+FAIL there teaches people to bypass gates. A commit without trailers degrades
+gracefully: it is simply graded by its diff instead.

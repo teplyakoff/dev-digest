@@ -5,8 +5,16 @@
 #
 #   gates.sh                 # greps + lint + typecheck on touched packages
 #   gates.sh --fast          # greps only (no install needed)
-#   gates.sh --full          # + vitest on touched packages
+#   gates.sh --unit          # + the UNIT suites (server excludes *.it.test.ts)
+#   gates.sh --full          # + the WHOLE suites (server INCLUDES *.it.test.ts)
 #   gates.sh --only server   # restrict to one package
+#
+# --unit and --full differ on exactly one package and the difference costs
+# minutes and a Docker daemon: `server`'s `test` script is a bare `vitest run`,
+# so --full sweeps in every `*.it.test.ts` and every testcontainer behind them.
+# --unit is the mode an agent verifying its own change wants — it mirrors the
+# `implementer` and `test-writer` command tables, which exclude the integration
+# suite unless a plan step asks for it. --full is the pre-PR mode.
 #
 # Exit codes
 #   0  every gate passed
@@ -32,6 +40,7 @@ ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --fast) MODE=fast ;;
+    --unit) MODE=unit ;;
     --full) MODE=full ;;
     --only) ONLY="${2:-}"; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -266,11 +275,12 @@ fi
 # These mirror the CI lanes one-for-one (.github/workflows/lint.yml). A FAIL
 # here is a red X on the PR that has not happened yet.
 
-pkg_script() { # package script label
+# Is this package in the change set, and can it run at all? Shared by every
+# gate below, because the answer must not depend on WHICH command follows.
+pkg_guard() { # package label  → 0 = go ahead, 1 = already gated
   p=$1
-  script=$2
-  label=$3
-  touched "^$p/" || { gate "$label" SKIP "not touched"; return; }
+  label=$2
+  touched "^$p/" || { gate "$label" SKIP "not touched"; return 1; }
   if [ ! -d "$p/node_modules" ]; then
     # e2e and demo are the "light" groups in routing.md — they cannot produce a
     # blocker, so their missing deps must not produce an INCONCLUSIVE either.
@@ -280,24 +290,55 @@ pkg_script() { # package script label
       e2e | demo) gate "$label" SKIP "no $p/node_modules (light group)" ;;
       *) gate "$label" UNKNOWN "no $p/node_modules — $(psr_pm "$p") install" ;;
     esac
-    return
+    return 1
   fi
-  if [ "$script" = typecheck ] && [ "$p" = server ] && [ ! -d reviewer-core/node_modules ]; then
-    # server's typecheck follows the path alias into reviewer-core's raw source.
-    gate "$label" UNKNOWN "needs reviewer-core/node_modules"
-    return
-  fi
+  return 0
+}
+
+# Run one command inside a package and gate on its exit status. The whole point
+# of the gate output is that a PASS costs three lines and a FAIL costs twelve —
+# an agent that runs the suite directly pays for the full reporter every time.
+pkg_exec() { # package label command...
+  p=$1
+  label=$2
+  shift 2
   # Failing logs outlive the run: $TMP is wiped by the EXIT trap, so pointing at
   # a path inside it would hand the reader a file that no longer exists.
   mkdir -p "$LOGDIR"
   log="$LOGDIR/$(echo "$label" | tr ':' '-').log"
-  if (cd "$p" && "$(psr_pm "$p")" run "$script") > "$log" 2>&1; then
+  if (cd "$p" && "$@") > "$log" 2>&1; then
     gate "$label" PASS
     rm -f "$log"
   else
     gate "$label" FAIL "$(grep -cE '(error|✖|problem)' "$log" | tr -d ' ') error line(s) — $log"
     tail -12 "$log" | sed 's/^/        /'
   fi
+}
+
+pkg_script() { # package script label
+  p=$1
+  script=$2
+  label=$3
+  pkg_guard "$p" "$label" || return
+  if [ "$script" = typecheck ] && [ "$p" = server ] && [ ! -d reviewer-core/node_modules ]; then
+    # server's typecheck follows the path alias into reviewer-core's raw source.
+    gate "$label" UNKNOWN "needs reviewer-core/node_modules"
+    return
+  fi
+  pkg_exec "$p" "$label" "$(psr_pm "$p")" run "$script"
+}
+
+# The unit lane. `server` is the only package with a DB-backed suite to exclude
+# — the `*.it.test.ts` files all live in server/test — so it is the only package
+# that cannot just run its own `test` script here.
+pkg_unit() { # package label
+  p=$1
+  label=$2
+  pkg_guard "$p" "$label" || return
+  case "$p" in
+    server) pkg_exec "$p" "$label" pnpm exec vitest run --exclude '**/*.it.test.ts' ;;
+    *) pkg_exec "$p" "$label" "$(psr_pm "$p")" run test ;;
+  esac
 }
 
 if [ "$MODE" = fast ]; then
@@ -308,7 +349,9 @@ else
   for p in server client reviewer-core mcp e2e demo; do pkg_script "$p" typecheck "typecheck:$p"; done
 fi
 
-if [ "$MODE" = full ]; then
+if [ "$MODE" = unit ]; then
+  for p in server client reviewer-core mcp; do pkg_unit "$p" "test:$p"; done
+elif [ "$MODE" = full ]; then
   for p in server client reviewer-core mcp; do pkg_script "$p" test "test:$p"; done
 fi
 

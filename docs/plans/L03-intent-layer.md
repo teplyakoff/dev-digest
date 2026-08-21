@@ -18,10 +18,11 @@ plan is executed through — the same way L02 has two plan files.
 | `client/` (`@devdigest/web`) | **pnpm** | `IntentCard`, hooks, trace prompt block, the hand-mirrored model registry |
 | `e2e/`, `demo/` | — | untouched (see *Out of scope*) |
 
-Produced by the `planner` agent, grounded in two parallel `researcher` runs — one
-on the OpenRouter model catalogue, one on external practice across seven AI
-review products — plus a repo pass. Model slugs and prices were verified a second
-time by querying `https://openrouter.ai/api/v1/models` directly.
+Produced by the `implementation-planner` agent (named `planner` when this plan
+was written), grounded in two parallel `researcher` runs — one on the OpenRouter
+model catalogue, one on external practice across seven AI review products — plus
+a repo pass. Model slugs and prices were verified a second time by querying
+`https://openrouter.ai/api/v1/models` directly.
 
 ---
 
@@ -55,7 +56,7 @@ far more than the one badge it buys.
 |---|---|---|
 | Module boundary | **`server/src/modules/intent/`**, reached as `container.intent` | `modules/index.ts:23` names "intent/smart-diff" as a lesson module; onion §11 forbids sibling-module imports, and the container is the sanctioned route — `container.skills` (`platform/container.ts:141-152`) is the precedent, with the same reasoning in its docstring |
 | Ownership of `pr_intent` | **Move** `upsertIntent`/`getIntent` out of `modules/reviews/repository/pull.repo.ts:49,64` and `repository.ts:138-143` into `modules/intent/repository.ts` | Two modules must not own one table. Zero callers exist today, so the move is free. Grep `server/test` before deleting |
-| `review_intent` registry default | **`openrouter` / `deepseek/deepseek-v4-flash-0731`** (today: `openai` / `gpt-4.1`, `platform.ts:52-57`) | **Maintainer decision, 2026-08-06**, taken against the planner's recommendation of `google/gemini-3.5-flash-lite` and with the trade-off understood. Cheapest confirmed structured-output model in the catalogue: $0.09 in / $0.18 out per 1M, **~$0.00032**/call at 3 000 in / 300 out — versus ~$0.00048 (`openai/gpt-5.6-luna`) and ~$0.0017 (`gemini-3.5-flash-lite`). **The cost of the choice:** the seeded reviewer agents run `openrouter/deepseek-v4-flash` (`db/seed.ts`), which differs from this slug only by the `-0731` suffix, so the two calls do not read as obviously different models at a glance. **The mitigation is mandatory, not optional** — every log line and trace entry labels the call's ROLE, never just its slug (see §7). All alternatives stay selectable in Settings → Models |
+| `review_intent` registry default | **`openrouter` / `deepseek/deepseek-v4-flash-0731`** (today: `openai` / `gpt-4.1`, `platform.ts:52-57`) | **Maintainer decision, 2026-08-06**, taken against `implementation-planner`'s recommendation of `google/gemini-3.5-flash-lite` and with the trade-off understood. Cheapest confirmed structured-output model in the catalogue: $0.09 in / $0.18 out per 1M, **~$0.00032**/call at 3 000 in / 300 out — versus ~$0.00048 (`openai/gpt-5.6-luna`) and ~$0.0017 (`gemini-3.5-flash-lite`). **The cost of the choice:** the seeded reviewer agents run `openrouter/deepseek-v4-flash` (`db/seed.ts`), which differs from this slug only by the `-0731` suffix, so the two calls do not read as obviously different models at a glance. **The mitigation is mandatory, not optional** — every log line and trace entry labels the call's ROLE, never just its slug (see §7). All alternatives stay selectable in Settings → Models |
 | Card placement | **Top of the Findings tab** (`?tab=findings`, labelled "Agent runs"), not Overview | The design bundle puts `IntentBlock` inside `BriefCard` on a PR-Brief Overview card (module `89858a9a`), but the rest of that brief — blast radius, risks, history — is unbuilt, and `?tab=overview` renders only `pr.body`. "Before the review results" is literally the top of `FindingsTab`. **Reverses when** the PR Brief is built: then the card moves into `BriefCard` on Overview and the Findings tab keeps nothing<br><br>**REVERSED 2026-08-10 (L04), and not for the reason predicted.** The mentor's L03 review read the spec as placing the card on Overview outright, so it moved there without waiting for the PR Brief — bare, not inside a `BriefCard`. The argument above was never wrong about Overview being thin; it was wrong to treat that as decisive against a spec that had already chosen. `OverviewTab` now owns `usePullIntent`/`useRecalculateIntent`, and `FindingsTab` opens on the Timeline as it did pre-L03 |
 | Per-finding `scope` | **Engine-local schema extension, not persisted** | See *§8 Risks* and *Out of scope*. A persisted enum would add a fourth CHECKed enum column to `findings`, which is precisely the trap `server/INSIGHTS.md` (2026-08-03) names |
 | `confidence` ownership | Model may return it; it can only **disarm** the filter, never arm it | The gate keys on a server-computed source-strength condition **and** on the model not claiming `low`. A model saying "high" can never re-enable suppression that thin sources disabled. See *§8 Risks* item 1 |
@@ -1035,11 +1036,12 @@ the whole payload. Never `--fast` — it caps at `INCONCLUSIVE`, which blocks.
   `04-pr-findings.flow.json` uses text-based waits and is additive-safe, so it
   needs no edit — but it also proves nothing about the card.
 - **`cd demo && npm run record`.** It triggers a real, paid review run.
-- **A `PreToolUse` hook enforcing read-only on `researcher`, `planner`,
-  `architecture-reviewer` and `plan-verifier`.** Re-raised with the maintainer on
-  2026-08-06 because *"read-only agents cannot modify files"* is on this feature's
-  acceptance list, and **answered: out of scope, keep the prose deny-list.** That
-  matches the decision already recorded in `L03-agents.md`. The consequence is
+- **A `PreToolUse` hook enforcing read-only on `researcher`,
+  `implementation-planner`, `architecture-reviewer` and `plan-verifier`.**
+  Re-raised with the maintainer on 2026-08-06 because *"read-only agents cannot
+  modify files"* is on this feature's acceptance list, and **answered: out of
+  scope, keep the prose deny-list.** That matches the decision already recorded
+  in `L03-agents.md`. The consequence is
   explicit: **that acceptance item is not met by this change and must not be
   reported as met.** A `tools` allowlist cannot make `Bash` read-only (root
   `INSIGHTS.md`), so the guarantee does not exist today — only the instruction does.

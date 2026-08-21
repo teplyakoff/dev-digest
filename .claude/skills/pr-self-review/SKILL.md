@@ -60,6 +60,12 @@ phase 3 — an unsplit oversized group is `INCONCLUSIVE`, not a clean pass.
 Exit `0` clean · `1` every FAIL is a BLOCKER · `2` a required gate could not run
 → the run is `INCONCLUSIVE` regardless of what the passes find.
 
+The script also carries `--unit` and `--full`, which add the test suites. Neither
+is this phase's default: `--full` pulls `server`'s `*.it.test.ts` and the
+testcontainers behind them, and `--unit` is the lane the `implementer` and
+`test-writer` agents verify themselves with. Reach for `--full` here only when
+the change set touches test-relevant code and you want the suites in the verdict.
+
 Failures here do **not** end the run. Carry them into the report and continue —
 a developer who has to re-run the whole gate to see the next class of problem
 stops running it at all. Copy the `GATE` lines into the report verbatim.

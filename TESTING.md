@@ -90,10 +90,16 @@ cd e2e && npm install && npm test
   (`vitest run --exclude '**/*.it.test.ts'`); the integration lane selects only
   it (`vitest run .it.test`). A DB-backed test that imports `test/helpers/pg.ts`
   must use the `.it.test.ts` suffix.
-- **`server/package.json` is `skip-worktree`** (a local variant diverges from the
-  committed file). CI therefore invokes the split with
-  `pnpm exec vitest run …` rather than relying on committed `test:unit` /
-  `test:integration` scripts.
+- **The split is invoked as `pnpm exec vitest run …`, never through a named
+  script.** `server/package.json` commits exactly one test script — `test`, a
+  bare `vitest run` that sweeps in both lanes — so there is no `test:unit` or
+  `test:integration` to call. Write the lane out, or use
+  `.claude/skills/pr-self-review/scripts/gates.sh --unit`, which writes it out
+  for you.
+
+  This rule was originally justified by `server/package.json` being
+  `skip-worktree`; it is not, on this checkout — `git ls-files -v` reports `H`.
+  The rule survives its old reason because the scripts genuinely do not exist.
 - **Hermetic by default.** Reach for `src/adapters/mocks.ts` (MockLLMProvider,
   MockGitClient) rather than real network/keys.
 - **E2E specs are deterministic batch JSON** (`e2e/specs/*.flow.json`) using
