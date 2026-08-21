@@ -106,7 +106,7 @@ clock. Do not merge any of them — their independence is the product.
 |---|---|---|
 | `architecture-reviewer` | **sonnet** (its frontmatter default) | the bundle, nothing else |
 | `security-reviewer` | opus | the bundle, nothing else. It decides for itself whether the diff trips a `routing.md` §3 trigger and **returns one line declining the pass when nothing does** — that line is a result, not a failure |
-| `plan-verifier` | opus | the plan path, the bundle, **"single pass — phases 1 through 5, including acceptance-criteria coverage"**, and the expected item count from step 5 below |
+| `plan-verifier` | opus | the plan path, the bundle, **"single pass — phases 1 through 5, including acceptance-criteria coverage"**, and the expected item count from step 5 below. **Unless you bought the rejection point back** in *The order* — then this launch is **"pass 2 — phases 1 through 5"**, and it also takes the pass ① report and `git diff <pass-1-head>..HEAD` |
 
 `architecture-reviewer` runs on sonnet to save tokens. Its guardrails are what
 make that safe rather than cheap: it may not invent a rule this repo has not
@@ -124,7 +124,8 @@ noisy one, keep the silent one.
 
 ## 5 — the item-count guard
 
-Before launching `plan-verifier`, count the plan's steps:
+Before launching `plan-verifier` — the **first** launch, so pass ① in two-pass
+mode, because that is the pass that enumerates — count the plan's steps:
 
 ```bash
 grep -cE '^\*\*S[0-9]+|^### S[0-9]+|^- \[ \] S[0-9]+' <plan path>
