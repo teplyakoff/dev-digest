@@ -141,7 +141,7 @@ grades `AC → step → test → commit` after the code lands. Each agent treats
 artefact upstream of it as fixed — the one rule that keeps the chain from quietly
 rewriting its own requirements.
 
-**The last link is carried by the commit, not by an agent.** None of these eight
+**The last link is carried by the commit, not by an agent.** None of these nine
 commits anything, deliberately, so `commit` is the one hop with no author in this
 table. The root [`AGENTS.md`](../../AGENTS.md) — *Commits* — closes it with two
 trailers, `Plan:` and `Steps:`, which is what lets `plan-verifier` follow the
@@ -205,7 +205,7 @@ Models are `opus` except `researcher` and `architecture-reviewer`, which run on
 `sonnet`. The Agent tool's `model` parameter overrides the frontmatter per call,
 so a one-off escalation costs nothing structural — see *Two deliberate economies*.
 
-The table is agent-per-row rather than metric-per-row: at eight agents the
+The table is agent-per-row rather than metric-per-row: at nine agents the
 transposed shape needs a column per agent and stops being readable.
 
 Every allowlist is written out in full on purpose. Omitting `tools` inherits
