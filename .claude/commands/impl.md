@@ -32,6 +32,23 @@ implementer (code + tests) → gates.sh --unit → collect-diff.sh
 on a branch that does not compile. A `FAIL` there, or a `NOT MET` from
 `plan-verifier`, goes back to `implementer` and the sequence resumes.
 
+**What that flat fan-out costs, stated rather than assumed.** `plan-verifier`
+used to run twice, and the early pass was the rejection point: a `NOT MET` step
+surfaced *before* anyone paid for the reviewers. Now it surfaces beside them, so
+a change that did not follow its plan is reviewed at full price before anyone
+notices. That is a deliberate trade — the early pass only earned its keep when
+`test-writer` sat downstream of it, and the three reviewers left are cheaper than
+that pass plus a test-writing context — but it is a trade, not a free
+simplification. When a plan is large, or when the implementer's report already
+reads as shaky, buy the rejection point back: run `plan-verifier` alone first
+with **"pass 1 — phases 1 through 4"**, and launch the rest only once it comes
+back clean. Doing that puts you back in two-pass mode, so the run is not finished
+until a **pass ②** has graded acceptance-criteria coverage — pass ① skips phase 5
+by definition, and stopping there leaves every `AC` ungraded while the report
+looks complete. Launch pass ② with the other two reviewers, handing it the pass ①
+report and `git diff <pass-1-head>..HEAD` so it regrades the delta rather than
+the branch.
+
 ## 1 — implementer
 
 Launch it with the plan **path** (not its text — it reads the file). Add:
