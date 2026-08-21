@@ -919,6 +919,17 @@ _(no entries yet)_
   of which found something — three of those in this gate's own earlier output —
   ending `CLEAN` at `4e1e328`. Nothing was pushed.
 
+- **2026-08-21** — Correction to the 2026-08-20 entry above, which records
+  shipping `.claude/commands/` with `/sdd-spec`, `/sdd-plan` and `/sdd-build`.
+  **All three were deleted the next day and none of them exists.** The directory
+  now holds one command, `/impl`, covering the third stage only; the two agents
+  the deleted commands fronted, `spec-creator` and `implementation-planner`, are
+  launched by hand. That entry is not wrong about what happened on 2026-08-20 and
+  is left as written, per this file's append-only rule — but read on its own it
+  names three commands a reader would then fail to find. The reason they went is
+  in *A command must not wrap a stage that stops to ask a human*, under Codebase
+  Patterns.
+
 ## Open Questions
 
 - `reviewer-core/test/**` matches **no group** in
