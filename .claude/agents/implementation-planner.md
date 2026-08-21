@@ -224,7 +224,14 @@ whoever runs the plan.
 | Mode | Who executes | Fits | Costs |
 |---|---|---|---|
 | **single-agent** | one `implementer` runs S1…Sn in order, writes its own tests, verifies | one package, steps that share files, a small coherent change | one context; cheapest; the same context that wrote the code also tests it |
-| **multi-agent** | `implementer` for code, `test-writer` for tests, then `architecture-reviewer` and `plan-verifier` on the result | more than one package, independent tracks, anything where an independent check is worth paying for | several contexts and several times the tokens; needs explicit handoffs |
+| **multi-agent** | `implementer` for code, `test-writer` for tests, then the reviewers on the result | more than one package, independent tracks, anything where an independent test context is worth paying for | several contexts and several times the tokens; needs explicit handoffs |
+
+**Single-agent is the default here, and `/impl` runs only that shape.** The
+review agents run in both modes — they are not what the gate decides. What the
+gate decides is whether `test-writer` gets its own context: recommend
+multi-agent only when an independent test author is worth a whole extra context
+for *this* change, and say why in those terms. Anything else and the plan is
+executed by one `implementer` writing the tests your *Traceability* table names.
 
 Multi-agent has one hard structural constraint, and the plan is where it is
 either satisfied or broken: **`implementer` and `test-writer` both write files,

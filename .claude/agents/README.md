@@ -15,8 +15,8 @@ changing behaviour, not this one.
 | [spec-creator](spec-creator.md) | opus | **yes**, specs only | Interrogate a request across six categories, read the design for what it omits, write one EARS spec with its verification bound to it |
 | [implementation-planner](implementation-planner.md) | opus | **yes**, plans only | Review the requirements, then turn them into a Development Plan someone can execute cold — never into a requirement |
 | [implementer](implementer.md) | opus | **yes** | Execute an approved plan, verify its own changes, report what happened |
-| [test-writer](test-writer.md) | opus | **yes** | Write the tests that pin a behaviour, in the right package, and run them |
-| [architecture-reviewer](architecture-reviewer.md) | opus | no | Decide whether the code is in the right ring or the right folder, with grounded findings |
+| [test-writer](test-writer.md) | opus | **yes** | Write the tests that pin a behaviour, in the right package, and run them. **Not in the `/impl` flow** — kept for when tests are worth an independent context |
+| [architecture-reviewer](architecture-reviewer.md) | **sonnet** | no | Decide whether the code is in the right ring or the right folder, with grounded findings |
 | [security-reviewer](security-reviewer.md) | opus | no | Trace each suspect line back to its input source and report only what an attacker can actually reach |
 | [plan-verifier](plan-verifier.md) | opus | no | Check a change set against every item of the plan, and every criterion of the spec behind it |
 | [doc-writer](doc-writer.md) | opus | **yes** | Turn an implemented feature or a plan into documentation, in the directory it belongs in |
@@ -37,78 +37,103 @@ request ─→ implementation-planner ─→ review + recommendations + mode gat
                                               S<n> → AC-<n> → test
                                                      │
                                                      ↓
-                                               implementer ──────→ code + report
+                                    implementer ──────→ code + its own tests
                                                      │
                                                      ↓
                                         gates.sh --unit ─────────→ PASS · FAIL · UNKNOWN
                                                      │             implementer phase 3 —
                                                      │             deterministic, no model
                                                      ↓
-                                        plan-verifier ① ─────────→ conformance, phases 1–4
-                                                     │             AC coverage deferred
-                                                     ↓
-                                               test-writer ───────→ tests + Test Report
+                                        collect-diff.sh ─────────→ one bundle, three readers
                                                      │
                     ┌────────────────────────────────┼────────────────────────────────┐
                     ↓                                ↓                                ↓
-         architecture-reviewer            security-reviewer                 plan-verifier ②
+         architecture-reviewer            security-reviewer                  plan-verifier
+              **sonnet**                        opus                             opus
           → grounded findings         → HIGH/MEDIUM, or "nothing      → conformance + AC coverage
                     │                    triggered — no pass run"                     │
                     └────────────────────────────────┼────────────────────────────────┘
                                                      ↓
                                                 doc-writer ───────→ docs/… + Doc Report
+
+                                 `test-writer` is out of this flow by choice —
+                                 `implementer` writes the plan's tests instead
 ```
 
-### Why that order, and not a fan-out
+### Why that order
 
-The four passes after `implementer` used to branch in parallel. Three of those
-edges were wrong, and each for its own reason:
-
-- **`architecture-reviewer` cannot run beside `test-writer`.** `test-writer`
-  writes files, and `routing.md` §1 puts them in reviewable groups
-  (`server-tests`, `mcp-tests`, onion §12). A reviewer started in parallel
-  grades a change set that is about to grow, so its verdict is stale the moment
-  it is handed back.
-- **`plan-verifier` is two passes, not one.** Its phases 1–4 need no test to
-  exist; its phase 5 grades `COVERED` against `CLAIMED` and therefore needs
-  `test-writer` to have run. One pass before → a column of `CLAIMED` that reads
-  like a finding. One pass after → a `NOT MET` step discovered only once the
-  tests and the architectural review have already been paid for. So: pass ①
-  right after the code, as the cheap rejection, and pass ② at the end, on the
-  delta. See *Phase 0a* in [plan-verifier.md](plan-verifier.md).
-- **`doc-writer` is last, never in the fan-out.** Documenting a change that pass
-  ② is about to mark `PARTIAL` produces documentation that is wrong on arrival.
-
-The **final fan-out is a real one** — three read-only agents over the same
-prepared bundle, launched in one message. They share no state and cost the same
-whether run together or one after another, so parallel is free wall-clock. What
-distinguishes `security-reviewer` from the other two is that it may decline:
-routing decides whether the diff trips a security trigger at all, and a change
-that trips none gets one line saying so rather than a pass with a guaranteed
-empty result.
-
-Two things make the second half cheap enough to be worth running twice.
 `gates.sh --unit` answers the mechanical half — lint, typecheck, the unit suites
-— at zero model cost before any reviewer starts, so no agent spends judgement on
-a branch that does not compile. And the reviewers are pointed at a **prepared
-diff, scoped to the unreviewed delta**: run
-[`collect-diff.sh`](../skills/pr-self-review/scripts/collect-diff.sh) once, hand
-all three the same output, and give pass ② `git diff <pass-1-head>..HEAD`
-rather than the branch base. The root [`INSIGHTS.md`](../../INSIGHTS.md) entry of
-2026-08-06 measured what skipping this costs: 25 of 47 files re-read
-byte-identical, roughly half of ~351 k tokens buying nothing.
+— at **zero model cost**, before any reviewer starts, so no agent spends
+judgement on a branch that does not compile. Then one prepared diff, from
+[`collect-diff.sh`](../skills/pr-self-review/scripts/collect-diff.sh), goes to
+all three reviewers; three agents each deriving their own change set pay for it
+three times, and the root [`INSIGHTS.md`](../../INSIGHTS.md) entry of 2026-08-06
+measured what that costs: 25 of 47 files re-read byte-identical, roughly half of
+~351 k tokens buying nothing.
 
-The rework edge is the one arrow the diagram leaves out: a `NOT MET` or
-`VIOLATED` row in pass ①, or a `FAIL` from `gates.sh`, goes back to
-`implementer` and the sequence resumes from there. That is the whole point of
-putting the two cheapest checks first.
+**The final fan-out is a real one** — three read-only agents over that bundle,
+launched in one message. They share no state and cost the same whether run
+together or one after another, so parallel is free wall-clock, and merging any
+two of them would destroy the independence that is their product.
+`security-reviewer` is the only one that may decline: routing decides whether
+the diff trips a security trigger at all, and a change that trips none gets one
+line saying so rather than a pass with a guaranteed empty result.
 
-**This order is executable, not just documented.** The three stages are
-[`/sdd-spec`](../commands/sdd-spec.md), [`/sdd-plan`](../commands/sdd-plan.md)
-and [`/sdd-build`](../commands/sdd-build.md) — see
-[COMMANDS.md](../COMMANDS.md). Running the agents by hand still
-works; the commands exist so the sequence and the cost flags stop being
-re-derived from memory each session.
+**`doc-writer` is last, never in the fan-out.** Documenting a change that
+`plan-verifier` is about to mark `PARTIAL` produces documentation that is wrong
+on arrival.
+
+The rework edge is the one arrow the diagram leaves out: a `FAIL` from
+`gates.sh`, or a `NOT MET` from `plan-verifier`, goes back to `implementer` and
+the sequence resumes from there.
+
+### Two deliberate economies, and what each costs
+
+**`test-writer` is out of the flow; `implementer` writes the plan's tests.**
+That is the `single-agent` mode `implementation-planner` already offers, and it
+saves a whole agent context. What it costs is stated in that same mode table:
+*the context that wrote the code also tests it* — which is precisely what the
+two-agent split existed to prevent. The mitigation is not another agent, it is
+one question asked of the new tests by whoever reads the report: *would this
+have failed before the change?* `test-writer` remains in the set, unchanged, for
+work where an independent test context is worth paying for.
+
+Dropping it also collapses `plan-verifier` back to **one pass**. The two-pass
+split existed because `COVERED` needs the named test to exist, so grading
+coverage before `test-writer` ran produced a column of `CLAIMED`. With the tests
+arriving in the same step as the code, that dependency is gone and phases 1–5
+run once — see *Phase 0a* in [plan-verifier.md](plan-verifier.md), which keeps
+the two-pass mode for when tests do arrive separately.
+
+**`architecture-reviewer` runs on sonnet; `security-reviewer` and
+`plan-verifier` stay on opus.** The root `INSIGHTS.md` entry of 2026-08-06 warns
+that cheap models buy little here, because `gates.sh` already does the
+mechanical work for free and what remains in the agents is judgement. The
+exception is decided by **how each one fails**:
+
+| Agent | Failure mode when weakened | Visible? |
+|---|---|---|
+| `architecture-reviewer` | more unfounded findings | yes — you read them and discard them |
+| `plan-verifier` | a shorter enumeration | **no** — a short conformance table reads exactly like a clean one |
+| `security-reviewer` | a missed traced input | no — and its own file says an unfounded finding costs more here than a missed one |
+
+Downgrade the noisy one, keep the silent ones. What makes the sonnet pass safe
+rather than merely cheap is that `architecture-reviewer` already carries the
+guardrails a smaller model needs: it may not invent a rule this repo has not
+stated, a preference is a `Nit:` that never blocks, and §15's sanctioned
+exemptions and known pre-existing violations are never findings.
+
+`plan-verifier` gets a mechanical guard regardless of model, and it is the one
+the same `INSIGHTS.md` entry asks for: `/impl` counts the plan's `S<n>` steps
+with a `grep`, passes the number in, and checks the returned table against it. A
+silently short enumeration is the one failure that agent exists to prevent, and
+one `grep` is what makes it visible.
+
+**This order is executable, not just documented.** [`/impl <plan path>`](../commands/impl.md)
+runs everything from `implementer` down — see [COMMANDS.md](../COMMANDS.md).
+`spec-creator` and `implementation-planner` are **not** commands and are launched
+by hand: both stop to put a question to a human, and a command wrapping a stop
+only makes the stop easier to skip.
 
 The `AC` ids are the thread: `spec-creator` numbers them,
 `implementation-planner` binds a step and a test name to each, `plan-verifier`
@@ -154,11 +179,13 @@ not survive — so anything the first pass paid for (a design bundle read, an
 `INSIGHTS.md` sweep) is in that block or bought again at a slightly different
 answer.
 
-**`plan-verifier` is also invoked twice, and for a different reason** — not a
-dialogue, but a dependency: its phase 5 cannot be graded until the tests exist.
-The carrier rule still applies, and harder. Hand pass ② the pass ① report along
-with the delta range, or pass ② regrades from scratch — a verdict it cannot see
-is a verdict it may not inherit. *Why that order* above has the full argument.
+**`plan-verifier` can also be invoked twice, for a different reason** — not a
+dialogue but a dependency: its phase 5 cannot be graded until the tests exist.
+That case no longer arises in the `/impl` flow, where `implementer` writes the
+tests, so its default is a single pass. It still arises whenever `test-writer`
+runs separately, and then the carrier rule applies and harder: hand pass ② the
+pass ① report along with the delta range, or it regrades from scratch — a
+verdict it cannot see is a verdict it may not inherit.
 
 ## Permissions and artifacts
 
@@ -171,8 +198,12 @@ is a verdict it may not inherit. *Why that order* above has the full argument.
 | test-writer | `Read, Edit, Write, Grep, Glob, Bash, Skill` | — (loads on demand, by path) | a behaviour to pin + its package | Test Report + the test files | the working tree |
 | architecture-reviewer | `Read, Grep, Glob, Bash` | — (**reads** `SKILL.md` files by path) | a change set | grounded findings (final message) | the caller |
 | security-reviewer | `Read, Grep, Glob, Bash` | — (**reads** `security/SKILL.md` sections by path) | a change set | HIGH/MEDIUM findings, or one line declining the pass (final message) | the caller |
-| plan-verifier | `Read, Grep, Glob, Bash` | — (**reads** `acceptance-criteria/SKILL.md` by path) | a plan **and** a change set, plus the spec the plan cites, plus which pass (① or ②) and — for ② — the pass ① report and delta range | conformance table + AC coverage table (final message) | the caller |
+| plan-verifier | `Read, Grep, Glob, Bash` | — (**reads** `acceptance-criteria/SKILL.md` by path) | a plan **and** a change set, plus the spec the plan cites, plus the plan's expected step count; two-pass mode additionally takes the pass ① report and a delta range | conformance table + AC coverage table (final message) | the caller |
 | doc-writer | `Read, Edit, Write, Grep, Glob, Bash, Skill` | — (loads on demand, by path) | an implemented feature, or a plan/report to convert | Doc Report + the doc files | the working tree |
+
+Models are `opus` except `researcher` and `architecture-reviewer`, which run on
+`sonnet`. The Agent tool's `model` parameter overrides the frontmatter per call,
+so a one-off escalation costs nothing structural — see *Two deliberate economies*.
 
 The table is agent-per-row rather than metric-per-row: at eight agents the
 transposed shape needs a column per agent and stops being readable.
@@ -361,6 +392,7 @@ inherited habit.
 | Cross-package checks neither skill owns | [routing.md](../skills/pr-self-review/routing.md) §5 |
 | `## Bash` is a backstop; `pr-guard.sh` is a PR gate, not a read-only enforcer | [sub-agents](https://code.claude.com/docs/en/sub-agents) `db-reader` example · [.claude/settings.json](../settings.json) · [pr-self-review](../skills/pr-self-review/SKILL.md) |
 | Not a replacement for `/pr-self-review` | [pr-self-review](../skills/pr-self-review/SKILL.md) — that skill owns the verdict and the hook |
+| Runs on **sonnet** | its failure mode when weakened is *noise*, which the reader discards, unlike the two silent ones — see *Two deliberate economies*. Its existing guardrails are what make that safe: no invented rules, preferences are `Nit:`, §15 exemptions are never findings |
 
 ### security-reviewer
 
@@ -396,7 +428,8 @@ inherited habit.
 | An unreadable cited spec makes coverage `UNVERIFIABLE`, not skipped | fail closed, [pr-self-review](../skills/pr-self-review/SKILL.md) |
 | `## Bash` backstop wording | as `architecture-reviewer` |
 | Commit `Steps:` trailers are corroborating evidence, never substitutive | root [AGENTS.md](../../AGENTS.md) — *Commits*. A trailer is an author's claim about their own work, which *Non-negotiables 6* already discounts; what it buys is the reverse direction, making the `commit` column machine-followable |
-| Two passes: ① phases 1–4 after the code, ② phases 1–5 after the tests | `COVERED` requires the named test to exist and pass, so phase 5 before `test-writer` yields only `CLAIMED`; and a `NOT MET` found after the reviewers ran has already wasted them. Defaults to ② when the invocation says neither |
+| One pass by default; two only when `test-writer` runs separately | `COVERED` requires the named test to exist and pass, so phase 5 before the tests are written yields only `CLAIMED`. In the `/impl` flow `implementer` writes them, so the dependency is gone and phases 1–5 run once |
+| Stays on **opus**, with a mechanical step-count guard | root [INSIGHTS.md](../../INSIGHTS.md) 2026-08-06 — a weakened verifier fails *silently*: a short enumeration reads exactly like a clean conformance table. That entry asks for the count assertion by name, and [`/impl`](../commands/impl.md) supplies it with one `grep` |
 | Pass ② takes the delta and the pass ① report, not the branch base | root [INSIGHTS.md](../../INSIGHTS.md) 2026-08-06 — 25 of 47 files re-read byte-identical, ~half of ~351 k tokens. A verdict pass ② cannot see is one it may not inherit |
 
 ### doc-writer

@@ -2,51 +2,69 @@
 
 Slash commands, living in `.claude/commands/`. A command is a **prompt the user
 invokes by name** — it runs in the main context, unlike an
-[agent](agents/README.md), which is a separate context that returns one
-artifact, and unlike a [skill](skills/README.md), which is knowledge loaded on
-demand.
+[agent](agents/README.md), which is a separate context that returns one artifact,
+and unlike a [skill](skills/README.md), which is knowledge loaded on demand.
 
 ## The set
 
 | Command | Stage | Hands you |
 |---|---|---|
-| [`/sdd-spec`](commands/sdd-spec.md) | request → spec | `<package>/docs/specs/NN-slug.md`, `SPEC-NN`, the open questions |
-| [`/sdd-plan`](commands/sdd-plan.md) | spec → plan | `docs/plans/<name>.md`, the execution mode |
-| [`/sdd-build`](commands/sdd-build.md) | plan → code, tests, verdicts | the change set, two conformance passes, the architectural findings |
+| [`/impl`](commands/impl.md) | plan → code, verified | the change set, one conformance pass, architectural and security findings, the commit message |
 
-They chain: each one ends by naming the next with the argument it needs.
+One command, and that is the whole set on purpose.
 
-## What these three are for
+## Why only the last stage is a command
 
-The eight agents already knew their own jobs. What lived nowhere was the **order
-they run in and the flags that keep them affordable** — which meant both were
-re-decided from memory every session, and drifted. These files are where that
-now lives:
+The SDD flow has three stages. The first two are run **by hand**, with the Agent
+tool:
 
-- the sequence after `implementer` is **not** a fan-out. `test-writer` writes
-  files, so `architecture-reviewer` cannot grade beside it; `plan-verifier` runs
-  twice because its phase 5 needs the tests to exist; `doc-writer` is last
-  because documenting a `PARTIAL` change ships documentation that is wrong on
-  arrival. The full argument is in [agents/README.md](agents/README.md) —
-  *Why that order, and not a fan-out*.
-- the token discipline is stated once, at the point it applies: do not spawn a
-  `researcher` for what a spec already cites, read skills by anchor rather than
-  whole, verify narrowly per step and gate once per package, and hand every
-  reviewer the **same** prepared diff scoped to the unreviewed delta.
+1. `spec-creator` — two passes: a question set across six clarification
+   categories, then the spec at `<package>/docs/specs/NN-slug.md`.
+2. `implementation-planner` — two passes: a requirements review with the
+   single-agent/multi-agent gate, then the plan at `docs/plans/<name>.md`.
+3. `/impl <plan path>` — everything downstream of an approved plan.
 
-Every number cited in them comes from the root [`INSIGHTS.md`](../INSIGHTS.md)
-entries of 2026-08-06, which measured what skipping each one costs.
+Stages 1 and 2 both **stop to put a question to a human**: a question set that
+needs answers, a set of `R-N` recommendations that need accepting or declining, a
+mode that needs choosing. Wrapping a stop inside a command does not make it
+easier to answer — it makes it easier to skip, because a command reads as
+something you fire and wait for. They were commands briefly and are not any more.
 
-## Two things they deliberately do not do
+Stage 3 has no such stop until the reviews come back, so it is exactly the part
+worth automating: a fixed order, a fixed set of flags, and four agents whose
+launch parameters are otherwise re-decided from memory every session.
 
-- **Neither runs `/pr-self-review`.** That skill is ON DEMAND ONLY and owns the
-  verdict `.claude/hooks/pr-guard.sh` reads before letting `git push` or
-  `gh pr create` through. A command that ran it for you would be pre-approving
-  the user's own gate.
-- **None of them approves anything.** A spec's `Status:` stays `draft`, an `R-N`
-  recommendation stays a proposal, and the single-agent/multi-agent choice is put
-  to the user rather than assumed. Each stop is a decision that changes what gets
-  built, not a courtesy round-trip.
+## What `/impl` encodes
+
+- **The order.** `implementer` → `gates.sh --unit` (no model tokens, so nothing
+  expensive runs against a branch that does not compile) → one prepared diff →
+  three reviewers in parallel → `doc-writer`, only if the verdicts are clean.
+- **The models.** `architecture-reviewer` runs on **sonnet**;
+  `security-reviewer` and `plan-verifier` stay on **opus**. The two downgrades
+  fail differently, and that asymmetry is the whole argument: a weaker
+  architecture pass is *noisier* and you discard the noise, while a weaker
+  conformance pass is *shorter* and a short enumeration reads exactly like a
+  clean table.
+- **The item-count guard.** One `grep` for the plan's `S<n>` steps, passed into
+  `plan-verifier` and checked against the table it returns. This is what makes a
+  silently short enumeration visible, and it is cheap enough to keep whatever
+  model that agent runs on.
+- **No `test-writer`.** `implementer` writes the plan's tests itself, under the
+  names the plan's *Traceability* table already chose. That saves a whole agent
+  context; what it costs is independence, so `/impl` tells you to read the new
+  tests against one question — *would this have failed before the change?*
+- **The token discipline** from the root [`INSIGHTS.md`](../INSIGHTS.md) entries
+  of 2026-08-06: read skills by anchor rather than whole, verify narrowly per
+  step and gate once per package, and hand every reviewer the same prepared diff.
+
+## Two things it deliberately does not do
+
+- **It does not run `/pr-self-review`.** That skill is ON DEMAND ONLY and owns
+  the verdict `.claude/hooks/pr-guard.sh` reads before letting `git push` or
+  `gh pr create` through. A command that ran it would be pre-approving the user's
+  own gate.
+- **It does not commit.** It hands you the message, including the `Plan:` and
+  `Steps:` trailers, and stops.
 
 ## Adding a command
 
