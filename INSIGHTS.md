@@ -84,6 +84,20 @@ here. Here is for what has no package at all.
   you test the neighbours for. The cheapest moment is before the fix, while the
   reproduction harness still exists. (2026-08-20)
 
+- **A finding that names a *class* is fixed as a class, and the audit itself
+  turns up defects the finding never named.** `/pr-self-review` reported a
+  contradiction at `.claude/commands/impl.md:109` — a newly added conditional
+  path versus a table two sections away still stating the unconditional one — and
+  described the class as "adding an alternative to a procedure means auditing
+  every place that procedure is restated". Patching the cited line took one edit.
+  Doing the audit turned up a second restatement at `:127` that the finding had
+  not mentioned and that was wrong in a worse way: the item-count guard was sent
+  to whichever launch came first in the text rather than to the pass that
+  actually enumerates, so in two-pass mode it would have guarded an enumeration
+  that does not happen in that pass. Same shape as the sibling-probe entry above,
+  one level in: that one says test the neighbouring *files*, this one says test
+  the other places in the *same* document. (2026-08-21)
+
 ## What Doesn't Work
 
 - **A subagent whose `tools` allowlist omits `Skill` cannot invoke any skill in
@@ -327,6 +341,31 @@ here. Here is for what has no package at all.
   which *tools* a guard sees, this one about which *paths* it accepts, and a
   guard can be wrong in both ways at once. (2026-08-20)
 
+- **Reading a `CLEAN` verdict as "the tree is clean" does not survive contact
+  with the data.** Six consecutive `/pr-self-review` runs on `homework-L05`, each
+  after fixing the last: `0a3dc80` found a reproduced root-resolution bug in
+  `plan-write-guard.sh`; `f253548` found a wider escape in `spec-write-guard.sh`
+  that the previous report had explicitly called clean; `abaf769` found two stale
+  agent counts that the run introducing them had missed; `9adaff4` found a stated
+  trade with no stated cost; `4e1e328` found the fix for that contradicting
+  another section. **Three of the five were defects in this gate's own previous
+  output.** The findings do shrink run over run, so it converges — but `CLEAN`
+  means "this pass saw nothing further", never "there is nothing further". Budget
+  a re-run after every fix and read the verdict as a floor, not a certificate.
+  Extends the *every review layer found something the layer before it missed*
+  entry above from four different layers to six runs of one. (2026-08-21)
+
+- **Do not spend `PSR_SKIP=1` on a false positive you can reword away.**
+  `pr-guard.sh` matches the whole tool payload as text, so writing a review's own
+  group results blocks the call whenever the prose quotes one of the four guarded
+  phrases — and a report about pushing and pull requests quotes them constantly.
+  The entry above records that this "costs one `PSR_SKIP=1`", which reads as
+  permission; in practice the cheaper and more honest move is to reword ("the
+  push command", "opening a pull request") and leave the override alone. The
+  override is the user's to spend — `pr-self-review/SKILL.md` — and an agent that
+  learns to reach for it on a documented false positive has learned the habit
+  that defeats the gate. (2026-08-21)
+
 ## Codebase Patterns
 
 - **A review subagent that needs two skills in one pass takes no `Skill` tool —
@@ -565,6 +604,49 @@ here. Here is for what has no package at all.
   touches nothing S4 named is a disagreement invisible from the diff alone.
   Nothing enforces them — no `commit-msg` hook, and deliberately not a `gates.sh`
   gate, because a false FAIL there teaches people to bypass gates. (2026-08-20)
+
+- **A command must not wrap a stage that stops to ask a human — it makes the stop
+  easier to skip, not easier to answer.** `/sdd-spec` and `/sdd-plan` existed for
+  one day and were deleted. Both fronted a two-pass agent whose first pass returns
+  a question set, an `R-N` recommendation list or an execution-mode gate and
+  writes nothing until a person answers. A command reads as something you fire
+  and wait for, so wrapping the stop invites skipping it, and skipping it is
+  exactly how a spec acquires silent assumptions. `spec-creator` and
+  `implementation-planner` are launched by hand for that reason. `/impl` is a
+  command because everything downstream of an approved plan has no such stop
+  until the reviews return. (2026-08-21)
+
+- **Removing `test-writer` from the flow also collapses `plan-verifier` to one
+  pass, and the dependency is not obvious until you trace it.** The two-pass
+  split existed for one reason: phase 5 grades `COVERED` versus `CLAIMED`, and
+  `COVERED` requires the named test to *exist*, so grading coverage before a
+  separate test author had run produced a column of `CLAIMED` that reads exactly
+  like a finding. Move test authorship into `implementer` — the `single-agent`
+  mode `implementation-planner` already offered — and the tests arrive with the
+  code, so the dependency vanishes and phases 1–5 run once. Two-pass mode is kept
+  in `plan-verifier` phase 0a for when a separate `test-writer` does run. What the
+  removal costs is independence, not coverage: the context that wrote the code
+  writes its tests, which is what the split existed to prevent, so `/impl` asks
+  one question of every new test — *would this have failed before the change?*
+  (2026-08-21)
+
+- **Pick which review agent to downgrade by how it FAILS, not by how important it
+  is.** A weakened `architecture-reviewer` produces more unfounded findings —
+  noise, which the reader sees and discards. A weakened `plan-verifier` produces a
+  *shorter enumeration*, and a short conformance table reads exactly like a clean
+  one. A weakened `security-reviewer` misses a traced input, equally invisible.
+  So `architecture-reviewer` moved to `sonnet` and the other two stayed on `opus`,
+  and the reason is asymmetry rather than rank. Two things make the sonnet pass
+  safe rather than merely cheap: that agent already carries the guardrails a
+  smaller model needs (never invent a rule this repo has not stated, a preference
+  is a `Nit:` that cannot block, §15's sanctioned exemptions are never findings),
+  and it is not the security control — `security-reviewer` is. This refines the
+  *cheap models buy little here* entry above, which named `plan-verifier`'s
+  extraction/verdict split as the one defensible downgrade: the failure-mode axis
+  is the more usable one, because it does not require splitting an agent in two.
+  `/impl` also supplies the guard that entry asks for by name — a `grep` for the
+  plan's `S<n>` steps, passed in and checked against the returned table.
+  (2026-08-21)
 
 ## Tool & Library Notes
 
@@ -824,6 +906,18 @@ _(no entries yet)_
   convention. Verified locally throughout: `gates.sh --unit` green on every
   package, guard exit codes asserted payload by payload, and every `path:line`
   cited in the new agent read back from the file it names. Nothing was committed.
+
+- **2026-08-21** — Cut the SDD pipeline down on cost, then spent most of the
+  session paying for the cuts. `/sdd-spec` and `/sdd-plan` deleted and
+  `/sdd-build` renamed `/impl`, leaving one command; `test-writer` out of the
+  flow with `implementer` writing the plan's tests; `architecture-reviewer` to
+  sonnet. Each of those had a second-order consequence that had to be traced
+  rather than assumed: dropping `test-writer` collapsed `plan-verifier` to a
+  single pass, the model question turned out to be about failure modes rather
+  than importance, and removing the early verifier pass cost a rejection point
+  that had to be named and given an escape hatch. Six `/pr-self-review` runs, five
+  of which found something — three of those in this gate's own earlier output —
+  ending `CLEAN` at `4e1e328`. Nothing was pushed.
 
 ## Open Questions
 
