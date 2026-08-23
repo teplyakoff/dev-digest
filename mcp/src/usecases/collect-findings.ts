@@ -30,8 +30,32 @@ export interface FindingsPage {
   /** Findings that matched the filters. */
   matched: number;
   items: FindingRecord[];
-  /** The agents whose review rows contributed, newest run first. */
+  /**
+   * Agents that contributed AT LEAST ONE finding, newest run first.
+   *
+   * Not "agents that reviewed" — that is `reviewers` below, and conflating the
+   * two is a defect this tool has already shipped once. A review row with an
+   * empty `findings` array used to land here anyway, so the header credited
+   * agents that found nothing: on `teplyakoff/dev-digest#4` it read "11
+   * finding(s) … from 3 agent(s)" while the Security Reviewer had 0 across all
+   * four of its runs, and that line was read as evidence the security agent had
+   * flagged the contract break. The audience for this header is a model, which
+   * cannot cross-check it against anything.
+   *
+   * Counted BEFORE the filters, because the sentence it feeds is "N finding(s)
+   * … across M agent(s)" — M describes `total`, not `matched`.
+   */
   agents: string[];
+  /**
+   * Every agent whose review row is in scope, whether or not it found anything.
+   *
+   * This is the list that answers "has anything reviewed this pull request?",
+   * and it is the one thing `agents` must NOT be used for: an empty `agents`
+   * means "nobody found anything", while an empty `reviewers` means "nobody
+   * looked". Those are opposite answers to the question a caller is actually
+   * asking.
+   */
+  reviewers: string[];
   /** Review rows a superseded run contributed that `allRuns: false` left out. */
   hiddenRuns: number;
 }
@@ -68,10 +92,14 @@ export async function collectFindings(
   const inScope = query.allRuns ? reviewRows : latestRunPerAgent(reviewRows);
 
   const agents: string[] = [];
+  const reviewers: string[] = [];
   const all: FindingRecord[] = [];
   for (const row of inScope) {
     const name = row.agent_name ?? row.agent_id ?? 'unknown agent';
-    if (!agents.includes(name)) agents.push(name);
+    if (!reviewers.includes(name)) reviewers.push(name);
+    // The `length > 0` guard IS the fix: an agent earns a place in `agents` by
+    // finding something, not by having run.
+    if (row.findings.length > 0 && !agents.includes(name)) agents.push(name);
     all.push(...row.findings);
   }
 
@@ -84,6 +112,7 @@ export async function collectFindings(
     matched: matched.length,
     items,
     agents,
+    reviewers,
     hiddenRuns: reviewRows.length - inScope.length,
   };
 }

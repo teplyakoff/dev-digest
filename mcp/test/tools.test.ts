@@ -185,8 +185,58 @@ describe('get_findings', () => {
     const { deps, extra } = base();
     const out = text(await getFindings.handler({ pull_request: 'acme/payments-api#482' }, deps, extra));
     expect(out).toContain('2 matching finding(s) of 2 total');
-    expect(out).toContain('3 agent(s)');
+    // TWO, not three. The fixture has three review rows, and the API Contract
+    // Reviewer's carries no findings — see the regression test below.
+    expect(out).toContain('2 agent(s)');
     expect(out).toContain('f-ignored'.replace('f-ignored', 'Unbounded retry loop'));
+  });
+
+  /**
+   * The header must credit only agents that actually found something.
+   *
+   * This shipped wrong once and the cost was concrete: on
+   * `teplyakoff/dev-digest#4` the header read "11 finding(s) … from 3 agent(s):
+   * Security Reviewer, General Reviewer, API Contract Reviewer" while the
+   * Security Reviewer had 0 findings across all four of its runs there. It was
+   * read as evidence that the security agent had flagged the contract break. It
+   * had not. The audience for this line is a model, which has nothing to
+   * cross-check it against.
+   */
+  it('names only the agents that contributed a finding, never the ones that found nothing', async () => {
+    const { deps, extra } = base();
+    const out = text(
+      await getFindings.handler(
+        { pull_request: 'acme/payments-api#482', response_format: 'detailed' },
+        deps,
+        extra,
+      ),
+    );
+
+    expect(out).toContain('General Reviewer');
+    expect(out).toContain('Test Quality Reviewer');
+    // The row exists, is in scope, and contributed nothing — so it is not in
+    // the list of agents the findings came "from".
+    expect(out).not.toContain('API Contract Reviewer');
+  });
+
+  it('still says an agent REVIEWED the PR when nobody found anything', async () => {
+    // The other half of the same distinction. With no findings at all, the
+    // contributor list is empty either way — so this sentence has to come from
+    // the reviewer list, or "everybody looked and found nothing" collapses into
+    // "nobody looked", which is the opposite answer.
+    const { deps, extra } = ctx({
+      repos: [makeRepo()],
+      pulls: { 'repo-1': [makePr()] },
+      reviews: {
+        'pr-1': [
+          makeReview({ id: 'rev-1', agent_id: 'agent-1', agent_name: 'General Reviewer', findings: [] }),
+        ],
+      },
+    });
+    const out = text(await getFindings.handler({ pull_request: 'acme/payments-api#482' }, deps, extra));
+    expect(out).toContain('1 agent(s) reviewed it and recorded no findings');
+    expect(out).toContain('General Reviewer');
+    expect(out).not.toMatch(/Nothing has reviewed/);
   });
 
   it('ignores summary rows', async () => {
@@ -368,10 +418,11 @@ describe('get_findings', () => {
     expect(out).toContain('Re-run finding');
     expect(out).toContain('Other agent finding');
     expect(out).not.toContain('Superseded finding');
-    // The untouched fixture still unions all three of its agents.
+    // The untouched fixture still unions across agents — two of its three rows
+    // carry findings, and it is those two the header names.
     expect(
       text(await getFindings.handler({ pull_request: 'acme/payments-api#482' }, deps, extra)),
-    ).toContain('3 agent(s)');
+    ).toContain('2 agent(s)');
   });
 
   it('keeps every orphaned review row instead of collapsing them into one', async () => {

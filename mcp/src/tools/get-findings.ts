@@ -96,7 +96,10 @@ async function run(
       : '';
 
   if (page.total === 0) {
-    if (page.agents.length === 0) {
+    // `reviewers`, not `agents`: with no findings at all, `agents` is empty
+    // either way, so it cannot tell "nobody looked" from "everybody looked and
+    // found nothing" — and those are opposite answers.
+    if (page.reviewers.length === 0) {
       return textResult(
         `${page.label}: no findings recorded. Nothing has reviewed this pull request yet — ` +
           'run run_agent_on_pull_request first.',
@@ -105,8 +108,8 @@ async function run(
     // Reviewed, and clean — which is a different answer from "never reviewed",
     // and more different still when older runs are sitting behind `all_runs`.
     return textResult(
-      `${page.label}: ${page.agents.length} agent(s) reviewed it and recorded no findings ` +
-        `(${page.agents.join(', ')}).${hidden}`,
+      `${page.label}: ${page.reviewers.length} agent(s) reviewed it and recorded no findings ` +
+        `(${page.reviewers.join(', ')}).${hidden}`,
     );
   }
   if (page.matched === 0) {
