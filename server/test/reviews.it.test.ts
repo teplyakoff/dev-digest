@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
-import { waitForPrRuns } from './helpers/runs.js';
+import { waitForPrRuns, waitForRunTrace } from './helpers/runs.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
@@ -383,6 +383,10 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
       });
       await waitForPrRuns(pg.handle.db, pr.id, { expected });
       const runId = res.json().runs[0].run_id;
+      // The run being terminal does NOT mean its trace has been written — see
+      // `waitForRunTrace`. Without this the GET below can 404 under load, and
+      // the assertion fails as `Cannot read properties of undefined`.
+      await waitForRunTrace(pg.handle.db, runId);
       return (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
     };
 
