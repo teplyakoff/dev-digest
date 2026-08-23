@@ -21,11 +21,17 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [acceptance-criteria](acceptance-criteria/SKILL.md) | Shared | One definition of a well-formed criterion — EARS patterns, the six quality tests, `AC-N`/`NFR-N` numbering, the four verification kinds |
 | [engineering-insights](engineering-insights/SKILL.md) | Shared | Reads a package's `INSIGHTS.md` at session start; appends what was learned at the end |
 | [pr-self-review](pr-self-review/SKILL.md) | Shared | Gates a pull request on the local diff — runs the CI gates, routes the change set to the skills above, blocks `gh pr create` on a critical finding |
+| [workflow-retro](workflow-retro/SKILL.md) | Shared | Retrospective on a multi-agent run — tokens, agent count, launch order, real concurrency, duplicated reading, failures; measured from the session transcripts |
 
-## The one skill that runs the others
+## The two skills that are not knowledge files
 
-`pr-self-review` is the only entry above that is not a knowledge file. It is a
-workflow: it decides which of the skills in this table apply to a given diff and
+`workflow-retro` is **manual only** — you invoke it, nothing schedules it. It
+reports how a multi-agent run went: tokens per agent, launch order, what really overlapped, which
+files two agents both re-read. It reads the transcripts under
+`~/.claude/projects/**`, writes no `INSIGHTS.md` of its own, and hands durable
+lessons to `engineering-insights`.
+
+`pr-self-review` is the other one. It is a workflow: it decides which of the skills in this table apply to a given diff and
 enforces the result through `.claude/hooks/pr-guard.sh`, a `PreToolUse` hook
 registered in `.claude/settings.json`.
 

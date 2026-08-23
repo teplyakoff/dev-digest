@@ -124,6 +124,13 @@ way an existing spec assumes.
   parallel and each returns its own report; this repo has run five at a time. One
   question per subagent — a brief carrying three questions comes back with the
   first answered well and the rest thin.
+- **Launch them blocking, never in the background.** A background child's
+  report is delivered to the session's main loop, not to you: you receive the
+  launch acknowledgement and nothing else, and you will finish the pass
+  without ever seeing the answer. Measured on SPEC-06 — four briefs, four
+  acknowledgements, zero reports, and the same six files re-read by hand
+  afterwards. If you find yourself writing "the report did not return, so I
+  re-derived it", that is this mistake and not a fact about the repo.
 - **Say which mode you want.** `researcher` runs REPO (how this codebase works,
   where, why it changed) or EXTERNAL (what a library, RFC, CVE or release
   actually says). Naming the mode in the brief is the difference between a
@@ -392,6 +399,11 @@ check is visible as a skipped check.
 
 **Criteria**
 - Does every `AC` describe exactly one checkable thing?
+- Re-read every criterion for a **second reaction** joined by "and", "та" or a
+  negation — a positive requirement with a prohibition attached is two verdicts
+  under one id. Run this over criteria you **appended** as well as the ones you
+  drafted first: on SPEC-06 this pass caught three compound criteria and missed
+  two more, both of them late additions, which a reader found afterwards.
 - Is the condition distinguishable from the reaction in every `AC`?
 - Do any two criteria contradict each other?
 - Is it behaviour, or did an implementation detail leak in? (A file path or a

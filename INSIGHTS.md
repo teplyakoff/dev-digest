@@ -98,6 +98,30 @@ here. Here is for what has no package at all.
   one level in: that one says test the neighbouring *files*, this one says test
   the other places in the *same* document. (2026-08-21)
 
+- **A "standalone" design HTML under `_assets/` is a bundler shell — grepping it
+  finds the artboard names and nothing else.** `_assets/L02/DevDigest Design
+  (standalone) (3).html` is 1.8 MB but only 180 lines: the screens live
+  base64+gzip inside a `<script type="__bundler/manifest">` tag, so a search for
+  `ScreenContext` returns two hits, both references in the artboard list, and the
+  component itself appears nowhere. Reading the design means unpacking it —
+  `json.loads` the manifest, `base64.b64decode` each entry, `gzip.decompress`
+  when `compressed` is set — after which `screen_tour_context.jsx` and the rest
+  are plain JSX. `spec-creator`'s Phase 2 sends agents to these files by path, so
+  an agent that greps and reports "the design does not contain this screen" is
+  wrong and will say so confidently. (2026-08-22)
+
+- **Run metrics are on disk; do not ask an agent what it spent.** Every session
+  writes `~/.claude/projects/<slug>/<session>.jsonl` plus one
+  `<session>/subagents/agent-<id>.jsonl` per subagent, each carrying `usage`
+  per call, timestamps, tool names with arguments, and `is_error` on results —
+  enough to derive tokens per agent, launch order, real concurrency, which files
+  two agents both read, and which tool calls failed.
+  `.claude/skills/workflow-retro/scripts/collect-run.py` does this. Two traps it
+  exists to avoid: a resumed agent's first→last timestamp spans every idle hour
+  between its bursts (`spec-creator` measured 1138 m that way and 37 m when
+  summed over bursts), and summing `input_tokens` gives billing, not context
+  size. (2026-08-22)
+
 ## What Doesn't Work
 
 - **A subagent whose `tools` allowlist omits `Skill` cannot invoke any skill in
@@ -365,6 +389,22 @@ here. Here is for what has no package at all.
   override is the user's to spend — `pr-self-review/SKILL.md` — and an agent that
   learns to reach for it on a documented false positive has learned the habit
   that defeats the gate. (2026-08-21)
+
+- **A subagent that spawns children in the background never receives their
+  reports — the main loop does.** `spec-creator` launched four `researcher`
+  briefs with `run_in_background`, and its transcript
+  (`agent-abc292521de4140b3.jsonl`) holds four launch acknowledgements of 1 099
+  chars each and **zero** task-notifications; all four reports were delivered to
+  the session's main loop instead. It finished the pass without them, re-read six
+  files its own children had already covered (`simple-git.ts`,
+  `tokenizer/index.ts`, `schema/agents.ts`, `schema/context.ts`,
+  `repos/service.ts`, `run-executor.ts`), and reported honestly that "only one
+  returned". 43 178 output tokens landed with the wrong recipient. A nested agent
+  must launch its research **blocking**, or the orchestrator must forward what
+  arrives. Mirror image of the 2026-08-06 entry above, where a *nested*
+  researcher's cost was reported to the planner and never to the main loop:
+  delivery follows the spawn mode, and neither direction is the one you assume.
+  (2026-08-22)
 
 ## Codebase Patterns
 
@@ -736,6 +776,14 @@ here. Here is for what has no package at all.
   `server/src/modules/repos/helpers.ts`, and the argv form `spawn(rg, [...])` at
   `server/src/adapters/codeindex/ripgrep.ts:60`, which is **not** command
   injection and must not be flagged as one. (2026-08-20)
+
+- **With `Edit` unavailable, a self-checking agent rewrites whole files.**
+  `spec-creator` issued 10 `Write` calls against 2 paths in one session — five
+  full rewrites each — because its Phase 6 self-check fixes findings one at a
+  time and `Edit` returned `No such tool available: Edit. Edit is disabled for
+  this session, in subagents as well as here.` A one-word correction cost a
+  ~30 KB write. When `Edit` is off, tell the agent to batch its corrections into
+  one pass rather than fixing as it finds. (2026-08-22)
 
 ## Recurring Errors & Fixes
 
