@@ -37,12 +37,34 @@ describe("nav registry — every shipped route is registered", () => {
     expect(item!.gKey).toBe(gKey);
   });
 
+  // Project Context (L06) is the one entry with NO g-key, so it cannot ride the
+  // table above. Its absence is pinned rather than assumed: the design item
+  // carries key, label and icon only, and a letter chosen here would be a
+  // requirement nobody wrote down. If one is ever assigned, this test fails and
+  // the SHORTCUTS row has to be added with it.
+  it("context → /repos/:repoId/context, deliberately without a g-key", () => {
+    const item = byKey("context");
+    expect(item, 'nav entry "context" is missing from NAV').toBeDefined();
+    expect(item!.href).toBe("/repos/:repoId/context");
+    expect(item!.label).toBe("Project Context");
+    expect(item!.gKey).toBeUndefined();
+  });
+
+  // Position, not just membership. The design puts Project Context directly
+  // after Pull Requests, and "it is somewhere in WORKSPACE" is a weaker claim
+  // that a reshuffle would satisfy.
+  it("places context second in WORKSPACE, right after Pull Requests", () => {
+    const workspace = NAV.find((g) => g.section === "WORKSPACE")!;
+    expect(workspace.items.map((i) => i.key)).toEqual(["pulls", "context"]);
+  });
+
   // The sidebar renders one header per group, so which group an item sits in is
   // user-visible grouping, not an implementation detail. Pinned because the
   // knowledge-layer pages drifted into WORKSPACE once already, while their own
   // breadcrumbs read "Skills Lab".
   it.each([
     ["pulls", "WORKSPACE"],
+    ["context", "WORKSPACE"],
     ["skills", "SKILLS LAB"],
     ["agents", "SKILLS LAB"],
     ["conventions", "SKILLS LAB"],
@@ -74,6 +96,7 @@ describe("nav registry — every shipped route is registered", () => {
     expect(resolveHref(byKey("skills")!.href, "repo-1")).toBe("/skills");
     expect(resolveHref(byKey("pulls")!.href, "repo-1")).toBe("/repos/repo-1/pulls");
     expect(resolveHref(byKey("conventions")!.href, "repo-1")).toBe("/repos/repo-1/conventions");
+    expect(resolveHref(byKey("context")!.href, "repo-1")).toBe("/repos/repo-1/context");
     // No active repo → the placeholder, not a broken "/repos/null/pulls".
     expect(resolveHref(byKey("pulls")!.href, null)).toBe("/repos/_/pulls");
   });
