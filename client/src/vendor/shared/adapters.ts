@@ -290,6 +290,24 @@ export interface CodeIndex {
  *
  * repo-intel is NOT migrated onto this yet; its four raw imports stay until
  * someone does that as its own change.
+ *
+ * **`list` reverses a decision this repo recorded in writing.**
+ * `server/docs/specs/04-conventions.md:236-238` says, in as many words, that
+ * "`SourceReader` stays a one-method port instead of growing a directory walk."
+ * That was right while the only consumer was the Conventions Extractor, which
+ * samples files repo-intel has already ranked and never needs to discover any.
+ * SPEC-06's import picker cannot exist without discovery: it offers a person the
+ * `.md` files that are actually in their clone, so the walk feeds a PICKER, not a
+ * prompt, and nothing downstream of it is a model call.
+ *
+ * It belongs on the PORT rather than inside `modules/context/` because
+ * `modules/repo-intel/pipeline/walk.ts:23-32` already carries two
+ * `eslint-disable no-restricted-imports` whose own comment names extracting
+ * exactly this port as the payoff. Putting the walk anywhere else would add a
+ * seventh raw-`fs` excuse to a codebase that has written down that it will not
+ * add more. This reversal is recorded in three places, because a negative
+ * decision written into a comment has to be reversed everywhere it is written
+ * down: here, in SPEC-06's *Inputs and provenance*, and in the PR body.
  */
 export interface SourceReader {
   /**
@@ -302,6 +320,37 @@ export interface SourceReader {
    * waiting for its first careless caller.
    */
   read(clonePath: string, relPath: string): Promise<string | null>;
+
+  /**
+   * Repo-relative paths of the files under `clonePath` whose extension is in
+   * `opts.extensions`, forward-slash normalised and sorted alphabetically, each
+   * with its size in bytes.
+   *
+   * The SIZE comes from the directory entry, not from reading the file, and that
+   * is what lets a caller refuse an oversized file without ever holding it in
+   * memory. A `list` that returned paths alone would force every caller to read
+   * first and judge afterwards — which is a heap exhaustion waiting for the
+   * first hostile clone, since a clone is content an outsider influences.
+   *
+   * The sort happens BEFORE the cap, so `maxEntries` always returns the
+   * alphabetically first N rather than whatever the filesystem handed back
+   * first — a list that reshuffles between two calls is a list a person cannot
+   * work through. `truncated` says the cap actually bit, and is a returned fact
+   * rather than a length comparison the caller re-derives from a constant it
+   * would then own a second copy of.
+   *
+   * Answers `{ entries: [], truncated: false }` for a root that is absent or
+   * unreadable, for the same reason `read` answers `null`: a repo with no clone
+   * yet is data, not a failure, and the picker renders an empty list.
+   *
+   * Directories in `EXCLUDED_DIRS` are never descended into, and every entry is
+   * re-checked against the resolved root — a SYMLINKED directory can walk out of
+   * a clone exactly as a symlinked file can be read out of one.
+   */
+  list(
+    clonePath: string,
+    opts: { extensions: string[]; maxEntries: number },
+  ): Promise<{ entries: Array<{ path: string; bytes: number }>; truncated: boolean }>;
 }
 
 // ---------- Auth (pluggable; MVP = LocalNoAuthProvider) ----------

@@ -327,6 +327,33 @@ export class MockSourceReader implements SourceReader {
     this.reads.push(relPath);
     return this.files[relPath] ?? null;
   }
+
+  /**
+   * The in-memory record IS the clone, so `list` is the same filter, sort and cap
+   * the filesystem implementation applies — over keys instead of dirents.
+   *
+   * Its existence is the point: without it every test that exercises the import
+   * picker would need a real temp directory, which is how a suite ends up with
+   * fixtures that only pass on the machine that wrote them.
+   */
+  async list(
+    _clonePath: string,
+    opts: { extensions: string[]; maxEntries: number },
+  ): Promise<{ entries: Array<{ path: string; bytes: number }>; truncated: boolean }> {
+    const wanted = new Set(opts.extensions.map((e) => e.toLowerCase()));
+    const sorted = Object.keys(this.files)
+      .filter((p) => {
+        const dot = p.lastIndexOf('.');
+        return dot > 0 && wanted.has(p.slice(dot).toLowerCase());
+      })
+      .sort();
+    return {
+      entries: sorted
+        .slice(0, opts.maxEntries)
+        .map((path) => ({ path, bytes: Buffer.byteLength(this.files[path] ?? '', 'utf8') })),
+      truncated: sorted.length > opts.maxEntries,
+    };
+  }
 }
 
 // ---------- Mock Auth / Secrets ----------
