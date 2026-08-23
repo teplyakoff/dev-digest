@@ -1,24 +1,58 @@
 {
   "title": "Project Context",
-  "chunks": "{count} chunks",
+  "subtitle": "Markdown documents this repo's agents can be given to read.",
+  "chunks": "{count, plural, one {# chunk} other {# chunks}}",
   "reindex": "Re-index",
   "indexing": "Indexing…",
   "resync": "Resync",
   "resyncing": "Resyncing…",
   "indexStatus": "Index status: {status}",
-  "loadError": "Couldn’t load specs",
+  "loadError": "Couldn’t load this repo’s documents",
   "kb": "{kb}kb",
+  "status": "{docs, plural, one {# document} other {# documents}} · {size}",
   "empty": {
-    "title": "No spec files yet",
-    "body": "Drop your PRDs, tech specs, and acceptance criteria under .devdigest/specs/. Every agent and the PR brief read them as grounding context."
+    "title": "No documents yet",
+    "body": "Add a Markdown document, then attach it to an agent or a skill. Nothing here is read automatically — an agent sees a document only once you attach it."
+  },
+  "add": {
+    "import": "Import from repo",
+    "new": "New document",
+    "upload": "Upload .md"
   },
   "mode": {
     "preview": "preview",
     "edit": "edit"
   },
   "editor": {
-    "loadError": "Couldn’t load spec",
+    "loadError": "Couldn’t load this document",
     "save": "Save",
-    "saving": "Saving…"
-  }
+    "saving": "Saving…",
+    "delete": "Delete {name}",
+    "deleteShort": "Delete"
+  },
+  "picker": {
+    "title": "Import from this repo",
+    "empty": "No .md files in this clone.",
+    "notCloned": "This repo hasn’t been cloned yet, so there’s nothing to import from.",
+    "truncated": "Showing the first {count, plural, one {# file} other {# files}}. There are more.",
+    "import": "Import",
+    "skipped": {
+      "too_large": "Too large to import",
+      "not_utf8": "Not UTF-8 text",
+      "outside_clone": "Outside this repo’s clone"
+    },
+    "rescan": "Rescan"
+  },
+  "targets": {
+    "agents": "Agents",
+    "skills": "Skills",
+    "tokens": "{count, plural, one {# token} other {# tokens}} attached",
+    "usedBy": "Used by {count, plural, one {# agent} other {# agents}}",
+    "warn": "That’s a lot of context — this agent will carry {count, plural, one {# token} other {# tokens}} on every review.",
+    "missing": "This document is no longer in the store",
+    "attach": "Attach {name}",
+    "detach": "Detach {name}",
+    "title": "Attach to"
+  },
+  "tokens": "{count, plural, one {# token} other {# tokens}}"
 }

@@ -35,3 +35,18 @@ export function formatTokens(tokensIn: number, tokensOut: number): string {
 export function skillTokens(trace: RunTrace): number {
   return (trace.config.skills ?? []).reduce((n, sk) => n + sk.tokens, 0);
 }
+
+/**
+ * What the project-context block cost this run, summed from the per-document
+ * counts the server measured.
+ *
+ * Not recomputed here, for exactly the reason `skillTokens` is not: a chars/4
+ * estimate in the UI would disagree with the number the run actually paid, and
+ * nothing on screen would say which of the two you were looking at.
+ *
+ * `config.specs` is nullish — every trace persisted before L06 has no such key,
+ * and a run that carried no documents omits it rather than storing `[]`.
+ */
+export function specTokens(trace: RunTrace): number {
+  return (trace.config.specs ?? []).reduce((n, spec) => n + spec.tokens, 0);
+}

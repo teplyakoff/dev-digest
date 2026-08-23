@@ -32,6 +32,19 @@ export type {
 } from "@devdigest/shared";
 
 export type { Review, Finding, Severity, Verdict } from "@devdigest/shared";
+/* L06 — the project-context store. `export type` only: a VALUE import from
+   @devdigest/shared pulls zod into First Load JS on every route (~15 kB). */
+export type {
+  ContextDoc,
+  ContextDocBody,
+  ContextStoreStatus,
+  ImportCandidate,
+  ImportCandidates,
+  ImportSkipReason,
+  AttachmentSet,
+  AttachedDoc,
+  CreateContextDoc,
+} from "@devdigest/shared";
 export type { PrBrief, SmartDiff, SmartDiffFinding } from "@devdigest/shared";
 
 /** UI-only view model for a PR list row (derives display fields from PrMeta). */
