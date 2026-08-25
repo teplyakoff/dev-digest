@@ -13,13 +13,6 @@ const RISK_COLOR: Record<BriefRiskLevel, string> = {
   low: "var(--ok)",
 };
 
-/** The badge colour for a risk level. A function, not an object spread in JSX:
- *  `style={{ ...s.badge, ...c }}` counts as an inline style to this repo's lint
- *  and returns a new reference every render (client/INSIGHTS.md, 2026-08-13). */
-export function riskColorFor(level: BriefRiskLevel): string {
-  return RISK_COLOR[level];
-}
-
 /** The whole computed style for a risk pill, same reason as above. */
 export function riskPillFor(level: BriefRiskLevel): CSSProperties {
   return {

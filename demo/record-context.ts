@@ -275,6 +275,26 @@ async function main() {
     );
   }
 
+  // WHAT WAS ATTACHED BEFORE THIS TAKE, so `finally` can put it back.
+  //
+  // The attachment API is a REPLACE: sending `[]` detaches everything, not just
+  // what this script attached. Clearing it blind would delete a configuration
+  // the recording did not create — `record-skills.ts` learned the same lesson
+  // about an agent's skill links and says it plainly: the recording is
+  // evidence, not a migration.
+  const priorAgentDocs = new Map<string, string[]>();
+  for (const agent of [agent1, agent2]) {
+    const attached = await api<{ id: string; missing?: boolean }[]>(`/agents/${agent.id}/context-docs`);
+    priorAgentDocs.set(agent.id, attached.map((d) => d.id));
+  }
+  const priorSkillDocs = (
+    await api<{ id: string }[]>(`/skills/${skill.id}/context-docs`)
+  ).map((d) => d.id);
+  const priorCount = [...priorAgentDocs.values()].flat().length + priorSkillDocs.length;
+  if (priorCount > 0) {
+    log(`noted ${priorCount} pre-existing attachment(s) to restore afterwards`);
+  }
+
   log(`preflight ✓ ${candidates.length} candidate(s), agent "${agent1.name}" → enabled skill "${skill.name}"`);
 
   const created: string[] = [];
@@ -492,16 +512,22 @@ async function main() {
 
     // Cleanup runs even after a failure. A take that left its documents behind
     // would make the next one start at "1 agent" and film nothing.
+    //
+    // RESTORE, never clear: the sets go back to exactly what the preflight
+    // read, so an installation that already had documents attached keeps them.
+    // The documents this take created are deleted below, and deleting a
+    // document takes its attachment rows with it, so the restored ids are only
+    // ever the pre-existing ones.
     for (const agent of [agent1, agent2]) {
       await api(`/agents/${agent.id}/context-docs`, {
         method: "PUT",
-        body: JSON.stringify({ doc_ids: [] }),
-      }).catch(() => {});
+        body: JSON.stringify({ doc_ids: priorAgentDocs.get(agent.id) ?? [] }),
+      }).catch(() => warn(`could not restore ${agent.name}'s attachments`));
     }
     await api(`/skills/${skill.id}/context-docs`, {
       method: "PUT",
-      body: JSON.stringify({ doc_ids: [] }),
-    }).catch(() => {});
+      body: JSON.stringify({ doc_ids: priorSkillDocs }),
+    }).catch(() => warn(`could not restore skill "${skill.name}"'s attachments`));
     for (const id of created) {
       await api(`/repos/${repo.id}/context/docs/${id}`, { method: "DELETE" }).catch(() => {});
     }

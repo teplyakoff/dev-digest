@@ -21,7 +21,7 @@ import { useTranslations } from "next-intl";
 import { Badge, Button, Card, Icon, SectionLabel, Skeleton } from "@devdigest/ui";
 import type { BriefRiskLevel, PrBriefRecord, Risk } from "@devdigest/shared";
 import { RunCostBadge } from "@/components/run-cost-badge/RunCostBadge";
-import { s, riskColorFor, riskDotFor, riskPillFor } from "./styles";
+import { s, riskDotFor, riskPillFor } from "./styles";
 
 /** AC-40. Ten is the ceiling the card renders; the count beside it (AC-41) is
  *  the length of the WHOLE list, so a truncation is never silent. The server
