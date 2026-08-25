@@ -88,7 +88,13 @@ export function FileCard({
     : 0;
 
   return (
-    <div style={s.fileCard}>
+    // `data-file-path` is the ONE addition the review-focus deep link needed on
+    // this shared card: which file a card is for is otherwise readable only from
+    // its rendered text, and `?file=<path>` has to be checkable against a
+    // specific card. It is an attribute, not a new prop — the card's behaviour
+    // is unchanged, and Smart Diff already decides what is open through
+    // `smart.defaultOpen`.
+    <div style={s.fileCard} data-file-path={file.path}>
       <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />

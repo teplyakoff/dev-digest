@@ -5,7 +5,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { PrIntentView } from "@devdigest/shared";
+import type { PrBriefView, PrIntentView } from "@devdigest/shared";
 // EIGHT levels up from a route-local `_components/<Name>/` folder — the
 // specifier is copied from a sibling rather than counted (client/INSIGHTS.md,
 // "Codebase Patterns").
@@ -74,9 +74,60 @@ const BLAST_VIEW = {
   counts: { symbols: 1, callers: 1, endpoints: 1 },
 };
 
+const BRIEF_VIEW: PrBriefView = {
+  brief: {
+    pr_id: "pr1",
+    what: "Adds a per-IP rate limiter in front of the public API routes.",
+    why: "The public API was knocked over by a scraper on the 3rd.",
+    risk_level: "high",
+    risks: [
+      {
+        kind: "availability",
+        title: "Limiter shares one in-process counter",
+        explanation: "Two API instances would each allow the full quota.",
+        severity: "high",
+        file_refs: ["src/middleware/ratelimit.ts"],
+      },
+    ],
+    review_focus: [
+      { path: "src/middleware/ratelimit.ts", reason: "the whole limiter lives here" },
+      { path: "src/api/public/index.ts", reason: "where it is mounted" },
+    ],
+    risks_grounded: true,
+    dropped_blocks: ["context-docs:ARCHITECTURE.md"],
+    unavailable_inputs: [],
+    head_sha: "sha-one",
+    provider: "openrouter",
+    model: "deepseek/deepseek-v4-flash-0731",
+    derived_at: "2026-08-20T09:15:00Z",
+    tokens_in: 6120,
+    tokens_out: 480,
+    cost_usd: 0.0021,
+    attempts: 1,
+  },
+  stale: false,
+  reused: true,
+  model_calls: 0,
+};
+
+/** The server's answer for a PR whose brief was never built: a 200 carrying a
+ *  null, not a 404 (server AC-67). It is what makes the empty state and the
+ *  error state distinguishable at all. */
+const EMPTY_BRIEF_VIEW: PrBriefView = { brief: null, stale: false, reused: false, model_calls: 0 };
+
+const rebuild = vi.fn();
+const openFile = vi.fn();
+
 /** Mutable per-test query state. `vi.hoisted` because the `vi.mock` factory
  *  below is hoisted above every other statement in this file. */
-const query = vi.hoisted(() => ({ loading: false }));
+const query = vi.hoisted(() => ({
+  loading: false,
+  /** The BRIEF query's own states — separate from the intent's, because the two
+   *  fail independently and the tab has to show that. */
+  briefError: false,
+  briefEmpty: false,
+  rebuilding: false,
+}));
 
 // No `QueryClientProvider` on purpose: with both hooks mocked, this tab renders
 // nothing that touches React Query. If a real hook ever leaks through, the
@@ -91,6 +142,19 @@ vi.mock("@/lib/hooks/intent", () => ({
     isLoading: query.loading,
   }),
   useRecalculateIntent: () => ({ mutate: recalculate, isPending: false }),
+}));
+
+// The brief's two hooks, mocked for the same reason as the intent's: this file
+// is about whether THE TAB feeds the card, so the transport underneath is
+// replaced and the card is rendered for real.
+vi.mock("@/lib/hooks/brief", () => ({
+  usePrBrief: () => ({
+    data: query.briefError ? undefined : query.briefEmpty ? EMPTY_BRIEF_VIEW : BRIEF_VIEW,
+    isLoading: false,
+    isError: query.briefError,
+    refetch: vi.fn(),
+  }),
+  useRebuildBrief: () => ({ mutate: rebuild, isPending: query.rebuilding }),
 }));
 
 // The Blast card is the tab's second half and fetches through React Query too.
@@ -110,7 +174,12 @@ import { OverviewTab } from "./OverviewTab";
 afterEach(() => {
   cleanup();
   recalculate.mockClear();
+  rebuild.mockClear();
+  openFile.mockClear();
   query.loading = false;
+  query.briefError = false;
+  query.briefEmpty = false;
+  query.rebuilding = false;
 });
 
 const PR_BODY = "Rate limiting was requested after the incident on the 3rd.";
@@ -118,7 +187,14 @@ const PR_BODY = "Rate limiting was requested after the incident on the 3rd.";
 function renderTab(headSha = "sha-one") {
   return render(
     <NextIntlClientProvider locale="en" messages={{ prReview, common, blast }}>
-      <OverviewTab prId="pr1" prBody={PR_BODY} headSha={headSha} repoId="repo1" repoFullName="acme/api" />
+      <OverviewTab
+        prId="pr1"
+        prBody={PR_BODY}
+        headSha={headSha}
+        repoId="repo1"
+        repoFullName="acme/api"
+        onOpenFile={openFile}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -150,7 +226,14 @@ describe("OverviewTab — the intent card", () => {
   it("still shows the card on a PR opened with no description", () => {
     render(
       <NextIntlClientProvider locale="en" messages={{ prReview, common, blast }}>
-        <OverviewTab prId="pr1" prBody={null} headSha="sha-one" repoId="repo1" repoFullName="acme/api" />
+        <OverviewTab
+          prId="pr1"
+          prBody={null}
+          headSha="sha-one"
+          repoId="repo1"
+          repoFullName="acme/api"
+          onOpenFile={openFile}
+        />
       </NextIntlClientProvider>,
     );
     expect(screen.getByText(/per-IP rate limiter to the public API/i)).toBeInTheDocument();
@@ -180,7 +263,15 @@ describe("OverviewTab — the intent card", () => {
     // controls that have nothing to do with whether a classifier call is one
     // click away. Counting them here would make an unrelated component able to
     // fail this test — and, worse, able to pass it by rendering nothing.
-    const intentCard = container.querySelector("div")!.children[0] as HTMLElement;
+    //
+    // RE-PINNED, not widened, when the brief card landed above the pair (AC-36):
+    // the tab's top-level children are now [brief card, intent/blast grid,
+    // description], so the intent card is the GRID's first child. The old
+    // locator — "the first div's first child" — silently started pointing at the
+    // brief card's header, whose rebuild button has nothing to do with whether a
+    // classifier call is one click away.
+    const pair = container.children[1] as HTMLElement;
+    const intentCard = pair.children[0] as HTMLElement;
     expect(within(intentCard).queryAllByRole("button")).toHaveLength(0);
   });
 
@@ -208,5 +299,126 @@ describe("OverviewTab — the intent card", () => {
 
     renderTab("sha-one");
     expect(screen.queryByText(STALE)).not.toBeInTheDocument();
+  });
+});
+
+/* THE BRIEF CARD, AT THE LEVEL WHERE THE WIRING IS VISIBLE.
+
+   `PrBriefCard.test.tsx` hands the card its props by hand, so it can never fail
+   because nothing passes them — the exact shape that let `AgentCard`'s
+   skill-count badge ship green and invisible for a whole lesson
+   (client/INSIGHTS.md, 2026-08-05). These tests render the card through the tab
+   that owns `usePrBrief` / `useRebuildBrief`, from MOCKED API DATA. */
+describe("OverviewTab — the PR brief card", () => {
+  // AC-36. Position is the requirement, so position is what is asserted: the
+  // brief's text comes before the intent card's, which is the first thing in
+  // the pair below it.
+  it("renders the brief card from the API response, above the intent/blast pair", () => {
+    renderTab();
+
+    expect(screen.getByText(/per-IP rate limiter in front of the public API/i)).toBeInTheDocument();
+    expect(screen.getByText("High risk")).toBeInTheDocument();
+    // The dropped-block line proves the WHOLE response is reaching the card, not
+    // just the two obvious fields.
+    expect(screen.getByText(/context-docs:ARCHITECTURE\.md/)).toBeInTheDocument();
+
+    const body = document.body.textContent ?? "";
+    expect(body.indexOf("per-IP rate limiter in front of")).toBeLessThan(
+      body.indexOf("per-IP rate limiter to the public API"),
+    );
+  });
+
+  // AC-42, THE MIDDLE LINK. The card's own test proves it calls its callback;
+  // `PrDetailView.test.tsx` proves what the URL becomes. This is the link
+  // between them — that the tab hands its `onOpenFile` down to the card at all.
+  // Without it, both ends can be green while the click goes nowhere.
+  it("passes a review-focus activation up to the page as a file path", () => {
+    renderTab();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Open src/api/public/index.ts in the changes tab",
+      }),
+    );
+    expect(openFile.mock.calls).toEqual([["src/api/public/index.ts"]]);
+  });
+
+  it("wires the rebuild button to the mutation the view owns", () => {
+    renderTab();
+    fireEvent.click(screen.getByRole("button", { name: "Rebuild brief" }));
+    expect(rebuild).toHaveBeenCalledTimes(1);
+  });
+
+  // AC-52. A rebuild is a PAID call, so a second click while the first is in
+  // flight buys a second model call for the same answer. `disabled` is asserted
+  // on the element rather than "the click did nothing", because a button that
+  // silently swallows clicks looks broken.
+  it("holds the rebuild button unavailable while a rebuild is in flight", () => {
+    query.rebuilding = true;
+    renderTab();
+
+    const button = screen.getByRole("button", { name: "Rebuild brief" });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  // AC-54. "The request failed" and "no brief has ever been built" are opposite
+  // situations, and the second one offers a button that spends money — so a
+  // failure must not render as the empty state.
+  it("shows a failed brief request as a state distinct from the empty one", () => {
+    query.briefError = true;
+    renderTab();
+
+    expect(screen.getByText(/Couldn't load the brief/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No brief has been built/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Build brief" })).not.toBeInTheDocument();
+  });
+
+  it("shows the call to build when the server says there is no brief yet", () => {
+    query.briefEmpty = true;
+    renderTab();
+
+    expect(screen.getByText(/No brief has been built/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Build brief" })).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't load the brief/i)).not.toBeInTheDocument();
+  });
+
+  /* AC-55. A rebuild that fails must leave the brief the reviewer was reading on
+     screen. The mechanism is that the mutation writes the cache in `onSuccess`
+     and nowhere else, so a failure changes no query data — and the guard that
+     matters here is that the TAB does not compensate by folding the mutation's
+     error into the card's `error` prop, which would blank a perfectly good
+     brief every time a rebuild failed. */
+  it("keeps the previous brief on screen when a rebuild fails", () => {
+    renderTab();
+    // The rebuild rejects: `mutate` is called with an `onError` callback, and
+    // this fires it the way React Query would.
+    fireEvent.click(screen.getByRole("button", { name: "Rebuild brief" }));
+    const [firstCall] = rebuild.mock.calls;
+    const options = firstCall?.[1] as { onError?: (e: unknown) => void } | undefined;
+    options?.onError?.(new Error("provider refused the request"));
+
+    expect(screen.getByText(/per-IP rate limiter in front of the public API/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't load the brief/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No brief has been built/i)).not.toBeInTheDocument();
+  });
+  /* NFR-7, and the reason it is asserted HERE rather than on either card: the
+     two regeneration controls only stand next to each other on this tab. This
+     page has already shipped two controls with one accessible name once — the
+     Smart Diff findings badge and a line's severity tag both read "Open
+     finding: …" (client/INSIGHTS.md, 2026-08-10) — and a screen-reader user
+     given two identically named buttons cannot tell a $0 action from a paid
+     one. */
+  it("gives the two regeneration buttons on this tab different accessible names", () => {
+    renderTab();
+
+    const names = screen
+      .getAllByRole("button")
+      .map((b) => b.getAttribute("aria-label") ?? b.textContent?.trim())
+      .filter((n): n is string => Boolean(n));
+
+    expect(names).toContain("Rebuild brief");
+    expect(names).toContain("Re-derive");
+    expect(new Set(names).size).toBe(names.length);
   });
 });

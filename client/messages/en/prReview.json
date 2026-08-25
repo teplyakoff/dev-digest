@@ -131,5 +131,33 @@
     "nothingInScope": "The classifier named nothing in scope.",
     "nothingOutOfScope": "Nothing was named as deliberately out of scope.",
     "heading": "Intent"
+  },
+  "brief": {
+    "heading": "PR Brief",
+    "none": "No brief has been built for this pull request yet.",
+    "build": "Build brief",
+    "rebuild": "Rebuild brief",
+    "errorTitle": "Couldn't load the brief",
+    "errorBody": "The brief could not be read. Retrying costs nothing — reading a brief never calls a model.",
+    "retry": "Try again",
+    "riskLevel": {
+      "high": "High risk",
+      "medium": "Medium risk",
+      "low": "Low risk"
+    },
+    "what": "What it changes",
+    "why": "Why",
+    "risks": "Risks",
+    "noRisks": "No risks were named for this change.",
+    "ungrounded": "These risks could not be confirmed against the changed files, so none are shown. The risk level above is still the one that was reported.",
+    "focus": "Review focus",
+    "focusEmpty": "No files were singled out to read first.",
+    "focusCount": "Showing {shown} of {total, plural, one {# file} other {# files}}",
+    "openFile": "Open {path} in the changes tab",
+    "cached": "Cached",
+    "stale": "Built against an older commit",
+    "dropped": "Left out to fit the token budget:",
+    "builtBy": "Built by {model} on {when}.",
+    "rebuildFailed": "Couldn't rebuild the brief."
   }
 }

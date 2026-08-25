@@ -76,7 +76,17 @@ vi.mock("../PrDetailHeader", () => ({
     <button onClick={() => onSetTab("findings")}>go to findings</button>
   ),
 }));
-vi.mock("../OverviewTab", () => ({ OverviewTab: () => <div>overview tab</div> }));
+// The Overview stub exposes exactly the one handler this view owns: what the
+// brief card's review-focus click does to the URL. The card itself, and the fact
+// that the tab passes this handler to it, are covered by their own tests.
+vi.mock("../OverviewTab", () => ({
+  OverviewTab: ({ onOpenFile }: { onOpenFile: (path: string) => void }) => (
+    <div>
+      overview tab
+      <button onClick={() => onOpenFile("src/middleware/ratelimit.ts")}>open focus file</button>
+    </div>
+  ),
+}));
 vi.mock("../FindingsTab", () => ({ FindingsTab: () => <div>findings tab</div> }));
 // The Files tab renders its own toggle and its own finding tags, both covered
 // by its own tests. What PrDetailView owns is what each of those handlers does
@@ -85,12 +95,17 @@ vi.mock("../DiffTab", () => ({
   DiffTab: ({
     onSetView,
     onOpenFinding,
+    selectedPath,
   }: {
     onSetView: (v: "smart" | "original") => void;
     onOpenFinding: (id: string) => void;
+    selectedPath?: string | null;
   }) => (
     <div>
       diff tab
+      {/* Echoed so the URL → tab half of the deep link is observable here; what
+          the tab DOES with it is `SmartDiffViewer.test.tsx`. */}
+      <span>selected: {selectedPath ?? "none"}</span>
       <button onClick={() => onSetView("original")}>toggle to original</button>
       <button onClick={() => onOpenFinding("fd-7")}>open finding</button>
     </div>
@@ -175,5 +190,40 @@ describe("PrDetailView", () => {
     state.detailError = true;
     render(<PrDetailView />);
     expect(screen.getByText("Couldn't load this pull request")).toBeInTheDocument();
+  });
+  /* AC-42, THE LAST LINK. `PrBriefCard.test.tsx` proves the card calls back with
+     a path; `OverviewTab.test.tsx` proves the tab hands its handler to the card;
+     this proves what the handler does — and the two properties that only exist
+     here: ONE navigation, and a PUSH.
+
+     One navigation, because two one-key setters read `search` from the same
+     render's closure and race, landing a URL with `file` but no `tab`. A push,
+     because the reviewer left Overview for somewhere else: replacing would make
+     Back skip the page they came from. */
+  it("opens a review-focus file with one pushed navigation carrying tab, view and file", () => {
+    render(<PrDetailView />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open focus file/i }));
+
+    expect(nav.push).toHaveBeenCalledTimes(1);
+    expect(nav.push).toHaveBeenCalledWith(
+      "/repos/r1/pulls/42?tab=diff&view=smart&file=src%2Fmiddleware%2Fratelimit.ts",
+    );
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  // The other half of the same parameter: arriving on that URL hands the path to
+  // the changes tab. Without this, the push above could be writing a parameter
+  // nothing reads.
+  it("hands the file named by the URL down to the changes tab", () => {
+    state.search = "tab=diff&view=smart&file=src%2Fmiddleware%2Fratelimit.ts";
+    render(<PrDetailView />);
+    expect(screen.getByText(/selected: src\/middleware\/ratelimit\.ts/)).toBeInTheDocument();
+  });
+
+  it("leaves the changes tab with nothing selected when the URL names no file", () => {
+    state.search = "tab=diff&view=smart";
+    render(<PrDetailView />);
+    expect(screen.getByText(/selected: none/)).toBeInTheDocument();
   });
 });

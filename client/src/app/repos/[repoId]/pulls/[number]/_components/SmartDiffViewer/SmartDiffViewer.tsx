@@ -25,11 +25,27 @@ interface SmartDiffViewerProps {
   data: SmartDiff;
   /** The PR's files, for their patch text — `SmartDiff` carries none. */
   files: PrFile[];
+  /**
+   * The file the reviewer arrived to read, from `?file=<path>` — a review-focus
+   * click on the Overview brief. It expands THAT card and nothing else; a path
+   * that is not in this PR selects nothing, which is a legitimate landing state
+   * rather than an error (AC-44).
+   *
+   * A PATH, never a `file:line`: the brief carries no line numbers, on purpose
+   * (client/INSIGHTS.md, 2026-08-13), and this feature adds no line anchors to
+   * `CodeLine` either.
+   */
+  selectedPath?: string | null;
   /** Navigates to this finding's card in the Agent runs tab (URL-driven). */
   onOpenFinding: (id: string) => void;
 }
 
-export function SmartDiffViewer({ data, files, onOpenFinding }: SmartDiffViewerProps) {
+export function SmartDiffViewer({
+  data,
+  files,
+  selectedPath,
+  onOpenFinding,
+}: SmartDiffViewerProps) {
   const t = useTranslations("prReview");
   const patches = React.useMemo(() => patchIndex(files), [files]);
 
@@ -98,7 +114,13 @@ export function SmartDiffViewer({ data, files, onOpenFinding }: SmartDiffViewerP
                 smart={{
                   findings: file.findings,
                   isLarge: file.is_large,
-                  defaultOpen: !COLLAPSED_ROLES.includes(group.role),
+                  // DERIVED at mount from the URL, never synced into it with an
+                  // effect: "which card is open" has one owner — `FileCard`'s
+                  // own state — and the selection only sets its initial value.
+                  // The role policy still opens everything it opened before; the
+                  // selected file is added to that set, never subtracted from it.
+                  defaultOpen:
+                    file.path === selectedPath || !COLLAPSED_ROLES.includes(group.role),
                   onOpenFinding,
                 }}
               />
