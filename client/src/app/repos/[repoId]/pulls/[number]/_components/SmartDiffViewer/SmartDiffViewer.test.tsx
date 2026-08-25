@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { PrFile, SmartDiff, SmartDiffFile, SmartDiffFinding } from "@devdigest/shared";
@@ -297,5 +297,53 @@ describe("SmartDiffViewer", () => {
     // …boilerplate shut, and no error copy anywhere.
     expect(screen.queryByText("sha512-deadbeef")).not.toBeInTheDocument();
     expect(screen.getByText(LOCK_PATH)).toBeInTheDocument();
+  });
+
+  /* Bringing the selected card into view.
+
+     This is NOT the measurement trap of INSIGHTS 2026-08-08: nothing here asks
+     jsdom where an element sits or how tall it is. It asserts that the component
+     asked the right node to scroll — a call, not a layout — which is the only
+     part of "the reviewer sees the file move" this component owns. */
+  describe("scrolling to the selected file", () => {
+    let calls: Element[];
+
+    beforeEach(() => {
+      calls = [];
+      // jsdom implements no scrollIntoView, so there is nothing to restore; the
+      // component calls it optionally for exactly this reason.
+      Element.prototype.scrollIntoView = function scrollIntoView(this: Element) {
+        calls.push(this);
+      };
+    });
+
+    it("scrolls the selected file's card into view", () => {
+      const { container } = renderViewer(
+        smartDiff([
+          { role: "core", files: [file(CORE_PATH, { additions: 2, deletions: 0 })] },
+          { role: "boilerplate", files: [file(LOCK_PATH, { additions: 1, deletions: 0 })] },
+        ]),
+        vi.fn(),
+        LOCK_PATH,
+      );
+
+      // Exactly one scroll, and it landed on the SELECTED card — not the first
+      // card, which is the failure a looser assertion would sail past.
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.getAttribute("data-file-path")).toBe(LOCK_PATH);
+      expect(container.querySelectorAll("[data-file-path]")).toHaveLength(2);
+    });
+
+    it("scrolls nowhere when the URL names no file, or names one the PR lacks", () => {
+      const diff = smartDiff([
+        { role: "core", files: [file(CORE_PATH, { additions: 2, deletions: 0 })] },
+      ]);
+
+      renderViewer(diff, vi.fn(), null);
+      expect(calls).toHaveLength(0);
+
+      renderViewer(diff, vi.fn(), "src/does/not/exist.ts");
+      expect(calls).toHaveLength(0);
+    });
   });
 });

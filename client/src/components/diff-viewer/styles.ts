@@ -10,6 +10,17 @@ export const s = {
     borderRadius: 7,
     overflow: "hidden",
     background: "var(--bg-elevated)",
+    // Clears the TWO stacked sticky headers above a file card, measured in the
+    // running app: the PR header (`PrDetailHeader/styles.ts`, 175 px) and the
+    // smart-diff group header (`SmartDiffViewer/styles.ts`, 31 px), both at
+    // `top: 0` inside the same scroller. Without it a card scrolled to by
+    // `?file=<path>` lands under them: its diff shows and its own header — the
+    // file name, the one thing proving the link went where it claimed — does
+    // not. `scroll-margin-top` is what the browser subtracts during
+    // `scrollIntoView`, so it cannot race the scroll the way a follow-up
+    // `scrollBy` would. A wrapped PR title makes the real header taller and
+    // costs a row of context, never the file name.
+    scrollMarginTop: 214,
   } satisfies CSSProperties,
   fileHeader: {
     display: "flex",

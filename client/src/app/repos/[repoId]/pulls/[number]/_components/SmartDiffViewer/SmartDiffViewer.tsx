@@ -55,8 +55,59 @@ export function SmartDiffViewer({
   const totals = totalsFor(data);
   const split = data.split_suggestion;
 
+  // The ONE effect in this component, and it owns no state the render needs:
+  // `defaultOpen` above already expands the selected card, but a card thirty
+  // files down opens off-screen, so the reviewer who clicked a review-focus
+  // item sees nothing move. Bringing it into view is the other half of AC-42 —
+  // the half no criterion spells out and every reader expects.
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!selectedPath) return;
+    const root = rootRef.current;
+    if (!root) return;
+
+    // NO SELECTOR INTERPOLATION. `selectedPath` is model-produced text that
+    // survived server grounding — grounding proves the file exists, never that
+    // the string is safe to build a CSS selector out of. `FindingsPanel` does
+    // interpolate its `?finding=` value and gets away with it because that
+    // value is a uuid; this one is a path. Reading the attribute back and
+    // comparing strings costs one pass over a handful of nodes.
+    const bring = () => {
+      const card = Array.from(root.querySelectorAll("[data-file-path]")).find(
+        (node) => node.getAttribute("data-file-path") === selectedPath,
+      );
+      // A path this PR does not carry scrolls nowhere — a legitimate landing
+      // state, not an error (AC-44).
+      //
+      // `block: "start"` with the DEFAULT (instant) behaviour, and `s.fileCard`
+      // carries the `scroll-margin-top` that clears the sticky PR header.
+      // Smooth would fight the repeat below: each new call would restart an
+      // animation the next mutation interrupts.
+      card?.scrollIntoView?.({ block: "start" });
+    };
+
+    bring();
+
+    // THE LIST GROWS AFTER THIS EFFECT, and that is the whole reason for the
+    // observer. On a 92-file PR the cards mount before their diff bodies do, so
+    // the target sits ~13 px down when the first scroll lands and ~22 000 px
+    // down once the cards above it have rendered their lines. A single scroll
+    // is therefore correct at the moment it runs and wrong a beat later — which
+    // is exactly the shape that made this look fine when clicked from Overview
+    // (already laid out) and do nothing on a freshly opened shared link.
+    const observer = new MutationObserver(bring);
+    observer.observe(root, { childList: true, subtree: true });
+    // Stop chasing once the list has settled: past this point a scroll would be
+    // yanking a reader who has started scrolling for themselves.
+    const stop = setTimeout(() => observer.disconnect(), 2000);
+    return () => {
+      observer.disconnect();
+      clearTimeout(stop);
+    };
+  }, [selectedPath, data]);
+
   return (
-    <div>
+    <div ref={rootRef}>
       <div style={s.summaryStrip}>
         <span>{t("smartDiff.filesCount", { count: totals.files })}</span>
         <span className="mono tnum" style={s.stat}>
