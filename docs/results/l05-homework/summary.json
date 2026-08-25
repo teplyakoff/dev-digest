@@ -1,0 +1,98 @@
+{
+  "recorded_at": "2026-08-25T07:54:25.997Z",
+  "repo": "teplyakoff/dev-digest",
+  "pr": 1,
+  "started_empty": true,
+  "blast": {
+    "status": "full",
+    "indexed_sha": "96acaeee1db6dfde14d205d48cfb2c1bd0ca4fcd",
+    "allowlist_files": 108
+  },
+  "brief": {
+    "risk_level": "medium",
+    "what": "Adds context maps (CLAUDE.md) for each package, an engineering-insights skill with append-only INSIGHTS.md, a run cost badge with null/zero semantics, severity counters on multiple UI surfaces, a demo/screencast recorder, and mentor-driven rework on counters.",
+    "why": "These changes aim to improve codebase context, track engineering insights, surface inference costs, and provide clearer severity breakdowns in the UI, supporting better review and operational visibility.",
+    "risks": [
+      {
+        "severity": "medium",
+        "title": "Incorrect severity counting or display",
+        "file_refs": [
+          "client/src/components/severity-counters/SeverityCounters.tsx",
+          "server/src/modules/pulls/severity.ts"
+        ]
+      },
+      {
+        "severity": "medium",
+        "title": "Run cost badge misreporting or null/zero confusion",
+        "file_refs": [
+          "client/src/components/run-cost-badge/RunCostBadge.tsx",
+          "client/src/components/run-cost-badge/helpers.ts"
+        ]
+      },
+      {
+        "severity": "medium",
+        "title": "Append-only INSIGHTS.md may be overwritten or corrupted",
+        "file_refs": [
+          "server/INSIGHTS.md",
+          "client/INSIGHTS.md",
+          "demo/INSIGHTS.md",
+          "reviewer-core/INSIGHTS.md",
+          "e2e/INSIGHTS.md"
+        ]
+      },
+      {
+        "severity": "low",
+        "title": "Demo/recorder code interfering with production or tests",
+        "file_refs": [
+          "demo/record.ts",
+          "demo/package.json",
+          "demo/package-lock.json"
+        ]
+      }
+    ],
+    "review_focus": [
+      {
+        "path": "client/src/components/severity-counters/SeverityCounters.tsx",
+        "reason": "Core logic for new severity counters; correctness and UI impact."
+      },
+      {
+        "path": "server/src/modules/pulls/severity.ts",
+        "reason": "Backend logic for severity aggregation; risk of data or API errors."
+      },
+      {
+        "path": "client/src/components/run-cost-badge/RunCostBadge.tsx",
+        "reason": "Implements run cost badge; check for correct cost handling and display."
+      },
+      {
+        "path": "server/INSIGHTS.md",
+        "reason": "Append-only insights file; ensure no accidental overwrites or data loss."
+      },
+      {
+        "path": "demo/record.ts",
+        "reason": "Demo/recorder code; verify isolation from production and test code."
+      }
+    ],
+    "risks_grounded": true,
+    "dropped_blocks": [
+      "context-docs:07-pr-brief.md"
+    ],
+    "unavailable_inputs": [],
+    "head_sha": "34e22487d895fdb92e365a565ac928ecdb37cfa6",
+    "model": "openrouter/openai/gpt-4.1",
+    "tokens_in": 7501,
+    "tokens_out": 603,
+    "cost_usd": 0.008882,
+    "attempts": 1,
+    "derived_at": "2026-08-25T07:53:35.225Z"
+  },
+  "asserted": {
+    "grounded_refs": 12,
+    "grounded_focus": 5,
+    "focus_carries_no_line_numbers": true,
+    "deep_link": "/repos/574318a8-1866-4391-9829-0504a84e85e1/pulls/1?tab=diff&view=smart&file=client%2Fsrc%2Fcomponents%2Fseverity-counters%2FSeverityCounters.tsx",
+    "cache_read_model_calls": 0,
+    "rebuild_moved_derived_at": "2026-08-25T07:54:17.962Z"
+  },
+  "build_model_calls": 0,
+  "rebuild_cost_usd": 0.02013
+}

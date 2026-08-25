@@ -30,13 +30,20 @@ how to put one in a PR: `README.md`.
   github.com and asserts where it landed, because filming the `<a>` tag would
   prove the markup rather than the deep link. Its preflight refuses to launch
   unless the target repo is indexed and the PR has a symbol with ≥2 callers.
+- `npm run record:brief` — the L05 homework PR Why + Risk Brief. **Spends real
+  money**: two builds, one structured call each. It ASSERTS three things a video
+  cannot show — that every risk reference and focus path is in the PR's own
+  blast map, that no focus item carries a line number, and that re-opening the
+  same PR state answers `reused: true` with `model_calls: 0`. Frame 01 needs the
+  target PR to have no `pr_brief` row, and nothing in the product deletes one.
 - `npm run typecheck`
 
 ## Map
 
 - `record.ts` — the review loop: one step per scene, each captioned.
 - `record-skills.ts` · `record-conventions.ts` · `record-intent.ts` ·
-  `record-smart-diff.ts` · `record-blast.ts` — one lab's feature each, same shape.
+  `record-smart-diff.ts` · `record-blast.ts` · `record-brief.ts` — one lab's
+  feature each, same shape.
 - `record-mcp.ts` — the odd one out: it drives the MCP Inspector, not the
   DevDigest web app, so none of this repo's selectors apply and the Mantine
   workarounds in it are specific to that UI.
