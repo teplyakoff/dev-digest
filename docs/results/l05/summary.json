@@ -1,0 +1,40 @@
+{
+  "recorded_at": "2026-08-25T08:28:16.279Z",
+  "repo": "teplyakoff/dev-digest",
+  "pr": 4,
+  "candidates": 194,
+  "documents": [
+    {
+      "id": "c3484f73-701f-4257-b4a4-200808a63804",
+      "name": "README.md",
+      "bytes": 322,
+      "tokens": 88
+    },
+    {
+      "id": "4e8c5be0-43b2-4aab-b08a-b4178c94d8e3",
+      "name": "AGENTS.md",
+      "bytes": 1201,
+      "tokens": 299
+    },
+    {
+      "id": "8ca2c523-5a15-4eb3-9e99-5f4770a688db",
+      "name": "INSIGHTS.md",
+      "bytes": 1248,
+      "tokens": 331
+    }
+  ],
+  "agent": "Security Reviewer",
+  "second_agent": "General Reviewer",
+  "skill": "secret-handling",
+  "asserted": {
+    "counter_zero": 0,
+    "counter_after_first_attach": 1,
+    "counter_after_second_attach": 2,
+    "skill_documents_reach_the_agent": true,
+    "run_log": "Project context: 3/3 document(s) loaded"
+  },
+  "run": {
+    "run_id": "745108b0-9916-4cc5-9bb1-09c50b90f6d0",
+    "status": "done"
+  }
+}

@@ -36,14 +36,21 @@ how to put one in a PR: `README.md`.
   blast map, that no focus item carries a line number, and that re-opening the
   same PR state answers `reused: true` with `model_calls: 0`. Frame 01 needs the
   target PR to have no `pr_brief` row, and nothing in the product deletes one.
+- `npm run record:context` — the L05 lab Project Context. **Spends real money**:
+  one review run, and only for the last two scenes; the store itself calls no
+  model. It ASSERTS the counter's three values (0 → 1 → 2), that a document on a
+  skill reaches the agents linking it without being attached to them, and that
+  the run's log reports exactly `3/3`. Preflight refuses to launch unless the
+  agent links an ENABLED skill and no stored document already owns one of the
+  imported basenames. It deletes everything it created in `finally`.
 - `npm run typecheck`
 
 ## Map
 
 - `record.ts` — the review loop: one step per scene, each captioned.
 - `record-skills.ts` · `record-conventions.ts` · `record-intent.ts` ·
-  `record-smart-diff.ts` · `record-blast.ts` · `record-brief.ts` — one lab's
-  feature each, same shape.
+  `record-smart-diff.ts` · `record-blast.ts` · `record-brief.ts` ·
+  `record-context.ts` — one lab's feature each, same shape.
 - `record-mcp.ts` — the odd one out: it drives the MCP Inspector, not the
   DevDigest web app, so none of this repo's selectors apply and the Mantine
   workarounds in it are specific to that UI.
