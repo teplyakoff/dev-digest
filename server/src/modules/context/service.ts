@@ -61,7 +61,14 @@ export class ProjectContextService {
   async list(workspaceId: string, repoId: string): Promise<ContextDoc[]> {
     await this.requireRepo(workspaceId, repoId);
     const rows = await this.repo.listDocs(workspaceId, repoId);
-    return tokenCountsFor(rows, this.container.tokenizer);
+    // One extra pair of grouped queries for the whole list, not one per row:
+    // the page renders every document at once, and a per-row count would be a
+    // fan-out of the exact shape the reviewer agents flag as N+1.
+    const reach = await this.repo.agentReachCounts(
+      workspaceId,
+      rows.map((r) => r.id),
+    );
+    return tokenCountsFor(rows, this.container.tokenizer, reach);
   }
 
   /** One document with its body — the editor's load. */
@@ -412,6 +419,10 @@ export class ProjectContextService {
           name: '(deleted document)',
           bytes: 0,
           tokens: 0,
+          // A row pointing at a deleted document reaches nobody: the run resolves
+          // it to nothing and counts it as dangling, so any other number here
+          // would contradict the log line that reports the gap.
+          agents: 0,
           updated_at: new Date(0).toISOString(),
           missing: true,
         };

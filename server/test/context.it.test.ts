@@ -500,6 +500,83 @@ d('project context store', () => {
       await app.close();
     });
 
+    /* The counter the Project Context list shows, and the rule that makes it
+       mean something: it counts agents that would RECEIVE the document, so a
+       skill only contributes while it is enabled. Disabling the skill without
+       detaching anything has to move the number, because `specsForAgent`
+       filters on exactly that flag before it reads a body. */
+    it('test_context_doc_usage_it: counts agents reached directly and through an ENABLED skill, each once', async () => {
+      const app = await makeApp();
+      const repo = await makeRepo();
+
+      const doc = await app.inject({
+        method: 'POST',
+        url: `/repos/${repo.id}/context/docs`,
+        payload: { kind: 'text', name: 'REACH.md', body: '# Reach' },
+      });
+      const docId = doc.json().id as string;
+
+      const agents = await pg.handle.db
+        .insert(t.agents)
+        .values(
+          ['one', 'two'].map((n) => ({
+            workspaceId,
+            name: `reach-${n}-${seq++}`,
+            provider: 'openai' as const,
+            model: 'gpt-4.1',
+            systemPrompt: 'Review.',
+          })),
+        )
+        .returning();
+
+      const countFor = async (): Promise<number> => {
+        const list = await app.inject({ method: 'GET', url: `/repos/${repo.id}/context/docs` });
+        const row = (list.json() as { id: string; agents: number }[]).find((r) => r.id === docId);
+        return row!.agents;
+      };
+
+      // Nobody yet.
+      expect(await countFor()).toBe(0);
+
+      // One direct attachment.
+      await app.inject({
+        method: 'PUT',
+        url: `/agents/${agents[0]!.id}/context-docs`,
+        payload: { doc_ids: [docId] },
+      });
+      expect(await countFor()).toBe(1);
+
+      // A skill carrying the same document, linked to BOTH agents. The first
+      // agent already had it directly: it must not be counted twice.
+      const skill = await app.inject({
+        method: 'POST',
+        url: '/skills',
+        payload: {
+          name: `reach-skill-${Math.random().toString(36).slice(2, 8)}`,
+          description: 'A skill that carries a document.',
+          type: 'rubric',
+          body: '# Rule',
+        },
+      });
+      const skillId = skill.json().id as string;
+      await app.inject({
+        method: 'PUT',
+        url: `/skills/${skillId}/context-docs`,
+        payload: { doc_ids: [docId] },
+      });
+      for (const a of agents) {
+        await pg.handle.db.insert(t.agentSkills).values({ agentId: a!.id, skillId, order: 0 });
+      }
+      expect(await countFor()).toBe(2);
+
+      // Disabling the skill takes its agent away again — the one that had no
+      // direct attachment. Nothing was detached.
+      await pg.handle.db.update(t.skills).set({ enabled: false }).where(eq(t.skills.id, skillId));
+      expect(await countFor()).toBe(1);
+
+      await app.close();
+    });
+
     it('shows a deleted-but-attached document as missing, and lets it be detached', async () => {
       const app = await makeApp();
       const repo = await makeRepo();

@@ -41,6 +41,10 @@ export function ContextDocList({
           <span style={s.name} title={doc.name}>
             {doc.name}
           </span>
+          {/* Agents first, tokens second: the question this list answers most
+              often is "is anything actually reading this?", and a document
+              nobody reaches is worth noticing before its price. */}
+          <span style={s.agents(doc.agents > 0)}>{t("agentsAttached", { count: doc.agents })}</span>
           <span style={s.tokens}>{t("tokens", { count: doc.tokens })}</span>
         </button>
       ))}

@@ -18,6 +18,7 @@ const DOCS: ContextDoc[] = [
     name: "ARCHITECTURE.md",
     bytes: 2048,
     tokens: 512,
+    agents: 2,
     updated_at: "2026-08-22T10:00:00.000Z",
   },
   {
@@ -25,6 +26,7 @@ const DOCS: ContextDoc[] = [
     name: "a-very-long-document-name-that-will-not-fit-in-the-row.md",
     bytes: 40,
     tokens: 9,
+    agents: 0,
     updated_at: "2026-08-22T10:00:00.000Z",
   },
 ];
@@ -41,6 +43,18 @@ function renderList(selectedId: string | null = null, onSelect = vi.fn()) {
 }
 
 describe("ContextDocList", () => {
+  /* The number the lab's demo turns on: how many agents would receive this
+     document. Zero says so in words rather than showing a bare "0", because a
+     row that reads "0" next to "512 tokens" invites reading it as a second
+     count of something. */
+  it("shows how many agents each document reaches, and names the empty case", () => {
+    renderList();
+
+    expect(screen.getByText("2 agents")).toBeInTheDocument();
+    expect(screen.getByText("no agents")).toBeInTheDocument();
+  });
+
+
   it("shows each document with its name and its token count", () => {
     renderList();
     // getByRole first: the Tier-1 query and the accessible-name requirement are

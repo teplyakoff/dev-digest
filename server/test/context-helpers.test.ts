@@ -163,6 +163,9 @@ describe('test_context_tokens', () => {
       name: 'a.md',
       bytes: 13,
       tokens: 3,
+      // No reach map passed: a document nobody attached reads as 0 rather than
+      // as absent, so the list never has to decide what a missing count means.
+      agents: 0,
       updated_at: '2026-08-22T10:00:00.000Z',
     });
     // Bytes, not characters: six Cyrillic code points are twelve UTF-8 bytes,

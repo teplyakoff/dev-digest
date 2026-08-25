@@ -152,12 +152,26 @@ export interface Countable {
 export function tokenCountsFor(
   docs: Countable[],
   tokenizer: { count(text: string): number },
-): Array<{ id: string; name: string; bytes: number; tokens: number; updated_at: string }> {
+  /**
+   * Agents-reached per document id, from `agentReachCounts`. A document nobody
+   * reaches is absent from the map rather than present as `0`, so the default
+   * lives here — the same shape `AgentsRepository.skillCounts` uses.
+   */
+  reach?: Map<string, number>,
+): Array<{
+  id: string;
+  name: string;
+  bytes: number;
+  tokens: number;
+  agents: number;
+  updated_at: string;
+}> {
   return docs.map((d) => ({
     id: d.id,
     name: d.name,
     bytes: Buffer.byteLength(d.body, 'utf8'),
     tokens: tokenizer.count(d.body),
+    agents: reach?.get(d.id) ?? 0,
     updated_at: d.updatedAt.toISOString(),
   }));
 }

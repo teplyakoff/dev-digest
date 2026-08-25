@@ -30,6 +30,17 @@ export const ContextDoc = z.object({
    * an estimate for a non-`cl100k_base` model and nothing on screen says so.
    */
   tokens: z.number().int(),
+  /**
+   * How many agents would RECEIVE this document on their next run — attached to
+   * the agent directly, or riding along on an ENABLED skill that agent links.
+   * An agent reached both ways counts once.
+   *
+   * "Would receive", not "is attached to": the number has to agree with the run
+   * log's `Project context: n/m document(s) loaded`, and a count of direct
+   * attachments alone would read `0` for a document that two agents are about
+   * to be sent through a skill.
+   */
+  agents: z.number().int(),
   updated_at: z.string(),
 });
 export type ContextDoc = z.infer<typeof ContextDoc>;

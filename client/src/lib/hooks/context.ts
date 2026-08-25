@@ -182,7 +182,10 @@ export function useSetAgentContextDocs(agentId: string | null | undefined) {
       api.put<AttachedDoc[]>(`/agents/${agentId}/context-docs`, {
         doc_ids: docIds,
       } satisfies AttachmentSet),
-    onSuccess: (data) => qc.setQueryData(keys.agentDocs(agentId), data),
+    onSuccess: (data) => {
+      qc.setQueryData(keys.agentDocs(agentId), data);
+      invalidateReach(qc);
+    },
   });
 }
 
@@ -194,8 +197,28 @@ export function useSetSkillContextDocs(skillId: string | null | undefined) {
       api.put<AttachedDoc[]>(`/skills/${skillId}/context-docs`, {
         doc_ids: docIds,
       } satisfies AttachmentSet),
-    onSuccess: (data) => qc.setQueryData(keys.skillDocs(skillId), data),
+    onSuccess: (data) => {
+      qc.setQueryData(keys.skillDocs(skillId), data);
+      invalidateReach(qc);
+    },
   });
+}
+
+/**
+ * Attaching changes a NUMBER ON ANOTHER LIST.
+ *
+ * Each document row carries how many agents would receive it, so attaching to
+ * an agent or to a skill makes every visible row potentially stale — including
+ * rows in another repo's store, since a skill is workspace-wide. The list is
+ * refetched by prefix rather than by `keys.docs(repoId)` because these two
+ * mutations know an agent id or a skill id and no repo id at all, and inventing
+ * one here would be guessing which store the caller is looking at.
+ *
+ * Without this the count is right in the database and wrong on screen until a
+ * reload — which is exactly how it behaved when the count first landed.
+ */
+function invalidateReach(qc: ReturnType<typeof useQueryClient>): void {
+  qc.invalidateQueries({ queryKey: ["context-docs"] });
 }
 
 /**

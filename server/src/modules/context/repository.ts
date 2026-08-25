@@ -47,6 +47,63 @@ export class ContextRepository {
       .orderBy(asc(t.contextDocs.name));
   }
 
+  /**
+   * How many agents would RECEIVE each of `docIds` — the reverse of
+   * `specsForAgent`, read from the document's side.
+   *
+   * Two ways in, one number: attached to the agent directly, or attached to a
+   * skill that agent has linked AND that is enabled. An agent reached both ways
+   * counts once, which is why the merge is a `Set` per document rather than a
+   * `count(*)` per query — two grouped counts added together would double it.
+   *
+   * The disabled-skill exclusion is not an extra rule: `specsForAgent` filters
+   * on `skill.enabled` before it reads a single body, so a count that ignored
+   * the flag would promise text the run does not send.
+   *
+   * Scoped on the AGENT's and the SKILL's workspace as well as the document's:
+   * neither join table has a workspace column, so those predicates are the only
+   * thing keeping a cross-tenant row from inflating the number
+   * (`AgentsRepository.skillCounts` guards the same hole the same way).
+   */
+  async agentReachCounts(workspaceId: string, docIds: string[]): Promise<Map<string, number>> {
+    if (docIds.length === 0) return new Map();
+
+    const [direct, viaSkills] = await Promise.all([
+      this.db
+        .select({ docId: t.agentContextDocs.docId, agentId: t.agentContextDocs.agentId })
+        .from(t.agentContextDocs)
+        .innerJoin(t.agents, eq(t.agentContextDocs.agentId, t.agents.id))
+        .where(
+          and(
+            inArray(t.agentContextDocs.docId, docIds),
+            eq(t.agents.workspaceId, workspaceId),
+          ),
+        ),
+      this.db
+        .select({ docId: t.skillContextDocs.docId, agentId: t.agentSkills.agentId })
+        .from(t.skillContextDocs)
+        .innerJoin(t.skills, eq(t.skillContextDocs.skillId, t.skills.id))
+        .innerJoin(t.agentSkills, eq(t.agentSkills.skillId, t.skills.id))
+        .innerJoin(t.agents, eq(t.agentSkills.agentId, t.agents.id))
+        .where(
+          and(
+            inArray(t.skillContextDocs.docId, docIds),
+            eq(t.skills.workspaceId, workspaceId),
+            eq(t.agents.workspaceId, workspaceId),
+            eq(t.skills.enabled, true),
+          ),
+        ),
+    ]);
+
+    const reach = new Map<string, Set<string>>();
+    for (const row of [...direct, ...viaSkills]) {
+      const set = reach.get(row.docId) ?? new Set<string>();
+      set.add(row.agentId);
+      reach.set(row.docId, set);
+    }
+    return new Map([...reach].map(([docId, agents]) => [docId, agents.size]));
+  }
+
   /** One document with its body, or `undefined` — including for another tenant's id. */
   async getDoc(workspaceId: string, docId: string): Promise<ContextDocRow | undefined> {
     const [row] = await this.db

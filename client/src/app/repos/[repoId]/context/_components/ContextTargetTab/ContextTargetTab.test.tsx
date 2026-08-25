@@ -20,8 +20,8 @@ import messages from "../../../../../../../messages/en/context.json";
  */
 
 const DOCS: ContextDoc[] = [
-  { id: "d1", name: "SMALL.md", bytes: 40, tokens: 10, updated_at: "2026-08-22T10:00:00.000Z" },
-  { id: "d2", name: "HUGE.md", bytes: 90_000, tokens: 25_000, updated_at: "2026-08-22T10:00:00.000Z" },
+  { id: "d1", name: "SMALL.md", bytes: 40, tokens: 10, agents: 0, updated_at: "2026-08-22T10:00:00.000Z" },
+  { id: "d2", name: "HUGE.md", bytes: 90_000, tokens: 25_000, agents: 0, updated_at: "2026-08-22T10:00:00.000Z" },
 ];
 
 const AGENT: Agent = {
@@ -151,6 +151,7 @@ describe("ContextTargetTab", () => {
         name: "DELETED.md",
         bytes: 0,
         tokens: 0,
+        agents: 0,
         updated_at: "1970-01-01T00:00:00.000Z",
         missing: true,
       },

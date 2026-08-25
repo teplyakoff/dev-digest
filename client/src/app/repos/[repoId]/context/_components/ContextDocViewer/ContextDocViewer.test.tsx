@@ -14,6 +14,7 @@ const DOC: ContextDocBody = {
   name: "ARCHITECTURE.md",
   bytes: 42,
   tokens: 11,
+  agents: 0,
   updated_at: "2026-08-22T10:00:00.000Z",
   body: "# Architecture\n\nThe store lives in Postgres.",
 };

@@ -287,6 +287,7 @@ describe('platform DTOs', () => {
       name: 'ARCHITECTURE.md',
       bytes: 2048,
       tokens: 512,
+      agents: 2,
       updated_at: '2026-08-22T10:00:00.000Z',
     });
     expect(doc.name).toBe('ARCHITECTURE.md');

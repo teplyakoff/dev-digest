@@ -14,8 +14,8 @@ import messages from "../../../../../../../messages/en/context.json";
  */
 
 const DOCS: ContextDoc[] = [
-  { id: "d1", name: "ARCHITECTURE.md", bytes: 2048, tokens: 512, updated_at: "2026-08-22T10:00:00.000Z" },
-  { id: "d2", name: "PRD.md", bytes: 1024, tokens: 256, updated_at: "2026-08-22T10:00:00.000Z" },
+  { id: "d1", name: "ARCHITECTURE.md", bytes: 2048, tokens: 512, agents: 2, updated_at: "2026-08-22T10:00:00.000Z" },
+  { id: "d2", name: "PRD.md", bytes: 1024, tokens: 256, agents: 0, updated_at: "2026-08-22T10:00:00.000Z" },
 ];
 
 const create = vi.fn();
@@ -79,6 +79,18 @@ describe("ContextView", () => {
     expect(screen.getByRole("button", { name: "Import from repo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New document" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upload .md" })).toBeInTheDocument();
+  });
+
+  /* AC-52. The number comes from the LIST DATA, not from a prop this test
+     hands to the row: `ContextDocList.test.tsx` passes `docs` by hand and
+     therefore cannot tell whether anything ever reaches the row. Here it
+     arrives the way it does in the app — through the mocked `useContextDocs`. */
+  it("shows how many agents each document reaches, from the list data", () => {
+    state.docs = DOCS;
+    renderView();
+
+    expect(screen.getByText("2 agents")).toBeInTheDocument();
+    expect(screen.getByText("no agents")).toBeInTheDocument();
   });
 
   it("shows a status line of documents and size — and never a chunk count", () => {

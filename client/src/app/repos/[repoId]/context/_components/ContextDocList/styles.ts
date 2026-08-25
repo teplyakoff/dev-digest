@@ -42,4 +42,16 @@ export const s = {
     color: "var(--text-muted)",
     flexShrink: 0,
   } satisfies CSSProperties,
+  /**
+   * Reached by nobody reads as muted, reached by someone reads as live. A
+   * function rather than two exported objects: the caller passes the condition
+   * and never assembles the style itself, which is what keeps the JSX free of
+   * spread-merged style objects.
+   */
+  agents: (any: boolean): CSSProperties => ({
+    fontSize: 11.5,
+    fontWeight: any ? 600 : 400,
+    color: any ? "var(--accent)" : "var(--text-muted)",
+    flexShrink: 0,
+  }),
 } as const;
