@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
-import { Intent, SmartDiff } from './brief.js';
+import { Intent, Risk, RiskSeverity, SmartDiff } from './brief.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -277,3 +277,103 @@ export const BlastResponse = z.object({
   }),
 });
 export type BlastResponse = z.infer<typeof BlastResponse>;
+
+// ---------------------------------------------------------------------------
+// PR brief — `GET`/`POST /pulls/:id/brief`.
+//
+// SEPARATE FROM `PrBrief` in `brief.ts`, deliberately, and for the same reason
+// `BlastResponse` above is separate from `BlastRadius`. That one composes four
+// whole building blocks (`intent` + `blast` + `risks` + `history`) into a
+// document nothing persists; this one is the row the brief endpoint reads and
+// writes — one model call's five fields plus the provenance the SERVER computed
+// around them. Reshaping the older contract to fit would drag `PrHistory`, for
+// which there is no source of data, onto the wire; it stays where it is as the
+// extension point it has always been.
+// ---------------------------------------------------------------------------
+
+/**
+ * One file the reviewer should look at first, and why.
+ *
+ * There is NO line number here, and its absence is the design: a `file:line`
+ * anchor computed against `head_sha` is exactly right by hand on a demo PR and
+ * wrong on the first file that shifts. A path survives a rebase; a line does
+ * not.
+ */
+export const ReviewFocusItem = z.object({
+  path: z.string(),
+  reason: z.string(),
+});
+export type ReviewFocusItem = z.infer<typeof ReviewFocusItem>;
+
+/**
+ * The brief's headline risk level. The same three values a `Risk` carries, and
+ * the same enum — a second declaration would drift.
+ */
+export const BriefRiskLevel = RiskSeverity;
+export type BriefRiskLevel = z.infer<typeof BriefRiskLevel>;
+
+/**
+ * The brief persisted for a PR: what the model said, plus everything the server
+ * computed around it.
+ *
+ * `risks[]` reuses `Risk` from `brief.ts` unchanged, including
+ * `file_refs: z.array(z.string())` with NO `.min(1)`. An empty array is legal
+ * on the way IN and is rejected on the way out, by grounding, not by the
+ * parser: a `.min(1)` here would turn a model that cited nothing into a
+ * schema-repair round, and the repair budget for a brief is one.
+ *
+ * `dropped_blocks` and `unavailable_inputs` are two different absences and are
+ * not interchangeable. The first is what the token budget removed (we had it,
+ * it did not fit); the second is what we set out to read and could not (a 404
+ * issue). Mirrors `pr_intent.missing_context`.
+ */
+export const PrBriefRecord = z.object({
+  pr_id: z.string(),
+  /** What the diff changes, in the model's words. */
+  what: z.string(),
+  /** Why it changes it. */
+  why: z.string(),
+  risk_level: BriefRiskLevel,
+  risks: z.array(Risk),
+  review_focus: z.array(ReviewFocusItem),
+  /**
+   * False when grounding dropped every risk the model returned. The headline
+   * `risk_level` is still the model's, so the card can say "we could not
+   * confirm these" instead of pretending there were none.
+   */
+  risks_grounded: z.boolean(),
+  /** Named input blocks the token budget dropped, in the order it dropped them. */
+  dropped_blocks: z.array(z.string()),
+  /** Inputs that were named but could not be read, one entry per gap. */
+  unavailable_inputs: z.array(z.string()),
+  /** The commit this was built against; a moved head makes it stale. */
+  head_sha: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  derived_at: z.string(),
+  tokens_in: z.number().int().nullable(),
+  tokens_out: z.number().int().nullable(),
+  /** null = UNKNOWN, 0 = free. Never coalesce the two. */
+  cost_usd: z.number().nullable(),
+  /** Model round-trips this build took: 1, or 2 when the schema was repaired. */
+  attempts: z.number().int(),
+});
+export type PrBriefRecord = z.infer<typeof PrBriefRecord>;
+
+/**
+ * `GET`/`POST /pulls/:id/brief`. Like `PrIntentView`, "not built yet" is a 200
+ * with a null, not a 404 the client has to special-case.
+ *
+ * `model_calls` counts what THIS request spent: 0 when the stored brief was
+ * reused, 1 for a build on a fresh intent, 2 when the intent had to be derived
+ * first. It is on the wire so the number is checkable from outside.
+ */
+export const PrBriefView = z.object({
+  brief: PrBriefRecord.nullable(),
+  /** The stored brief was built against a different head than the PR's. */
+  stale: z.boolean(),
+  /** The stored brief was returned as-is; no model was called. */
+  reused: z.boolean(),
+  model_calls: z.number().int(),
+});
+export type PrBriefView = z.infer<typeof PrBriefView>;

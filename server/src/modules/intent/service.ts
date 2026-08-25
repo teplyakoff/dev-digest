@@ -3,6 +3,7 @@ import type {
   PrIntentRecord,
   PrIntentView,
   Provider,
+  RepoRef,
   UnifiedDiff,
 } from '@devdigest/shared';
 import type { PromptSection } from '@devdigest/reviewer-core';
@@ -16,6 +17,7 @@ import {
   DEFAULT_INTENT_PROVIDER,
   INTENT_MAX_TOKENS,
   INTENT_TIMEOUT_MS,
+  MAX_ISSUE_BODY_CHARS,
 } from './constants.js';
 import {
   buildPromptRecord,
@@ -165,6 +167,51 @@ export class IntentService {
   /** The reviewer's prompt slot: claim + provenance, never fetched content. */
   renderIntentBlock(record: PrIntentRecord): string {
     return renderIntentBlock(record);
+  }
+
+  /**
+   * The TEXT of the issue this PR links, fetched live.
+   *
+   * A third public method for the same §11 reason as the two above: the brief
+   * builder (`modules/brief`) needs the issue body, the linked-issue number is
+   * only recoverable from a record this module owns, and reaching into
+   * `../intent/pipeline/sources.js` would be a sibling import.
+   *
+   * Deliberately a LIVE fetch rather than a widening of `DeriveOutcome`: the
+   * derivation already fetched this issue and threw the text away, so a cold PR
+   * pays for the same issue twice. That is a knowingly accepted cost — the
+   * alternative edits this module's outcome shape for another module's benefit.
+   *
+   * Three returns, and they are three different facts:
+   *   - `{ ref, text }`   — read it;
+   *   - `{ ref, note }`   — a `used` issue that would not fetch NOW (a 404, a
+   *     revoked token, a rate limit — indistinguishable from here, and all the
+   *     same thing to the caller). The caller lists it among its unavailable
+   *     inputs rather than dropping it silently;
+   *   - `null`            — this PR links no readable issue at all, which is not
+   *     a gap and must not be reported as one.
+   */
+  async linkedIssueText(
+    record: PrIntentRecord,
+    repo: RepoRef,
+  ): Promise<{ ref: string; text: string } | { ref: string; note: string } | null> {
+    const source = record.sources.find((s) => s.kind === 'linked_issue' && s.status === 'used');
+    if (!source) return null;
+    const n = Number(source.ref.replace(/^#/, ''));
+    if (!Number.isInteger(n)) return null;
+    try {
+      const gh = await this.container.github();
+      const issue = await gh.getIssue(repo, n);
+      // Same join and the same cap as the derivation used
+      // (`intent/pipeline/sources.ts`), so the two readers of this issue are
+      // reasoning about the same text rather than two truncations of it.
+      const text = [issue.title, (issue.body ?? '').slice(0, MAX_ISSUE_BODY_CHARS)]
+        .filter((part) => part.length > 0)
+        .join('\n\n');
+      return { ref: source.ref, text };
+    } catch (err) {
+      return { ref: source.ref, note: `could not be fetched (${(err as Error).message})` };
+    }
   }
 
   /**

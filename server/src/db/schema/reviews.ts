@@ -7,6 +7,7 @@ import {
   jsonb,
   timestamp,
   doublePrecision,
+  boolean,
   index,
   check,
 } from 'drizzle-orm/pg-core';
@@ -178,9 +179,90 @@ export const prIntent = pgTable(
   }),
 );
 
-export const prBrief = pgTable('pr_brief', {
-  prId: uuid('pr_id')
-    .primaryKey()
-    .references(() => pullRequests.id, { onDelete: 'cascade' }),
-  json: jsonb('json').notNull(),
-});
+/**
+ * The PR brief: one row per PR, replaced on every rebuild.
+ *
+ * Shaped after `pr_intent` above, for the same reason and by the same move —
+ * migration 0017 widened it from a single `json` blob to real columns while the
+ * table was still empty, exactly as 0015 did for `pr_intent`.
+ *
+ * Tenancy: no `workspace_id` here either. Every read and write scopes through
+ * the PR — `reviewRepo.getPull(workspaceId, prId)` first, always, and never a
+ * query on a bare `prId` taken from a request.
+ */
+export const prBrief = pgTable(
+  'pr_brief',
+  {
+    prId: uuid('pr_id')
+      .primaryKey()
+      .references(() => pullRequests.id, { onDelete: 'cascade' }),
+    /**
+     * The starter's original single-blob slot. NOT dropped and NOT read by the
+     * brief module: it is an extension point (the root `CLAUDE.md` rule about
+     * empty tables and unused slots), and 0017 gave it a `'{}'` default purely
+     * so an insert that ignores it does not trip its `NOT NULL`.
+     */
+    json: jsonb('json').notNull().default(sql`'{}'::jsonb`),
+
+    // ---- the model's five fields -------------------------------------------
+    /** What the diff changes. */
+    what: text('what').notNull(),
+    /** Why it changes it. */
+    why: text('why').notNull(),
+    /**
+     * Headline risk. `text` + CHECK rather than a PG enum, mirroring
+     * `pr_intent_confidence_ck`: the value set is business logic, and a CHECK is
+     * one `ALTER` to change where an enum type is a migration dance.
+     */
+    riskLevel: text('risk_level', { enum: ['high', 'medium', 'low'] }).notNull(),
+    /** Grounded risks only. Mirrors `Risk` in `vendor/shared/contracts/brief.ts`. */
+    risks: jsonb('risks')
+      .$type<
+        {
+          kind: string;
+          title: string;
+          explanation: string;
+          severity: 'high' | 'medium' | 'low';
+          file_refs: string[];
+        }[]
+      >()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Files to read first. No line numbers — see `ReviewFocusItem`. */
+    reviewFocus: jsonb('review_focus')
+      .$type<{ path: string; reason: string }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+
+    // ---- server-computed provenance ----------------------------------------
+    /** False when grounding dropped every risk the model returned. */
+    risksGrounded: boolean('risks_grounded').notNull().default(true),
+    /** Input blocks the token budget dropped: we had them, they did not fit. */
+    droppedBlocks: jsonb('dropped_blocks').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Inputs we set out to read and could not — a 404 issue, a file that is
+     * gone. A different absence from `dropped_blocks`, and the mirror of
+     * `pr_intent.missing_context`.
+     */
+    unavailableInputs: jsonb('unavailable_inputs')
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** The commit this was built against; a moved head makes the row stale. */
+    headSha: text('head_sha').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    derivedAt: timestamp('derived_at', { withTimezone: true }).defaultNow().notNull(),
+    tokensIn: integer('tokens_in'),
+    tokensOut: integer('tokens_out'),
+    /** null = UNKNOWN price, 0 = free. Never coalesced to 0 anywhere. */
+    costUsd: doublePrecision('cost_usd'),
+    /** Model round-trips this build took. 2 means the schema was repaired once. */
+    attempts: integer('attempts').notNull().default(1),
+  },
+  (t) => ({
+    // ONE EDIT IN TWO PLACES with `BriefRiskLevel` in
+    // vendor/shared/contracts/review-api.ts, same as `pr_intent_confidence_ck`.
+    riskLevelCk: check('pr_brief_risk_level_ck', sql`${t.riskLevel} in ('high','medium','low')`),
+  }),
+);

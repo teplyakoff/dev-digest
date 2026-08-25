@@ -34,6 +34,7 @@ import { ReviewRepository } from '../modules/reviews/repository.js';
 import { loadDiff, type DiffPullRef } from '../modules/reviews/diff-loader.js';
 import { SkillsService } from '../modules/skills/service.js';
 import { IntentService } from '../modules/intent/service.js';
+import { BlastService } from '../modules/blast/service.js';
 import { ProjectContextService } from '../modules/context/service.js';
 import { ContextRepository } from '../modules/context/repository.js';
 import { getFeatureModelOverride } from '../modules/settings/feature-models.js';
@@ -99,6 +100,7 @@ export class Container {
   private _reviewRepo?: ReviewRepository;
   private _skills?: SkillsService;
   private _intent?: IntentService;
+  private _blast?: BlastService;
   private _contextRepo?: ContextRepository;
   private _projectContext?: ProjectContextService;
   private _repoIntel?: RepoIntel;
@@ -184,6 +186,25 @@ export class Container {
    */
   get intent(): IntentService {
     return (this._intent ??= new IntentService(this));
+  }
+
+  /**
+   * The blast-radius map (L04), shared across features.
+   *
+   * Here for the same reason `intent` is: `modules/brief` needs the impact map
+   * to build its allowlist and its prompt, and `modules/blast` is its SIBLING —
+   * onion §11 makes a sibling module private and the container the sanctioned
+   * route.
+   *
+   * WHICH ENTRY POINT MATTERS HERE. `BlastService.get` is not a thin wrapper
+   * over `repoIntel.getBlastRadius`: the facade has a cheap indexed branch and
+   * an expensive re-parse-the-clone fallback, returns the same shape either way,
+   * and gives the caller no way to tell which it got. `BlastService` checks the
+   * index state first and returns `degraded` instead of reaching for the slow
+   * path. Consumers go through here; nobody calls `getBlastRadius` directly.
+   */
+  get blast(): BlastService {
+    return (this._blast ??= new BlastService(this));
   }
 
   /**
