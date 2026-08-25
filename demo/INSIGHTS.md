@@ -36,6 +36,17 @@ would be obvious to anyone reading the code, don't write it.
   localhost — and in exchange the evidence frame is the call site itself,
   highlighted by GitHub, at the commit the line number came from. (2026-08-13)
 
+- **Preflight the SHAPE of every payload the recorder reads and every name it
+  will create — both failures are free before the browser starts and expensive
+  after.** Two takes of `record-context.ts` died mid-scene: `/context/candidates`
+  returns `{candidates, truncated}` rather than an array, and an import is named
+  by the file's BASENAME, so three different `README.md`s collide on the second
+  `POST` with a 409 `duplicate_name`. Both are now preflight checks that refuse
+  to launch Chromium. The rule generalises: anything the script asserts about the
+  API's shape, and anything it creates by a derived name, belongs in the block
+  that runs before the recording, not in the middle of scene four. (2026-08-25)
+
+
 ## What Doesn't Work
 
 - Recording against a **seeded** PR produces a meaningless video: seeded file
@@ -212,6 +223,30 @@ would be obvious to anyone reading the code, don't write it.
   call was redundant as well as harmful: a popup already inherits the browser
   context's viewport. Cost one take and a false accusation against the feature.
   (2026-08-13)
+
+- **On a REPLACE endpoint, "clean up" and "clear" are not the same thing, and
+  clearing edits the user's installation.** `record-context.ts` finished by
+  `PUT`ting `{doc_ids: []}` to both agents and to the skill it borrowed —
+  detaching everything those targets had, not just what the take attached.
+  `PUT /agents/:id/context-docs` and `/skills/:id/context-docs` are whole-set
+  replaces, so an empty array is a delete. Snapshot both sets in the preflight
+  and restore them in `finally`, the way this file already prescribes for the
+  agent's `skill_ids`. Deleting the documents the take CREATED is still correct —
+  that takes their attachment rows with them. (2026-08-25)
+
+- **A green assertion and a legible frame are different claims, and the recorder
+  only checks one of them.** Three takes in one session shipped screenshots that
+  proved nothing while every assertion passed: the brief's deep-link frame showed
+  a diff with the file card's header — the filename — scrolled under the sticky
+  chrome, and the counter frames showed the "Attach to" panel with the document
+  list, the thing being counted, off the top of the viewport. The assertion reads
+  the API; the frame is whatever the browser happens to be showing. **Before
+  every shot, scroll the subject of the caption into view explicitly**
+  (`scrollIntoViewIfNeeded` on the row, not on the page) and open the PNG
+  afterwards. `record-blast.ts` already says the same thing about links; it
+  generalises to any claim a caption makes. (2026-08-25)
+
+
 
 ## Codebase Patterns
 

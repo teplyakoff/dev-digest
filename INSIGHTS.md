@@ -122,6 +122,20 @@ here. Here is for what has no package at all.
   summed over bursts), and summing `input_tokens` gives billing, not context
   size. (2026-08-22)
 
+- **Hand the finished plan to a model of another family BEFORE `/impl`, not the
+  code afterwards.** `docs/plans/L05-pr-brief.md` went to `codex exec --sandbox
+  read-only` (OpenAI `gpt-5.6-sol`, reasoning high) with both spec halves and the
+  repo's instruction files; it opened with *"not executable as written"* and
+  returned four blockers, three of which were confirmed by hand. The two that
+  mattered were invisible to the Claude agents that wrote and graded the plan:
+  render-time caps that made two drop levels **unreachable in production while
+  their unit test stayed green**, and a token budget measured over the source
+  blocks while the requirement measured the assembled messages. Both would have
+  shipped as green tests. Cost: one read-only CLI run, no repo writes. The note
+  belongs in `docs/results/<lab>/` beside the video, because a reviewer asking
+  "was this checked" wants the raw output, not a summary. (2026-08-25)
+
+
 ## What Doesn't Work
 
 - **A subagent whose `tools` allowlist omits `Skill` cannot invoke any skill in
@@ -405,6 +419,19 @@ here. Here is for what has no package at all.
   researcher's cost was reported to the planner and never to the main loop:
   delivery follows the spawn mode, and neither direction is the one you assume.
   (2026-08-22)
+
+- **`git add -u` while a subagent's work is sitting in the tree commits their
+  files under your subject.** The L05 spec patch was staged that way and swept in
+  eight of `implementer`'s tracked edits: `448dd8b`, subject `docs(specs): …`,
+  carried the contract, the schema, the container and the intent service. It
+  broke two things at once — a `docs` commit holding feature code, and the
+  `feat` commit's own `Steps: S1…S13` claiming steps whose files were not in its
+  diff. `plan-verifier` caught it in phase 2, not the author. **Stage explicit
+  paths whenever an agent has an edit in flight**, and re-read `git status`
+  before every `git add` that is not a single named file. The repair is a
+  `git reset --soft` to the commit before and two re-commits, which is only
+  cheap while nothing has been pushed. (2026-08-25)
+
 
 ## Codebase Patterns
 
@@ -788,6 +815,16 @@ here. Here is for what has no package at all.
 ## Recurring Errors & Fixes
 
 _(no entries yet)_
+
+- **`git log --format='%(trailers:key=Steps)'` returns EMPTY on a commit that
+  visibly has `Steps:` in it** → a blank line sits between the plan trailers and
+  `Co-Authored-By`. Git parses only the LAST paragraph of a message as trailers,
+  so `Plan:`/`Steps:` followed by a blank line are prose, not trailers, and the
+  command root `AGENTS.md` documents reads nothing. Both L05 feature commits
+  were written that way, verified empty, and rebuilt with the three trailers in
+  ONE block, no blank line. Check with the documented command right after
+  committing — the message looks correct in `git show` either way. (2026-08-25)
+
 
 ## Session Notes
 
