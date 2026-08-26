@@ -220,6 +220,19 @@ _(no entries yet)_
   numbers came from — `BlastResponse.indexed_sha`, with `head_sha` only as a
   fallback for the degraded path that has no links anyway. (2026-08-13)
 
+- **`scrollIntoView` on a long, lazily-rendered list scrolls to where the target
+  WAS.** `?file=<path>` on a 92-file PR looked broken on a freshly opened link and
+  fine when clicked from Overview. Cause: the file cards mount before their diff
+  bodies, so the effect ran while the target sat ~13 px down, and by the time the
+  cards above had rendered it was 22 406 px down — `main` (the scroller, not the
+  window) had `scrollTop: 13.5`. Two things fix it together: a `MutationObserver`
+  on the list that re-scrolls while the layout settles and disconnects after
+  ~2 s, and `scroll-margin-top` on the card for the sticky chrome (214 px here =
+  the PR header's 175 + the group header's 31, both `top: 0` in the same
+  scroller, measured in the running app). Do not compare against `window.scrollY`
+  when debugging this — it stays 0 the whole time. (2026-08-25)
+
+
 ## Codebase Patterns
 
 - **A route-local test's path to `messages/` is EIGHT levels up, and getting it
@@ -348,6 +361,19 @@ _(no entries yet)_
   2026-08-05 entry on `MonoLink` switching primitive by prop: that one is about
   not wrapping it in `next/link`, this one is about not reaching for it when
   there is no destination at all. (2026-08-13)
+
+- **A list row that gains a server-computed field needs every mutation that can
+  change it to invalidate that list — including mutations keyed by something
+  else.** `ContextDoc` gained `agents` (how many agents receive the document);
+  attaching is `useSetAgentContextDocs` / `useSetSkillContextDocs`, keyed by
+  agent and by skill, which correctly `setQueryData` on their own keys and
+  touched nothing else. The API returned `agents: 1` and the row kept saying
+  "no agents" until a reload. Those hooks know no repo id, so the invalidation is
+  by prefix (`["context-docs"]`) through a named private helper, per
+  frontend-architecture §10. Caught by clicking in the running app; every unit
+  test was green, because each hook did exactly what its own test asserted.
+  (2026-08-25)
+
 
 ## Tool & Library Notes
 

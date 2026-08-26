@@ -68,5 +68,15 @@ $reason
 Run /pr-self-review, fix what it reports, and try again. If the block is wrong
 or accepted deliberately, the user — not you — decides:
   /pr-self-review --accept-risk "<reason>"
+
+If this command does not open, update or merge a pull request and only MENTIONS
+one of the guarded strings — an echo, a heredoc, a doc or script edit — then the
+match is the known over-block, not a finding about your command. It is matched
+in the payload as a whole on purpose; narrowing it would need a JSON parser, and
+a guard with a dependency stops guarding the day the dependency is missing.
+Reword the command — "the push command", "opening a pull request" — and leave
+the override alone. `PSR_SKIP=1` is the user's to spend, not yours: an agent that
+reaches for it on a documented false positive has learned the habit that
+defeats the gate.
 EOF
 exit 2

@@ -2,7 +2,7 @@
 name: architecture-reviewer
 description: "Read-only architectural review of a change set in this repo. Checks `server/` and `reviewer-core/` files against the onion rings (dependency direction, ports, composition root, cross-module imports) and `client/` files against the frontend placement rules, plus the cross-package rules that belong to neither: five standalone packages with their own managers, Zod contracts vendored from `server/src/vendor/shared` into `client/src/vendor/shared`, frozen vendor paths, and `reviewer-core` staying free of I/O. Returns findings only, each citing `path:line`, the rule it breaks and the fix, plus what it could not establish. Never edits a file. Do NOT use for general code review, security or performance review, writing code, or as a replacement for /pr-self-review — that skill owns the verdict that actually blocks a pull request."
 tools: Read, Grep, Glob, Bash
-model: opus
+model: sonnet
 ---
 
 # architecture-reviewer

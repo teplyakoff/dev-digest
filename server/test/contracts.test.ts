@@ -16,6 +16,13 @@ import {
   Repo,
   PrMeta,
   PrDetail,
+  ContextDoc,
+  ContextDocBody,
+  ContextStoreStatus,
+  ImportCandidates,
+  AttachmentSet,
+  AttachedDoc,
+  CreateContextDoc,
 } from '@devdigest/shared';
 
 /**
@@ -273,5 +280,72 @@ describe('platform DTOs', () => {
     expect(pr.latest_findings).toHaveLength(1);
     // Legacy payloads without the fields still parse (nullish back-compat).
     expect(() => PrMeta.parse(base)).not.toThrow();
+  });
+  it('project-context store (SPEC-06)', () => {
+    const doc = ContextDoc.parse({
+      id: 'd1',
+      name: 'ARCHITECTURE.md',
+      bytes: 2048,
+      tokens: 512,
+      agents: 2,
+      updated_at: '2026-08-22T10:00:00.000Z',
+    });
+    expect(doc.name).toBe('ARCHITECTURE.md');
+
+    // The body-carrying read extends the metadata rather than replacing it, so
+    // a list row and an editor load are the same shape plus one field.
+    expect(ContextDocBody.parse({ ...doc, body: '# Architecture\n' }).body).toContain('#');
+
+    expect(ContextStoreStatus.parse({ docs: 3, total_bytes: 9001 }).docs).toBe(3);
+
+    // A skipped candidate carries its reason; an importable one does not.
+    const listed = ImportCandidates.parse({
+      candidates: [
+        { path: 'docs/PRD.md', bytes: 900, status: 'ok' },
+        { path: 'docs/huge.md', bytes: 999_999, status: 'skipped', reason: 'too_large' },
+      ],
+      truncated: true,
+    });
+    // A discriminated union, so the two arms are different shapes rather than
+    // one shape with an optional field. `reason` is reachable only after
+    // narrowing, which is the type-level half of the same guarantee.
+    const [ok, skipped] = listed.candidates;
+    expect(ok!.status).toBe('ok');
+    expect(skipped!.status === 'skipped' && skipped.reason).toBe('too_large');
+    expect(listed.truncated).toBe(true);
+
+    // An unknown reason is still rejected …
+    expect(() =>
+      ImportCandidates.parse({
+        candidates: [{ path: 'a.md', bytes: 1, status: 'skipped', reason: 'because' }],
+        truncated: false,
+      }),
+    ).toThrow();
+    // … and so is `skipped` with NO reason, which the previous shape allowed.
+    // That state rendered as the literal string `picker.skipped.undefined` in
+    // the import picker, because the client indexes a translation key by it.
+    expect(() =>
+      ImportCandidates.parse({
+        candidates: [{ path: 'a.md', bytes: 1, status: 'skipped' }],
+        truncated: false,
+      }),
+    ).toThrow();
+    // An `ok` arm carrying a reason does not throw — Zod strips unknown keys
+    // rather than rejecting them — but the reason does not SURVIVE the parse,
+    // which is the guarantee the picker actually depends on.
+    const contradiction = ImportCandidates.parse({
+      candidates: [{ path: 'a.md', bytes: 1, status: 'ok', reason: 'too_large' }],
+      truncated: false,
+    });
+    expect(contradiction.candidates[0]).toEqual({ path: 'a.md', bytes: 1, status: 'ok' });
+
+    // Attachment is a whole set, never a delta — an empty array detaches all.
+    expect(AttachmentSet.parse({ doc_ids: [] }).doc_ids).toEqual([]);
+    expect(AttachedDoc.parse({ ...doc, missing: true }).missing).toBe(true);
+
+    // Import and text are the two ways in; upload rides on `text` (R-1).
+    expect(CreateContextDoc.parse({ kind: 'import', path: 'docs/PRD.md' }).kind).toBe('import');
+    expect(CreateContextDoc.parse({ kind: 'text', name: 'notes.md', body: '' }).kind).toBe('text');
+    expect(() => CreateContextDoc.parse({ kind: 'upload', name: 'n.md', body: '' })).toThrow();
   });
 });

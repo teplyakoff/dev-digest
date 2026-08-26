@@ -88,4 +88,30 @@ describe('routes (no DB)', () => {
     expect(res.json().error.code).toBe('validation_error');
     await app.close();
   });
+
+  // Same argument again for the project-context module, and the same second job:
+  // a 404 rather than a 422 here would mean `modules/index.ts` never picked the
+  // plugin up. Nothing else in the Docker-free lane would notice — the routes
+  // would simply not exist, and the client would read it as a routing bug.
+  it('GET /repos/:repoId/context/docs rejects a non-uuid id with a 422', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({ method: 'GET', url: '/repos/not-a-uuid/context/docs' });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
+
+  it('POST /repos/:repoId/context/docs rejects a body the union does not accept', async () => {
+    // Rejected at the EDGE by the route's Zod body schema, before any handler
+    // runs — which is why the id below never has to be a real repo.
+    const app = await buildApp({ config });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/repos/00000000-0000-4000-8000-000000000000/context/docs',
+      payload: { kind: 'upload', name: 'x.md', body: '' },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
 });

@@ -56,7 +56,8 @@
       "fullscreen": "Open fullscreen",
       "search": "Search in this block…",
       "noMatches": "No matches for “{q}”.",
-      "skillTokens": "{count} tokens"
+      "skillTokens": "{count} tokens",
+      "specTokens": "{count, plural, one {# token} other {# tokens}}"
     },
     "tools": {
       "args": "args",

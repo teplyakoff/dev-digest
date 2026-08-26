@@ -256,6 +256,31 @@ would be obvious to anyone reading the code, don't write it.
   resync. In production the version bump in `constants.ts` is what does it.
   (2026-08-13)
 
+- **A criterion that protects the CONTENT of a prompt block cannot be verified by
+  asserting the block is present.** SPEC-07 AC-24 made the changed-file paths
+  undroppable; the test was `expect(prompt).toContain('file-stats')`, which is
+  true with 200 paths in the block and equally true with 50 — and drop level 5
+  trimmed that same block. Zero tests failed. Enumerate the elements
+  (`for (const path of paths) expect(prompt).toContain(path)`), never the
+  container. The sibling defect shipped in the same file: `UNDROPPABLE_BLOCKS`
+  listed the protected blocks in `constants.ts` and **was imported by nothing**,
+  so it documented a guarantee no code checked while `budget.ts` broke it. A list
+  of invariants that nothing reads is a comment; `assertUndroppableIntact`, run
+  after every applied level and comparing identity rather than rendering, is the
+  version that fails. (2026-08-25)
+
+- **Trimming a list server-side for the client's benefit silently killed a client
+  criterion.** `modules/brief/service.ts` sliced `review_focus` to ten before
+  persisting, which looked like a sensible bound. Client AC-40 renders at most
+  ten and AC-41 shows the TRUE total beside them — and the true total was gone
+  before the client ever saw it, with no field on the record carrying it.
+  `plan-verifier`'s coverage pass found it; the step-conformance pass could not,
+  because every server step was correctly implemented. **Trim for display where
+  the display is.** A server bound needs its own reason (cost, payload size) and
+  then has to ship the count it dropped. (2026-08-25)
+
+
+
 ## Codebase Patterns
 
 - The Zod contracts are **vendored twice — `server/src/vendor/shared/**` and
@@ -430,6 +455,28 @@ would be obvious to anyone reading the code, don't write it.
   "nothing calls this" is exactly the claim a reviewer acts on. Nothing catches
   this: the type is right, the constant is right, the number of rows is
   plausible. `capPerSymbol` in `repo-intel/service.ts` is the fix. (2026-08-13)
+
+- **One ordinary project-context document is 2.5× the whole brief budget, so the
+  first drop level fires on every build.** Measured, not estimated:
+  `pnpm measure:brief` on three real PRs of this repo reads 5 943 / 7 172 / 1 892
+  tokens of assembled messages with an empty store; adding a single 63 KB spec
+  (`07-pr-brief.md`) puts them at 26 548 / 27 777 / 22 497 against a
+  `BRIEF_TOKEN_BUDGET` of 8 000. The document is dropped whole and named in
+  `dropped_blocks`, so the feature is honest — but any design that assumes the
+  brief usually SEES the project context is wrong on this repo and on any repo
+  with a real store. `MAX_DOC_BYTES = 64_000` (`modules/context/constants.ts`) is
+  the bound that makes this structural. (2026-08-25)
+
+- **`pr_intent.sources` records that a linked issue was used, never its text.**
+  The row stores `{kind, ref, status}` (`db/schema/reviews.ts`); the body is
+  fetched live by `adapters/github/octokit.ts` and thrown away. So any feature
+  that "reuses the linked issue the intent already found" is really making a
+  second GitHub call — L05's brief does exactly that through
+  `IntentService.linkedIssueText`, and on a cold PR the same issue is fetched
+  twice within a second. Budget for the call, or extend `DeriveOutcome` to carry
+  the text forward; do not assume the text is in the database. (2026-08-25)
+
+
 
 ## Tool & Library Notes
 

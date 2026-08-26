@@ -92,6 +92,25 @@ export const TraceSkill = z.object({
 });
 export type TraceSkill = z.infer<typeof TraceSkill>;
 
+/**
+ * One project-context document that was loaded into a run's prompt, with what it
+ * cost. `tokens` counts the document's body as it was sent.
+ *
+ * This exists for the same reason `TraceSkill.tokens` does, and not for
+ * symmetry: the trace drawer shows the block's cost in its header, and the only
+ * honest source for that number is the count the SERVER measured. A chars/4
+ * estimate computed in the UI would disagree with what the run actually paid,
+ * and the two numbers would be indistinguishable on screen.
+ *
+ * `specs_read` on the trace stays as it is — the names, in prompt order. This is
+ * the priced view of the same list.
+ */
+export const TraceSpec = z.object({
+  name: z.string(),
+  tokens: z.number().int(),
+});
+export type TraceSpec = z.infer<typeof TraceSpec>;
+
 /** The single-document trace stored in `run_traces.trace`. */
 export const RunTrace = z.object({
   config: z.object({
@@ -108,6 +127,14 @@ export const RunTrace = z.object({
      * `prompt_assembly.skills` is null on the same trace.
      */
     skills: z.array(TraceSkill).nullish(),
+    /**
+     * Project-context documents loaded for this run, in prompt order. Nullish
+     * for the same reason `skills` is: every trace persisted before L06 has no
+     * such key and must still parse, and absent means the agent carried no
+     * documents — which is also why `prompt_assembly.specs` is null on the same
+     * trace.
+     */
+    specs: z.array(TraceSpec).nullish(),
   }),
   stats: RunStats,
   prompt_assembly: PromptAssembly,

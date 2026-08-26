@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { PrFile, SmartDiff, SmartDiffFile, SmartDiffFinding } from "@devdigest/shared";
@@ -89,13 +89,22 @@ function smartDiff(groups: SmartDiff["groups"]): SmartDiff {
   };
 }
 
-function renderViewer(data: SmartDiff, onOpenFinding: (id: string) => void = vi.fn()) {
-  render(
+function renderViewer(
+  data: SmartDiff,
+  onOpenFinding: (id: string) => void = vi.fn(),
+  selectedPath: string | null = null,
+) {
+  return render(
     // Both namespaces: the viewer's own strings are `prReview.smartDiff`, but
     // the shared FileCard/CodeLine read `shell.diffViewer` — a shared component
     // must not depend on a route namespace. One namespace renders raw keys.
     <NextIntlClientProvider locale="en" messages={{ prReview, shell }}>
-      <SmartDiffViewer data={data} files={PR_FILES} onOpenFinding={onOpenFinding} />
+      <SmartDiffViewer
+        data={data}
+        files={PR_FILES}
+        selectedPath={selectedPath}
+        onOpenFinding={onOpenFinding}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -233,5 +242,108 @@ describe("SmartDiffViewer", () => {
     // The click navigated AWAY; it must not also have expanded the card behind
     // the reader, or Back returns them to a file they never opened.
     expect(screen.queryByText("sha512-deadbeef")).not.toBeInTheDocument();
+  });
+  /* AC-43 — the landing half of the review-focus click-through.
+
+     THE TARGET IS NOT THE FIRST CARD, and that is the whole design of this
+     fixture: a card at index 0 is a false positive for "the deep link worked"
+     (client/INSIGHTS.md, 2026-08-08), and a boilerplate card is doubly good
+     here because its role policy keeps it SHUT by default — so if it is open,
+     something opened it deliberately.
+
+     It asserts EXPANSION, never scrolling: neither jsdom nor the available
+     browser pane can observe a scroll, and three rounds of "fixes" have already
+     been spent on measurements that environment cannot make (INSIGHTS,
+     2026-08-08). AC-43 is written as expansion for that reason. */
+  it("expands the selected file's card even when its role would keep it collapsed", () => {
+    const { container } = renderViewer(
+      smartDiff([
+        { role: "core", files: [file(CORE_PATH, { additions: 2, deletions: 0 })] },
+        {
+          role: "boilerplate",
+          files: [file(LOCK_PATH, { additions: 1, deletions: 0 })],
+        },
+      ]),
+      vi.fn(),
+      LOCK_PATH,
+    );
+
+    // The lock file is the SECOND card, and it is open: its body is on screen.
+    const cards = Array.from(container.querySelectorAll("[data-file-path]"));
+    expect(cards.map((el) => el.getAttribute("data-file-path"))).toEqual([CORE_PATH, LOCK_PATH]);
+    expect(screen.getByText("sha512-deadbeef")).toBeInTheDocument();
+
+    // The role policy still holds for everything else — selecting one file does
+    // not turn the collapse rules off, it adds one card to the open set.
+    expect(screen.getByText("const MAX_RETRIES = 99;")).toBeInTheDocument();
+  });
+
+  /* AC-44. A `?file=` that names a path this PR does not touch — a brief built
+     before a force-push, a hand-edited URL — opens the tab with nothing
+     selected. Not an error state, not an empty viewer: the diff, as it would
+     have looked without the parameter. */
+  it("selects nothing when the named file is not part of the PR", () => {
+    renderViewer(
+      smartDiff([
+        { role: "core", files: [file(CORE_PATH, { additions: 2, deletions: 0 })] },
+        { role: "boilerplate", files: [file(LOCK_PATH, { additions: 1, deletions: 0 })] },
+      ]),
+      vi.fn(),
+      "src/does/not/exist.ts",
+    );
+
+    // Both cards are exactly where the role policy left them: core open…
+    expect(screen.getByText("const MAX_RETRIES = 99;")).toBeInTheDocument();
+    // …boilerplate shut, and no error copy anywhere.
+    expect(screen.queryByText("sha512-deadbeef")).not.toBeInTheDocument();
+    expect(screen.getByText(LOCK_PATH)).toBeInTheDocument();
+  });
+
+  /* Bringing the selected card into view.
+
+     This is NOT the measurement trap of INSIGHTS 2026-08-08: nothing here asks
+     jsdom where an element sits or how tall it is. It asserts that the component
+     asked the right node to scroll — a call, not a layout — which is the only
+     part of "the reviewer sees the file move" this component owns. */
+  describe("scrolling to the selected file", () => {
+    let calls: Element[];
+
+    beforeEach(() => {
+      calls = [];
+      // jsdom implements no scrollIntoView, so there is nothing to restore; the
+      // component calls it optionally for exactly this reason.
+      Element.prototype.scrollIntoView = function scrollIntoView(this: Element) {
+        calls.push(this);
+      };
+    });
+
+    it("scrolls the selected file's card into view", () => {
+      const { container } = renderViewer(
+        smartDiff([
+          { role: "core", files: [file(CORE_PATH, { additions: 2, deletions: 0 })] },
+          { role: "boilerplate", files: [file(LOCK_PATH, { additions: 1, deletions: 0 })] },
+        ]),
+        vi.fn(),
+        LOCK_PATH,
+      );
+
+      // Exactly one scroll, and it landed on the SELECTED card — not the first
+      // card, which is the failure a looser assertion would sail past.
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.getAttribute("data-file-path")).toBe(LOCK_PATH);
+      expect(container.querySelectorAll("[data-file-path]")).toHaveLength(2);
+    });
+
+    it("scrolls nowhere when the URL names no file, or names one the PR lacks", () => {
+      const diff = smartDiff([
+        { role: "core", files: [file(CORE_PATH, { additions: 2, deletions: 0 })] },
+      ]);
+
+      renderViewer(diff, vi.fn(), null);
+      expect(calls).toHaveLength(0);
+
+      renderViewer(diff, vi.fn(), "src/does/not/exist.ts");
+      expect(calls).toHaveLength(0);
+    });
   });
 });

@@ -112,6 +112,13 @@ export function PrDetailView() {
   // `?finding=<id>` is the whole click-through: which finding to open, resolved
   // to its owning run from data this view already holds.
   const focusFindingId = search.get("finding");
+  // `?file=<path>` — the review-focus click-through, and a SIBLING of `finding`
+  // rather than a variant of it: it names a file, never a file:line. Line
+  // numbers were deliberately left out of the brief's `review_focus`, because a
+  // line computed against one commit is wrong on the next
+  // (client/INSIGHTS.md, 2026-08-13). A path that no longer exists in the PR
+  // simply opens the diff with nothing selected.
+  const selectedPath = search.get("file");
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -188,6 +195,13 @@ export function PrDetailView() {
             headSha={pr.head_sha}
             repoId={repoId}
             repoFullName={repoFullName}
+            // Tab, view AND file in ONE navigation — two one-key setters read
+            // `search` from the same render's closure and race — and a PUSH, so
+            // Back returns the reviewer to Overview instead of overwriting the
+            // entry they came from. Same shape as the finding click below.
+            onOpenFile={(path) =>
+              setParams({ tab: "diff", view: "smart", file: path }, { history: "push" })
+            }
           />
         )}
 
@@ -237,6 +251,7 @@ export function PrDetailView() {
             files={pr.files}
             canComment={pr.status === "open"}
             view={diffView}
+            selectedPath={selectedPath}
             // REPLACE: the toggle is a view preference on the screen the
             // reviewer is already on, not somewhere they navigated to.
             onSetView={(v) => setParam("view", v)}

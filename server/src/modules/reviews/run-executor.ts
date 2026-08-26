@@ -6,6 +6,7 @@ import type {
   RunTrace,
   ToolCall,
   TraceSkill,
+  TraceSpec,
   UnifiedDiff,
 } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers, renderSkillBlock } from '@devdigest/reviewer-core';
@@ -368,6 +369,14 @@ export class ReviewRunExecutor {
       // the log was never a feature.
       const { skills, traceSkills } = await this.resolveSkills(agent.id, runLog);
 
+      // L06 — the agent's project context. Same route as skills (the composition
+      // root, never a sibling import) and the same omit-when-empty contract, but
+      // a DIFFERENT trust level: a skill body is configuration this workspace
+      // wrote, while a context document may have been imported out of a clone.
+      // Bodies therefore go into `specs`, which the engine wraps in
+      // `wrapUntrusted('spec-N', …)`, and never into `skills`.
+      const specs = await this.resolveSpecs(workspaceId, agent.id, pull.repoId, runLog);
+
       // T1.3 — callers-in-prompt. Best-effort: when repo-intel is off the facade
       // returns []; we omit the section and behavior is identical to the
       // pre-T1.3 prompt (acceptance #10).
@@ -413,6 +422,10 @@ export class ReviewRunExecutor {
         // L02 — passed only when the agent has enabled skills linked, so an
         // agent with none gets a prompt byte-identical to the pre-L02 one.
         ...(skills.length > 0 ? { skills } : {}),
+        // L06 — attached project-context documents, passed only when at least
+        // one resolved. With none, the spread is absent and the assembled prompt
+        // is byte-identical to the pre-L06 one (AC-15).
+        ...(specs.bodies.length > 0 ? { specs: specs.bodies } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -538,6 +551,10 @@ export class ReviewRunExecutor {
           // loaded" row is absent rather than empty — same distinction the
           // prompt makes by omitting the section.
           ...(traceSkills.length > 0 ? { skills: traceSkills } : {}),
+          // L06 — same omit-when-empty rule as `skills` above: absent rather
+          // than `[]` when the agent carried no documents, so an old trace and a
+          // documentless run render identically.
+          ...(specs.traceSpecs.length > 0 ? { specs: specs.traceSpecs } : {}),
         },
         stats: {
           duration_ms: durationMs,
@@ -565,7 +582,11 @@ export class ReviewRunExecutor {
         ],
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        // The names actually INCLUDED, not the names attached: a document that
+        // was detached or deleted between attachment and run is absent from the
+        // prompt, so listing it here would make the trace a record of intent
+        // rather than of what the model was sent.
+        specs_read: specs.names,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -677,6 +698,62 @@ export class ReviewRunExecutor {
         (skipped > 0 ? ` — ${skipped} linked but disabled` : ''),
     );
     return { skills, traceSkills };
+  }
+
+  /**
+   * Resolve the agent's project context: the documents attached to it, plus the
+   * documents attached to each of its ENABLED skills, in prompt order.
+   *
+   * Reached through `container.projectContext` for the same reason `skills` and
+   * `intent` are: `modules/context` is this module's sibling, and onion §11 makes
+   * a sibling module private. The composition root is the sanctioned route.
+   *
+   * **The log line is emitted on EVERY run**, including one with no attachments
+   * at all (`0/0`) and one with nothing skipped. That is not verbosity — a gate
+   * that reports only when it acts is indistinguishable from a gate that never
+   * ran, so `Project context:` missing from a trace has to mean exactly one
+   * thing: this build does not have the feature. `resolveSkills` above is
+   * deliberately NOT the model here; its silence-on-no-links case is the shape
+   * this one refuses to copy.
+   *
+   * Nothing is truncated. The per-document and per-store bounds are enforced at
+   * WRITE time, so by the time a body reaches this method it is already within
+   * them; a prompt that still does not fit the model's window fails the run
+   * loudly rather than quietly dropping half a specification.
+   */
+  private async resolveSpecs(
+    workspaceId: string,
+    agentId: string,
+    repoId: string,
+    runLog: RunLogger,
+  ): Promise<{ bodies: string[]; names: string[]; traceSpecs: TraceSpec[] }> {
+    const { bodies, names, loaded, total } = await this.container.projectContext.specsForAgent(
+      workspaceId,
+      agentId,
+      repoId,
+    );
+
+    runLog.info(`Project context: ${loaded}/${total} document(s) loaded`);
+    if (loaded < total) {
+      // The gap is dangling attachments — rows pointing at documents that have
+      // been deleted. The run continues without them; saying which count is
+      // missing is what makes the difference visible in the one place a person
+      // looks for it.
+      runLog.info(
+        `${total - loaded} attached document(s) no longer exist and were skipped`,
+      );
+    }
+
+    // Priced on the body as it is sent, by the same tokenizer the skills path
+    // uses. Counted HERE rather than estimated in the UI: a chars/4 guess on the
+    // client would disagree with what the run actually paid, and the two numbers
+    // would look identical on screen.
+    const traceSpecs: TraceSpec[] = names.map((name, i) => ({
+      name,
+      tokens: this.container.tokenizer.count(bodies[i] ?? ''),
+    }));
+
+    return { bodies, names, traceSpecs };
   }
 
   /**

@@ -28,6 +28,10 @@ interface DiffTabProps {
   /** From `?view=` — absent means smart, so the sorted view is what a reviewer
       lands on. */
   view: DiffView;
+  /** From `?file=` — the path a review-focus click asked to read first. Null
+      when the reviewer came here by any other route. Original mode ignores it:
+      the selection is a smart-mode capability, like findings. */
+  selectedPath?: string | null;
   onSetView: (view: DiffView) => void;
   /** Navigates to a finding's card in the Agent runs tab. */
   onOpenFinding: (id: string) => void;
@@ -39,6 +43,7 @@ export function DiffTab({
   files,
   canComment,
   view,
+  selectedPath,
   onSetView,
   onOpenFinding,
 }: DiffTabProps) {
@@ -104,7 +109,12 @@ export function DiffTab({
 
       {view === "smart" ? (
         smartDiff.data ? (
-          <SmartDiffViewer data={smartDiff.data} files={files} onOpenFinding={onOpenFinding} />
+          <SmartDiffViewer
+            data={smartDiff.data}
+            files={files}
+            selectedPath={selectedPath}
+            onOpenFinding={onOpenFinding}
+          />
         ) : smartDiff.isError ? (
           <ErrorState
             title={t("smartDiff.errorTitle")}

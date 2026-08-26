@@ -25,11 +25,27 @@ interface SmartDiffViewerProps {
   data: SmartDiff;
   /** The PR's files, for their patch text — `SmartDiff` carries none. */
   files: PrFile[];
+  /**
+   * The file the reviewer arrived to read, from `?file=<path>` — a review-focus
+   * click on the Overview brief. It expands THAT card and nothing else; a path
+   * that is not in this PR selects nothing, which is a legitimate landing state
+   * rather than an error (AC-44).
+   *
+   * A PATH, never a `file:line`: the brief carries no line numbers, on purpose
+   * (client/INSIGHTS.md, 2026-08-13), and this feature adds no line anchors to
+   * `CodeLine` either.
+   */
+  selectedPath?: string | null;
   /** Navigates to this finding's card in the Agent runs tab (URL-driven). */
   onOpenFinding: (id: string) => void;
 }
 
-export function SmartDiffViewer({ data, files, onOpenFinding }: SmartDiffViewerProps) {
+export function SmartDiffViewer({
+  data,
+  files,
+  selectedPath,
+  onOpenFinding,
+}: SmartDiffViewerProps) {
   const t = useTranslations("prReview");
   const patches = React.useMemo(() => patchIndex(files), [files]);
 
@@ -39,8 +55,59 @@ export function SmartDiffViewer({ data, files, onOpenFinding }: SmartDiffViewerP
   const totals = totalsFor(data);
   const split = data.split_suggestion;
 
+  // The ONE effect in this component, and it owns no state the render needs:
+  // `defaultOpen` above already expands the selected card, but a card thirty
+  // files down opens off-screen, so the reviewer who clicked a review-focus
+  // item sees nothing move. Bringing it into view is the other half of AC-42 —
+  // the half no criterion spells out and every reader expects.
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!selectedPath) return;
+    const root = rootRef.current;
+    if (!root) return;
+
+    // NO SELECTOR INTERPOLATION. `selectedPath` is model-produced text that
+    // survived server grounding — grounding proves the file exists, never that
+    // the string is safe to build a CSS selector out of. `FindingsPanel` does
+    // interpolate its `?finding=` value and gets away with it because that
+    // value is a uuid; this one is a path. Reading the attribute back and
+    // comparing strings costs one pass over a handful of nodes.
+    const bring = () => {
+      const card = Array.from(root.querySelectorAll("[data-file-path]")).find(
+        (node) => node.getAttribute("data-file-path") === selectedPath,
+      );
+      // A path this PR does not carry scrolls nowhere — a legitimate landing
+      // state, not an error (AC-44).
+      //
+      // `block: "start"` with the DEFAULT (instant) behaviour, and `s.fileCard`
+      // carries the `scroll-margin-top` that clears the sticky PR header.
+      // Smooth would fight the repeat below: each new call would restart an
+      // animation the next mutation interrupts.
+      card?.scrollIntoView?.({ block: "start" });
+    };
+
+    bring();
+
+    // THE LIST GROWS AFTER THIS EFFECT, and that is the whole reason for the
+    // observer. On a 92-file PR the cards mount before their diff bodies do, so
+    // the target sits ~13 px down when the first scroll lands and ~22 000 px
+    // down once the cards above it have rendered their lines. A single scroll
+    // is therefore correct at the moment it runs and wrong a beat later — which
+    // is exactly the shape that made this look fine when clicked from Overview
+    // (already laid out) and do nothing on a freshly opened shared link.
+    const observer = new MutationObserver(bring);
+    observer.observe(root, { childList: true, subtree: true });
+    // Stop chasing once the list has settled: past this point a scroll would be
+    // yanking a reader who has started scrolling for themselves.
+    const stop = setTimeout(() => observer.disconnect(), 2000);
+    return () => {
+      observer.disconnect();
+      clearTimeout(stop);
+    };
+  }, [selectedPath, data]);
+
   return (
-    <div>
+    <div ref={rootRef}>
       <div style={s.summaryStrip}>
         <span>{t("smartDiff.filesCount", { count: totals.files })}</span>
         <span className="mono tnum" style={s.stat}>
@@ -98,7 +165,13 @@ export function SmartDiffViewer({ data, files, onOpenFinding }: SmartDiffViewerP
                 smart={{
                   findings: file.findings,
                   isLarge: file.is_large,
-                  defaultOpen: !COLLAPSED_ROLES.includes(group.role),
+                  // DERIVED at mount from the URL, never synced into it with an
+                  // effect: "which card is open" has one owner — `FileCard`'s
+                  // own state — and the selection only sets its initial value.
+                  // The role policy still opens everything it opened before; the
+                  // selected file is added to that set, never subtracted from it.
+                  defaultOpen:
+                    file.path === selectedPath || !COLLAPSED_ROLES.includes(group.role),
                   onOpenFinding,
                 }}
               />

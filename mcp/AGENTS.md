@@ -6,7 +6,7 @@ database pool, no `Container`, no secrets, and no model.
 
 The from-scratch runbook and the token cost are in `README.md` — do not restate
 them here. The short version: `.mcp.json` in the repo root is auto-discovered,
-so every session in this repo carries the five tools and pays 1 936 tokens for
+so every session in this repo carries the five tools and pays 1 967 tokens for
 them; `claude --strict-mcp-config` is the opt-out. `./scripts/dev.sh` does not
 start this server and never has — the MCP client spawns it over stdio.
 
@@ -62,6 +62,13 @@ breaks the double at compile time instead of drifting silently.
   to the engine; this package reports what it read.
 - **stdout is the protocol.** Diagnostics go to stderr through `src/log.ts`; the
   lint lane fails on `console.log` and on `process.stdout`.
+- **`.mcp.json`'s `timeout` stays above `MAX_WAIT_SECONDS`.** 960 000 ms against
+  900 s, so this server's own deadline fires first and returns the `run_id`s.
+  A client abort returns nothing, and the runs are billed either way. Raising
+  `max_wait_seconds` without raising `timeout` is the regression.
+- **`get_findings` unions across AGENTS and dedupes within ONE agent.** Never
+  the reverse, and never a global "latest". `all_runs: true` opts back into the
+  history; a default answer that dropped rows must say how many.
 
 ## Contracts
 
@@ -80,6 +87,12 @@ vendored copy. `zod` is self-pinned in `tsconfig.json` for the same reason
   This entry used to say the whole file was a stub and not to be implemented,
   because the server exposed no blast route. L04 added `modules/blast/`, so that
   reason expired — the rule that outlived it is the one above.
+
+- `src/tools/list-agents.ts`'s **omission of `a.provider`**. It is deployment
+  configuration, not something a caller can act on: no tool here selects a
+  provider, and the model string already names the family. `test/tools.test.ts`
+  pins the absence, because nothing else fails when someone adds it back while
+  making the head line read better.
 
 ## Read when
 

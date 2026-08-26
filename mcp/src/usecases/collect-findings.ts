@@ -1,11 +1,11 @@
-import type { FindingCategory, FindingRecord, Severity } from '@devdigest/shared';
+import type { FindingCategory, FindingRecord, ReviewRecord, Severity } from '@devdigest/shared';
 import type { ApiClient } from '../api/types.js';
 import type { Resolver } from '../resolve.js';
 
 /**
- * Ring 2 — resolve → fetch → union → filter → paginate. Five dependent steps
- * and a loop, which is onion §9's own definition of "this body is a service,
- * not a handler".
+ * Ring 2 — resolve → fetch → scope to runs → union → filter → paginate. Six
+ * dependent steps and a loop, which is onion §9's own definition of "this body
+ * is a service, not a handler".
  */
 
 export type FindingStatus = 'open' | 'accepted' | 'dismissed' | 'all';
@@ -18,18 +18,46 @@ export interface FindingsQuery {
   status: FindingStatus;
   limit: number;
   offset: number;
+  /** false = the newest review row of each agent. true = every run this PR ever had. */
+  allRuns: boolean;
 }
 
 export interface FindingsPage {
   /** `acme/payments-api#482` when it could be resolved, else the raw ref. */
   label: string;
-  /** Findings across EVERY review row, before filtering. */
+  /** Findings across every review row IN SCOPE, before filtering. */
   total: number;
   /** Findings that matched the filters. */
   matched: number;
   items: FindingRecord[];
-  /** The agents whose review rows contributed, in the order they were read. */
+  /**
+   * Agents that contributed AT LEAST ONE finding, newest run first.
+   *
+   * Not "agents that reviewed" — that is `reviewers` below, and conflating the
+   * two is a defect this tool has already shipped once. A review row with an
+   * empty `findings` array used to land here anyway, so the header credited
+   * agents that found nothing: on `teplyakoff/dev-digest#4` it read "11
+   * finding(s) … from 3 agent(s)" while the Security Reviewer had 0 across all
+   * four of its runs, and that line was read as evidence the security agent had
+   * flagged the contract break. The audience for this header is a model, which
+   * cannot cross-check it against anything.
+   *
+   * Counted BEFORE the filters, because the sentence it feeds is "N finding(s)
+   * … across M agent(s)" — M describes `total`, not `matched`.
+   */
   agents: string[];
+  /**
+   * Every agent whose review row is in scope, whether or not it found anything.
+   *
+   * This is the list that answers "has anything reviewed this pull request?",
+   * and it is the one thing `agents` must NOT be used for: an empty `agents`
+   * means "nobody found anything", while an empty `reviewers` means "nobody
+   * looked". Those are opposite answers to the question a caller is actually
+   * asking.
+   */
+  reviewers: string[];
+  /** Review rows a superseded run contributed that `allRuns: false` left out. */
+  hiddenRuns: number;
 }
 
 export async function collectFindings(
@@ -42,23 +70,36 @@ export async function collectFindings(
   const reviews = await api.listReviews(pullId, signal);
 
   /*
-   * THE correctness risk in this tool, and it has already been paid for once
-   * (`server/INSIGHTS.md:343-356`): ONE ROW IN `reviews` IS ONE AGENT, not one
-   * review pass. A Run Review writes a `kind: 'review'` row per agent, so
-   * `reviews.find(r => r.kind === 'review')` — the obvious code — reports the
-   * agent that happened to finish LAST. On teplyakoff/dev-digest#5 that was the
-   * API Contract Reviewer with 0 findings, on a PR that really had 13.
+   * `reviews` rows are plain INSERTs — `repository/review.repo.ts:25` never
+   * upserts — so re-running an agent APPENDS a row rather than replacing one.
+   * Two axes therefore have to be kept apart, and conflating them is how this
+   * tool goes wrong in both directions:
    *
-   * So: union every `kind: 'review'` row. The knowing cost is that a re-run
-   * agent's superseded findings stay visible until its older review is deleted —
-   * the same trade `modules/smart-diff/service.ts` made.
+   *   across agents — union, always. One Run Review writes one row PER AGENT,
+   *     so narrowing to a single row reports whichever agent finished last. On
+   *     teplyakoff/dev-digest#5 that was the API Contract Reviewer with 0
+   *     findings on a PR that really had 13 (`server/INSIGHTS.md:343-356`).
+   *
+   *   across runs OF ONE AGENT — the newest wins by default. Older rows are a
+   *     superseded verdict on the same diff, and reporting them beside the
+   *     current one double-counts findings the agent has already re-decided.
+   *
+   * `allRuns: true` keeps the history; the count that was dropped travels back
+   * as `hiddenRuns` so the caller is told what it is not seeing rather than
+   * left to infer it from a total that quietly shrank.
    */
-  const reviewRows = reviews.filter((r) => r.kind === 'review');
+  const reviewRows = [...reviews.filter((r) => r.kind === 'review')].sort(newestFirst);
+  const inScope = query.allRuns ? reviewRows : latestRunPerAgent(reviewRows);
+
   const agents: string[] = [];
+  const reviewers: string[] = [];
   const all: FindingRecord[] = [];
-  for (const row of reviewRows) {
+  for (const row of inScope) {
     const name = row.agent_name ?? row.agent_id ?? 'unknown agent';
-    if (!agents.includes(name)) agents.push(name);
+    if (!reviewers.includes(name)) reviewers.push(name);
+    // The `length > 0` guard IS the fix: an agent earns a place in `agents` by
+    // finding something, not by having run.
+    if (row.findings.length > 0 && !agents.includes(name)) agents.push(name);
     all.push(...row.findings);
   }
 
@@ -71,7 +112,43 @@ export async function collectFindings(
     matched: matched.length,
     items,
     agents,
+    reviewers,
+    hiddenRuns: reviewRows.length - inScope.length,
   };
+}
+
+/**
+ * Newest first. Returns 0 rather than `NaN` on an unparseable or equal
+ * `created_at`, which keeps the sort stable — ties hold the order the API
+ * returned (`reviewsForPull` already orders `createdAt DESC`), instead of
+ * depending on comparator behaviour that is not specified for `NaN`.
+ */
+function newestFirst(a: ReviewRecord, b: ReviewRecord): number {
+  const ta = Date.parse(a.created_at);
+  const tb = Date.parse(b.created_at);
+  if (Number.isNaN(ta) || Number.isNaN(tb) || ta === tb) return 0;
+  return tb - ta;
+}
+
+/**
+ * One row per agent, keeping the newest — the input must already be sorted.
+ *
+ * The key falls back through `agent_id` → the name → the row's own id, and that
+ * last step is not a formality: rows whose agent has been deleted carry a null
+ * `agent_id` AND a null `agent_name`, and keying those together would collapse
+ * every orphaned review in a PR's history into one. Unattributable rows each
+ * keep their own key and so all survive.
+ */
+function latestRunPerAgent(newestFirstRows: ReviewRecord[]): ReviewRecord[] {
+  const seen = new Set<string>();
+  const kept: ReviewRecord[] = [];
+  for (const row of newestFirstRows) {
+    const key = row.agent_id ?? (row.agent_name ? `name:${row.agent_name}` : `row:${row.id}`);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(row);
+  }
+  return kept;
 }
 
 function matches(f: FindingRecord, q: FindingsQuery): boolean {

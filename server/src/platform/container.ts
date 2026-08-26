@@ -34,8 +34,13 @@ import { ReviewRepository } from '../modules/reviews/repository.js';
 import { loadDiff, type DiffPullRef } from '../modules/reviews/diff-loader.js';
 import { SkillsService } from '../modules/skills/service.js';
 import { IntentService } from '../modules/intent/service.js';
+import { BlastService } from '../modules/blast/service.js';
+import { ProjectContextService } from '../modules/context/service.js';
+import { ContextRepository } from '../modules/context/repository.js';
 import { getFeatureModelOverride } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
+import type { ProjectContextService as ProjectContextServiceType } from '../modules/context/service.js';
+import type { ContextRepository as ContextRepositoryType } from '../modules/context/repository.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
@@ -63,6 +68,14 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /**
+   * The project-context store (L06). Overridable for the same reason
+   * `repoIntel` is: `run-executor` reaches it through the container, so a test
+   * that wants a review to carry documents — or to carry none — swaps the
+   * service rather than seeding three tables to say so.
+   */
+  projectContext?: ProjectContextServiceType;
+  contextRepo?: ContextRepositoryType;
 }
 
 export class Container {
@@ -87,6 +100,9 @@ export class Container {
   private _reviewRepo?: ReviewRepository;
   private _skills?: SkillsService;
   private _intent?: IntentService;
+  private _blast?: BlastService;
+  private _contextRepo?: ContextRepository;
+  private _projectContext?: ProjectContextService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -170,6 +186,48 @@ export class Container {
    */
   get intent(): IntentService {
     return (this._intent ??= new IntentService(this));
+  }
+
+  /**
+   * The blast-radius map (L04), shared across features.
+   *
+   * Here for the same reason `intent` is: `modules/brief` needs the impact map
+   * to build its allowlist and its prompt, and `modules/blast` is its SIBLING —
+   * onion §11 makes a sibling module private and the container the sanctioned
+   * route.
+   *
+   * WHICH ENTRY POINT MATTERS HERE. `BlastService.get` is not a thin wrapper
+   * over `repoIntel.getBlastRadius`: the facade has a cheap indexed branch and
+   * an expensive re-parse-the-clone fallback, returns the same shape either way,
+   * and gives the caller no way to tell which it got. `BlastService` checks the
+   * index state first and returns `degraded` instead of reaching for the slow
+   * path. Consumers go through here; nobody calls `getBlastRadius` directly.
+   */
+  get blast(): BlastService {
+    return (this._blast ??= new BlastService(this));
+  }
+
+  /**
+   * The project-context document store (L06), shared across features.
+   *
+   * Here for the same reason `skills` and `intent` are: the review executor needs
+   * it to fill the prompt's `specs` slot, and `modules/context` is that
+   * executor's SIBLING — onion §11 makes a sibling module private and the
+   * container the sanctioned route. `run-executor.ts` calls
+   * `container.projectContext.specsForAgent(...)`, never `../context/service.js`.
+   */
+  get projectContext(): ProjectContextService {
+    if (this.overrides.projectContext) return this.overrides.projectContext;
+    return (this._projectContext ??= new ProjectContextService(this));
+  }
+
+  /**
+   * Project-context data access, exposed for the same reason `agentsRepo` is:
+   * more than one caller needs the rows and none of them should own the SQL.
+   */
+  get contextRepo(): ContextRepository {
+    if (this.overrides.contextRepo) return this.overrides.contextRepo;
+    return (this._contextRepo ??= new ContextRepository(this.db));
   }
 
   /**

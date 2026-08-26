@@ -33,6 +33,16 @@ export const NAV: NavGroup[] = [
     section: "WORKSPACE",
     items: [
       { key: "pulls", label: "Pull Requests", icon: "GitPullRequest", href: "/repos/:repoId/pulls", gKey: "p" },
+      // L06 — Project Context sits second in WORKSPACE, after Pull Requests, as
+      // the design has it. The design's neighbours (`dashboard`,
+      // `onboarding-tour`) do not exist here, so the POSITION is carried by
+      // meaning rather than by index.
+      //
+      // NO `gKey`, and therefore no SHORTCUTS row: the design item carries key,
+      // label and icon only, and assigning a letter here would be inventing a
+      // requirement nobody stated. `nav-registry.test.ts` pins the absence so it
+      // reads as a decision rather than an omission.
+      { key: "context", label: "Project Context", icon: "Folder", href: "/repos/:repoId/context" },
     ],
   },
   {

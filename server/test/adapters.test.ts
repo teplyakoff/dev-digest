@@ -6,6 +6,7 @@ import {
   MockGitHubClient,
   MockCodeIndex,
   MockEmbedder,
+  MockSourceReader,
 } from '../src/adapters/mocks.js';
 import { assemblePrompt } from '../src/platform/prompt.js';
 import { groundFindings } from '../src/platform/grounding.js';
@@ -103,5 +104,38 @@ describe('pricing / cost discipline', () => {
   it('estimates cost for known models and returns null for unknown', () => {
     expect(estimateCost('gpt-4o-mini', 1_000_000, 0)).toBeCloseTo(0.15, 5);
     expect(estimateCost('some-future-model', 1000, 1000)).toBeNull();
+  });
+
+  /**
+   * The half of a new port method that is most often forgotten. Without it every
+   * test that exercises SPEC-06's import picker would need a real temp directory
+   * — which is how a suite ends up with fixtures that pass only on the machine
+   * that wrote them.
+   */
+  it('MockSourceReader.list filters by extension, sorts, and reports the cap', async () => {
+    const reader = new MockSourceReader({
+      'docs/PRD.md': '# prd',
+      'README.md': '# readme',
+      'src/a.ts': 'const a = 1;',
+    });
+
+    expect(await reader.list('/clone', { extensions: ['.md'], maxEntries: 10 })).toEqual({
+      entries: [
+        { path: 'README.md', bytes: 8 },
+        { path: 'docs/PRD.md', bytes: 5 },
+      ],
+      truncated: false,
+    });
+
+    // Sorted before the cap, exactly as the filesystem adapter does it.
+    expect(await reader.list('/clone', { extensions: ['.md'], maxEntries: 1 })).toEqual({
+      entries: [{ path: 'README.md', bytes: 8 }],
+      truncated: true,
+    });
+
+    expect(await reader.list('/clone', { extensions: ['.md'], maxEntries: 0 })).toEqual({
+      entries: [],
+      truncated: true,
+    });
   });
 });

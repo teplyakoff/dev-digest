@@ -8,7 +8,7 @@ import { Badge } from "@devdigest/ui";
 import type { RunTrace, FindingRecord } from "@devdigest/shared";
 import { formatCost } from "@/components/run-cost-badge";
 import { PROMPT_COLORS } from "../../constants";
-import { formatSeconds, formatTokens, skillTokens } from "../../helpers";
+import { formatSeconds, formatTokens, skillTokens, specTokens } from "../../helpers";
 import { s } from "../../styles";
 import { TraceSection } from "../TraceSection";
 import { ToolCallRow } from "../ToolCallRow";
@@ -110,8 +110,19 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         {trace.prompt_assembly.repo_map != null && (
           <PromptBlock label={t("trace.prompt.repoMap")} text={trace.prompt_assembly.repo_map} color={PROMPT_COLORS.repoMap} />
         )}
+        {/* Null on every trace persisted before L06 and on any run whose agent
+            carried no attached documents — this `!= null` is what makes both
+            render with no row rather than an empty one. */}
         {trace.prompt_assembly.specs != null && (
-          <PromptBlock label={t("trace.prompt.specs")} text={trace.prompt_assembly.specs} color={PROMPT_COLORS.specs} />
+          <PromptBlock
+            // The cost of the project context, on the block that carries it —
+            // the same shape the skills block above already uses.
+            label={`${t("trace.prompt.specs")} · ${t("trace.prompt.specTokens", {
+              count: specTokens(trace),
+            })}`}
+            text={trace.prompt_assembly.specs}
+            color={PROMPT_COLORS.specs}
+          />
         )}
         {trace.prompt_assembly.callers != null && (
           <PromptBlock label={t("trace.prompt.callers")} text={trace.prompt_assembly.callers} color={PROMPT_COLORS.callers} />

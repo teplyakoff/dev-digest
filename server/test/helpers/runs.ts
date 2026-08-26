@@ -32,3 +32,38 @@ export async function waitForPrRuns(
     await new Promise((r) => setTimeout(r, 25));
   }
 }
+
+/**
+ * Wait until a run's TRACE row exists, not merely until the run is terminal.
+ *
+ * These are two different moments, and the gap between them is real: the
+ * executor sets `status: 'done'` inside its persistence transaction and calls
+ * `saveRunTrace` AFTER that transaction commits. `waitForPrRuns` watches the
+ * status, so it can return in the window where the run is finished and the trace
+ * has not been written yet.
+ *
+ * Under load that window opens wide enough to matter — it failed a `--full`
+ * suite run here, and the symptom is a bare
+ * `Cannot read properties of undefined (reading 'skills')` pointing at the
+ * assertion rather than at the ordering, which is what makes it expensive to
+ * diagnose from the failure alone.
+ *
+ * The executor's ordering is correct and is deliberately left alone: the run's
+ * terminal status is the truth, the trace is reporting, and a trace written
+ * before the run settled would be a record of something that had not happened.
+ * So the wait belongs here, once, rather than in each test that reads a trace.
+ */
+export async function waitForRunTrace(
+  db: PgFixture['handle']['db'],
+  runId: string,
+  opts: { timeoutMs?: number } = {},
+): Promise<typeof t.runTraces.$inferSelect | undefined> {
+  const { timeoutMs = 10_000 } = opts;
+  const start = Date.now();
+  for (;;) {
+    const [row] = await db.select().from(t.runTraces).where(eq(t.runTraces.runId, runId));
+    if (row) return row;
+    if (Date.now() - start > timeoutMs) return undefined;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}

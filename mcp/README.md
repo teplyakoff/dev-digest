@@ -147,15 +147,36 @@ relative `command` with an absolute path if that client will not run one:
 { "mcpServers": { "devdigest": {
     "command": "mcp/bin/devdigest-mcp",
     "args": [],
-    "env": { "DEVDIGEST_API_URL": "http://localhost:3001" } } } }
+    "env": { "DEVDIGEST_API_URL": "http://localhost:3001" },
+    "timeout": 960000 } } }
 ```
+
+### Why `timeout` is in there, and why it is 960 000
+
+`timeout` is a per-server **tool-call** wall clock in milliseconds, and it is the
+only half of the timeout story this repo controls. `MCP_TIMEOUT` is the client's
+*startup* budget and is a different number; `MCP_TOOL_TIMEOUT` is the same wall
+clock set globally, which this key overrides for this server alone.
+
+960 000 ms is `MAX_WAIT_SECONDS` (900) plus a minute. The ordering is the whole
+point: **this server's own timeout must fire first.** When it does,
+`run_agent_on_pull_request` returns `isError: true` carrying the `run_id`s, so
+the work is recoverable with `get_findings`. When the client's fires first, the
+call is aborted from outside and the caller gets no ids at all — the runs are
+still billed and still finish, and nothing says where they went.
+
+Do not assume progress notifications cover this. They reset a *client's* idle
+accounting and, in an SDK client, a `resetTimeoutOnProgress` deadline — but a
+per-server `timeout` in Claude Code is a hard wall clock that progress does not
+extend. Raising `max_wait_seconds` without raising this number reintroduces
+exactly the failure it is here to prevent.
 
 ## The five tools
 
 | Tool | What it does | Reads or writes |
 |---|---|---|
-| `list_agents` | The workspace's review agents: provider, model, enabled, linked skill count | read |
-| `get_findings` | Findings for a PR, filterable by severity / category / path / status | read |
+| `list_agents` | The workspace's review agents: model, enabled, linked skill count | read |
+| `get_findings` | Findings for a PR, filterable by severity / category / path / status / run | read |
 | `get_conventions` | A repo's extracted conventions, with the evidence line each cites | read |
 | `run_agent_on_pull_request` | Runs one agent (or all) and **blocks** until the runs settle | **writes, calls GitHub and an LLM, spends money** |
 | `get_blast_radius` | What else a PR can reach: changed symbols → callers → downstream endpoints and crons | read |
@@ -163,6 +184,22 @@ relative `command` with an absolute path if that client will not run one:
 Every identifier is flexible: a GitHub URL, `owner/repo` plus a number, or a
 UUID. On a miss the error lists the candidates it actually saw, so the model can
 correct itself instead of guessing.
+
+### `get_findings` unions agents but not re-runs
+
+A `reviews` row is one AGENT, not one review pass, and the rows are appended —
+re-running an agent adds a row rather than replacing one. So the tool treats the
+two axes differently, and the difference is the whole design:
+
+- **Across agents it always unions.** Reading a single row reports whichever
+  agent finished last, which on `teplyakoff/dev-digest#5` was the one with 0
+  findings on a PR that had 13 (`server/INSIGHTS.md:343-356`).
+- **Within one agent the newest run wins**, because an older row is a verdict
+  the agent has already replaced, and showing both double-counts it.
+
+`all_runs: true` returns the history instead. Either way the header states the
+scope, and a default answer that dropped rows says how many it dropped — a total
+that quietly shrank is indistinguishable from an agent that found less.
 
 ### `run_agent_on_pull_request` is genuinely blocking
 
@@ -173,11 +210,16 @@ filtered to the run ids it was given, until each is `done`, `failed` or
 
 `max_wait_seconds` defaults to **900**, and that is not padding: two real runs in
 this repo's history took **945 s** and **674 s** against a typical 8–99 s
-(`server/INSIGHTS.md`). Two things make a wait that long survivable:
+(`server/INSIGHTS.md`). Three things make a wait that long survivable:
 
+- **A client timeout set above ours.** `.mcp.json` carries `"timeout": 960000`,
+  so the server's own 900 s deadline is always the one that fires — see
+  [above](#why-timeout-is-in-there-and-why-it-is-960000). This is the load-bearing
+  one, because the other two do not cover it.
 - **Progress notifications.** When the client sends a `progressToken`, every
-  poll tick emits progress. Clients that set `resetTimeoutOnProgress` reset
-  their own timeout on each one.
+  poll tick emits progress. That resets a client's idle accounting, and in an
+  SDK client a `resetTimeoutOnProgress` deadline — but **not** a per-server
+  `timeout`, which is a hard wall clock progress does not extend.
 - **Cancellation.** `extra.signal` is honoured on every tick; the tool stops at
   once and hands back the `run_id`s so `get_findings` can pick the work up.
 
@@ -209,12 +251,12 @@ index answers normally, with the caveat inline.
 <a id="token-cost"></a>
 
 Tool definitions are injected into the **system prompt of every chat that loads
-them**, so the five cost **1 936 measured tokens** — serialised `tools/list` from
-the running server, 7 745 characters at ~4 chars/token, against an earlier
+them**, so the five cost **1 967 measured tokens** — serialised `tools/list` from
+the running server, 7 868 characters at ~4 chars/token, against an earlier
 estimate of ~1 650.
 
 Because `.mcp.json` is committed and auto-discovered, that is charged to **every**
-session in this repo — `planner`, `researcher` and the review agents included,
+session in this repo — `implementation-planner`, `researcher` and the review agents included,
 none of which can call these tools. That is the deliberate trade: the tools are
 always there, and the price is always paid. `claude --strict-mcp-config` is the
 per-session opt-out, and it is worth reaching for when a session is not about
@@ -224,18 +266,24 @@ Measured per tool, from the same payload:
 
 | Tool | Tokens | Estimated | |
 |---|---:|---:|---|
-| `run_agent_on_pull_request` | **499** | ~550 | the only `outputSchema` |
-| `get_findings` | **467** | ~405 | seven filters |
+| `run_agent_on_pull_request` | **509** | ~550 | the only `outputSchema` |
+| `get_findings` | **500** | ~405 | eight filters; `all_runs` cost 33 |
 | `get_conventions` | **424** | ~285 | the `ConventionStatus \| 'all'` union costs more than a plain enum |
 | `get_blast_radius` | **275** | ~185 | was 221 as a stub; a real schema and a real description cost 54 more |
-| `list_agents` | **260** | ~225 | |
-| | **1 936** | ~1 650 | |
+| `list_agents` | **258** | ~225 | 260 until the `provider` projection came out |
+| | **1 967** | ~1 650 | |
 
-**64 tokens of headroom, and that is the whole story of this table.** L04 spent
-54 of them turning `get_blast_radius` from a stub into a working tool, which was
-worth it; what is left will not absorb another filter on another tool. The next
-change that needs room takes it from `get_conventions` (424 tokens for one
-read, the worst ratio here) rather than from the budget.
+(The per-tool column sums to slightly more than the total: each row is measured
+on its own serialised object, the total on the serialised array. The **total** is
+what the budget is about.)
+
+**33 tokens of headroom, and that is the whole story of this table.** L04 spent
+54 of the original 64 turning `get_blast_radius` from a stub into a working tool;
+L05 spent 31 more on `all_runs`, and that one had to be paid — without it the
+tool could not report a re-run at all. What is left will not absorb another
+filter on another tool. The next change that needs room takes it from
+`get_conventions` (424 tokens for one read, the worst ratio here) rather than
+from the budget.
 
 Budget: **2 000 tokens**. Going over is a defect, not a fact of life. What holds
 it there, strongest first: exactly five tools; `instructions` omitted; exactly

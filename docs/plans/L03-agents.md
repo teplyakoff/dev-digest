@@ -8,9 +8,10 @@ agents already there, plus the companion updates the change makes necessary.
 `routing.md` §1 puts `.claude/**` in the `infra` group and skips `docs/**` and
 `*.md` entirely. No package manager is involved.
 
-Produced by the `planner` agent, grounded in five parallel `researcher` runs
-(subagent mechanics, test authoring, architectural review, plan verification,
-documentation). Sources are cited per rule in
+Produced by the `implementation-planner` agent (named `planner` when this plan
+was written), grounded in five parallel `researcher` runs (subagent mechanics,
+test authoring, architectural review, plan verification, documentation). Sources
+are cited per rule in
 [`.claude/agents/README.md`](../../.claude/agents/README.md) — *What grounds the
 rules*.
 
