@@ -432,6 +432,26 @@ here. Here is for what has no package at all.
   `git reset --soft` to the commit before and two re-commits, which is only
   cheap while nothing has been pushed. (2026-08-25)
 
+- **A graded eval case copied its target path from a documentation *example*
+  instead of the real convention it claims to test.** `evals/workflow/review-workflow.cases.ts`
+  had three `trace` cases asserting `filesRead` contained `server/docs/api-contracts.md`,
+  `reviewer-core/docs/pipeline.md`, and `reviewer-core/insights/gotchas.md` — none of
+  which ever existed anywhere in this repo's git history (`git log --all -p -- CLAUDE.md`
+  never mentions any of the three). The source was `evals/README.md`'s illustrative
+  `contrast`-kind example (`expectFileRead: "server/docs/api-contracts.md"`, written to
+  teach the DSL shape, not to describe this repo) — someone building the real graded
+  cases reused that placeholder path verbatim instead of checking root CLAUDE.md's actual
+  "Read when" table, which routes to `server/README.md`, `reviewer-core/README.md`, and
+  (via the "Session loop" rule, not a dedicated gotchas file) each package's own
+  `INSIGHTS.md`. All three cases had been silently failing every `pnpm eval:workflow` run
+  since the eval package was merged in. **When a graded case's expected path looks
+  suspiciously specific, grep the doc it's meant to test for that exact string before
+  trusting the case — a README's teaching example and a real fixture can drift apart with
+  nothing to catch it**, because nothing type-checks a hardcoded path against the prose it
+  claims to route from. Fixed by pointing the three cases at the real "Read when" targets;
+  see the inline "FIXED 2026-08-26" comments in `review-workflow.cases.ts` for the
+  per-case mapping. (2026-08-26)
+
 
 ## Codebase Patterns
 
