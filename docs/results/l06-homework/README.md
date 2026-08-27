@@ -141,7 +141,8 @@ throughout — it checks that a key is *present*, not that it works.
 
 | File | What it shows |
 |---|---|
-| `devdigest-evals.mp4` | the whole loop: a decided finding → one click → the Evals tab → a batch running → metrics → the prompt edited → a second batch → the dashboard → two runs compared |
+| `devdigest-evals-edited.mp4` | **watch this one.** The same take, 1 min 50 s: the two five-minute batch waits are cut and replaced by a card saying so. Nothing else is altered — no reordering, no speed change, no re-shoot |
+| `devdigest-evals.mp4` | the unedited take, 11 min 43 s. Two thirds of it is a spinner. Kept because the edited cut is derived from it and a reader may want to check that the cuts hide nothing |
 | `01-decided-finding.png` | the accepted finding on `acme/payments-api#482` before it becomes anything |
 | `02-eval-case-created.png` | **one click** — the toast with its link, and no dialog opened (AC-65) |
 | `03-evals-tab-cases.png` | the set, every row saying what it asserts: `MUST FIND` / `MUST NOT FLAG` |
@@ -156,6 +157,36 @@ throughout — it checks that a key is *present*, not that it works.
 | `12-prompt-diff.png` | **the reason**: the two prompt snapshots diffed word by word |
 | `summary.json` | what the recorder asserted rather than filmed, per scene |
 | `verify-l06.txt` | **NFR-8.** Four lanes green, and each one *shown to go red* — one planted failure per lane, exactly one FAIL, the other three still running, exit 1, md5-verified restore |
+
+### How the edited cut was made
+
+Same take, cuts only — `docs/results/README.md`'s "never mix takes" rule is about
+mixing *recordings*, and this is one recording with two waits removed.
+
+```
+segment A   0:00–0:45   original 0–45      setup → one click → Evals tab → Run all evals
+card 1      3.2s        "≈ 5 minutes pass · 12 cases · one model call each"
+segment B   0:48–1:12   original 338–362   batch A lands → the prompt edited
+card 2      3.2s        "≈ 5 minutes pass · the same 12 cases · the new prompt"
+segment C   1:15–1:50   original 669–end   batch B lands → dashboard → compare → prompt diff
+```
+
+The two cuts remove 5 min 11 s and 5 min 24 s of a progress counter — measured
+from the frame timestamps, not estimated. Each card is followed immediately by
+the frame where the result lands, so the elapsed time is stated rather than
+silently skipped.
+
+Note the metric strip shows the *previous* batch's numbers during segment A
+(38% / 12% / 96%). That is not a stale render: `current` is deliberately the last
+**finished** batch, so the last good numbers stay on screen while a run is in
+flight. `latest_batch` is the channel that knows a batch is running, and it is
+what disables the button in the same frame.
+
+The interstitials were rendered as HTML through Playwright rather than with
+ffmpeg's `drawtext`: this machine's ffmpeg 8.1.2 is built without libfreetype, so
+that filter does not exist in it. Rendering them as pages also means they carry
+the app's own tokens (`#0a0a0a`, the accent blue, the mono caption) instead of
+looking like a title slide bolted on afterwards.
 
 Stills are downscaled to 1280 px per [`docs/results/README.md`](../README.md);
 re-recording **replaces** these files rather than adding a second set.
