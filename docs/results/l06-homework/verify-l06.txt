@@ -1,0 +1,473 @@
+verify:l06 — NFR-8 evidence
+===========================
+
+NFR-8 requires that this script be shown to go RED, not merely observed green.
+Root INSIGHTS.md: "A verification script that cannot be shown to go red is not
+evidence." A script whose lanes silently matched zero test files would print
+exactly the same PASS lines.
+
+Procedure, per lane: append one deliberately failing it(), run, confirm exactly
+one lane FAILs, confirm the other lanes still ran, confirm exit 1, restore, and
+verify the restore with md5.
+
+Baseline hashes before any plant:
+  aeef375fbbde934008970ffce7852d8f  reviewer-core/test/eval-score.test.ts
+  e23420fa0576f6c14f628cd35500d03d  server/test/evals-aggregate.test.ts
+  4bcbe4587849a67c3b508f936bd82942  client/src/components/evals/EvalMetricStrip/EvalMetricStrip.test.tsx
+  4d82ad47a34f7c1eb938ac676a0e29c9  client/src/components/evals/RunCompare/RunCompare.test.tsx
+
+The plant, identical in all four rounds, appended at file end:
+  it("PLANTED — S28 red-ability proof, removed immediately after", () => {
+    expect(1).toBe(2);
+  });
+
+================================================================
+ROUND 1
+================================================================
+Already up to date
+Done in 134ms using pnpm v11.5.3
+$ bash ../scripts/verify-l06.sh
+── verify:l06 · the eval pipeline ──────────────────────────────────
+
+[1/4] reviewer-core (npm) — the scorer: micro-average, 0/0 → unknown, AC-3 differential
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/reviewer-core
+
+ ❯ test/eval-score.test.ts (40 tests | 1 failed) 6ms
+   × PLANTED — S28 red-ability proof, removed immediately after 2ms
+     → expected 1 to be 2 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/eval-score.test.ts > PLANTED — S28 red-ability proof, removed immediately after
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ test/eval-score.test.ts:504:13
+    502| 
+    503| it("PLANTED — S28 red-ability proof, removed immediately after", () =>…
+    504|   expect(1).toBe(2);
+       |             ^
+    505| });
+    506| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 39 passed (40)
+   Start at  15:12:16
+   Duration  281ms (transform 75ms, setup 0ms, collect 112ms, tests 6ms, environment 0ms, prepare 53ms)
+
+
+[2/4] server (pnpm) — batch aggregates + wire DTO, hermetic
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/server
+
+ ✓ test/evals-aggregate.test.ts (17 tests) 4ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  15:12:17
+   Duration  195ms (transform 30ms, setup 0ms, collect 29ms, tests 4ms, environment 0ms, prepare 55ms)
+
+
+[3/4] client (pnpm) — the metric strip: unknown renders as an em dash, never 0%
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:12490) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/components/evals/EvalMetricStrip/EvalMetricStrip.test.tsx (9 tests) 29ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  15:12:17
+   Duration  611ms (transform 102ms, setup 20ms, collect 251ms, tests 29ms, environment 112ms, prepare 54ms)
+
+
+[4/4] client (pnpm) — run comparison: deltas, prompt diff, comparability
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:12536) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/components/evals/RunCompare/RunCompare.test.tsx (14 tests) 79ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  15:12:18
+   Duration  665ms (transform 101ms, setup 20ms, collect 257ms, tests 79ms, environment 111ms, prepare 50ms)
+
+
+── result ──────────────────────────────────────────────────────────
+  FAIL  reviewer-core  scorer arithmetic
+  PASS  server        batch aggregates + DTO
+  PASS  client        metric strip / unknown
+  PASS  client        run comparison
+
+verify:l06 FAILED
+[ELIFECYCLE] Command failed with exit code 1.
+
+================================================================
+ROUND 2
+================================================================
+Already up to date
+Done in 133ms using pnpm v11.5.3
+$ bash ../scripts/verify-l06.sh
+── verify:l06 · the eval pipeline ──────────────────────────────────
+
+[1/4] reviewer-core (npm) — the scorer: micro-average, 0/0 → unknown, AC-3 differential
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/reviewer-core
+
+ ✓ test/eval-score.test.ts (39 tests) 3ms
+
+ Test Files  1 passed (1)
+      Tests  39 passed (39)
+   Start at  15:12:34
+   Duration  270ms (transform 84ms, setup 0ms, collect 112ms, tests 3ms, environment 0ms, prepare 48ms)
+
+
+[2/4] server (pnpm) — batch aggregates + wire DTO, hermetic
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/server
+
+ ❯ test/evals-aggregate.test.ts (18 tests | 1 failed) 5ms
+   × PLANTED — S28 red-ability proof, removed immediately after 2ms
+     → expected 1 to be 2 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/evals-aggregate.test.ts > PLANTED — S28 red-ability proof, removed immediately after
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ test/evals-aggregate.test.ts:195:13
+    193| 
+    194| it("PLANTED — S28 red-ability proof, removed immediately after", () =>…
+    195|   expect(1).toBe(2);
+       |             ^
+    196| });
+    197| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  15:12:34
+   Duration  203ms (transform 44ms, setup 0ms, collect 22ms, tests 5ms, environment 0ms, prepare 60ms)
+
+
+[3/4] client (pnpm) — the metric strip: unknown renders as an em dash, never 0%
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:12763) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/components/evals/EvalMetricStrip/EvalMetricStrip.test.tsx (9 tests) 29ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  15:12:35
+   Duration  627ms (transform 91ms, setup 20ms, collect 252ms, tests 29ms, environment 107ms, prepare 39ms)
+
+
+[4/4] client (pnpm) — run comparison: deltas, prompt diff, comparability
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:12808) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/components/evals/RunCompare/RunCompare.test.tsx (14 tests) 81ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  15:12:36
+   Duration  680ms (transform 96ms, setup 19ms, collect 257ms, tests 81ms, environment 107ms, prepare 54ms)
+
+
+── result ──────────────────────────────────────────────────────────
+  PASS  reviewer-core  scorer arithmetic
+  FAIL  server        batch aggregates + DTO
+  PASS  client        metric strip / unknown
+  PASS  client        run comparison
+
+verify:l06 FAILED
+[ELIFECYCLE] Command failed with exit code 1.
+
+================================================================
+ROUND 3
+================================================================
+Already up to date
+Done in 130ms using pnpm v11.5.3
+$ bash ../scripts/verify-l06.sh
+── verify:l06 · the eval pipeline ──────────────────────────────────
+
+[1/4] reviewer-core (npm) — the scorer: micro-average, 0/0 → unknown, AC-3 differential
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/reviewer-core
+
+ ✓ test/eval-score.test.ts (39 tests) 3ms
+
+ Test Files  1 passed (1)
+      Tests  39 passed (39)
+   Start at  15:12:54
+   Duration  273ms (transform 68ms, setup 0ms, collect 106ms, tests 3ms, environment 0ms, prepare 56ms)
+
+
+[2/4] server (pnpm) — batch aggregates + wire DTO, hermetic
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/server
+
+ ✓ test/evals-aggregate.test.ts (17 tests) 2ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  15:12:54
+   Duration  199ms (transform 27ms, setup 0ms, collect 24ms, tests 2ms, environment 0ms, prepare 59ms)
+
+
+[3/4] client (pnpm) — the metric strip: unknown renders as an em dash, never 0%
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:13035) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ src/components/evals/EvalMetricStrip/EvalMetricStrip.test.tsx (10 tests | 1 failed) 29ms
+   × PLANTED — S28 red-ability proof, removed immediately after 2ms
+     → expected 1 to be 2 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/evals/EvalMetricStrip/EvalMetricStrip.test.tsx > PLANTED — S28 red-ability proof, removed immediately after
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ src/components/evals/EvalMetricStrip/EvalMetricStrip.test.tsx:189:13
+    187| 
+    188| it("PLANTED — S28 red-ability proof, removed immediately after", () =>…
+    189|   expect(1).toBe(2);
+       |             ^
+    190| });
+    191| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  15:12:55
+   Duration  613ms (transform 99ms, setup 20ms, collect 251ms, tests 29ms, environment 110ms, prepare 55ms)
+
+
+[4/4] client (pnpm) — run comparison: deltas, prompt diff, comparability
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:13080) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/components/evals/RunCompare/RunCompare.test.tsx (14 tests) 80ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  15:12:56
+   Duration  683ms (transform 98ms, setup 20ms, collect 263ms, tests 80ms, environment 112ms, prepare 52ms)
+
+
+── result ──────────────────────────────────────────────────────────
+  PASS  reviewer-core  scorer arithmetic
+  PASS  server        batch aggregates + DTO
+  FAIL  client        metric strip / unknown
+  PASS  client        run comparison
+
+verify:l06 FAILED
+[ELIFECYCLE] Command failed with exit code 1.
+
+================================================================
+ROUND 4
+================================================================
+Already up to date
+Done in 131ms using pnpm v11.5.3
+$ bash ../scripts/verify-l06.sh
+── verify:l06 · the eval pipeline ──────────────────────────────────
+
+[1/4] reviewer-core (npm) — the scorer: micro-average, 0/0 → unknown, AC-3 differential
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/reviewer-core
+
+ ✓ test/eval-score.test.ts (39 tests) 3ms
+
+ Test Files  1 passed (1)
+      Tests  39 passed (39)
+   Start at  15:13:15
+   Duration  289ms (transform 65ms, setup 0ms, collect 106ms, tests 3ms, environment 0ms, prepare 40ms)
+
+
+[2/4] server (pnpm) — batch aggregates + wire DTO, hermetic
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/server
+
+ ✓ test/evals-aggregate.test.ts (17 tests) 2ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  15:13:15
+   Duration  189ms (transform 27ms, setup 0ms, collect 22ms, tests 2ms, environment 0ms, prepare 56ms)
+
+
+[3/4] client (pnpm) — the metric strip: unknown renders as an em dash, never 0%
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:13312) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/components/evals/EvalMetricStrip/EvalMetricStrip.test.tsx (9 tests) 27ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  15:13:16
+   Duration  612ms (transform 101ms, setup 19ms, collect 254ms, tests 27ms, environment 114ms, prepare 54ms)
+
+
+[4/4] client (pnpm) — run comparison: deltas, prompt diff, comparability
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:13357) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ src/components/evals/RunCompare/RunCompare.test.tsx (15 tests | 1 failed) 83ms
+   × PLANTED — S28 red-ability proof, removed immediately after 2ms
+     → expected 1 to be 2 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/evals/RunCompare/RunCompare.test.tsx > PLANTED — S28 red-ability proof, removed immediately after
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ src/components/evals/RunCompare/RunCompare.test.tsx:238:13
+    236| 
+    237| it("PLANTED — S28 red-ability proof, removed immediately after", () =>…
+    238|   expect(1).toBe(2);
+       |             ^
+    239| });
+    240| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+   Start at  15:13:17
+   Duration  681ms (transform 110ms, setup 20ms, collect 258ms, tests 83ms, environment 115ms, prepare 49ms)
+
+
+── result ──────────────────────────────────────────────────────────
+  PASS  reviewer-core  scorer arithmetic
+  PASS  server        batch aggregates + DTO
+  PASS  client        metric strip / unknown
+  FAIL  client        run comparison
+
+verify:l06 FAILED
+[ELIFECYCLE] Command failed with exit code 1.
+
+================================================================
+AFTER ALL FOUR ROUNDS
+================================================================
+All four files restored byte-identical (diff of before/after md5 lists: no output).
+grep -rn PLANTED reviewer-core/test server/test client/src | wc -l  ->  0
+
+Final green run follows.
+
+Already up to date
+Done in 131ms using pnpm v11.5.3
+$ bash ../scripts/verify-l06.sh
+── verify:l06 · the eval pipeline ──────────────────────────────────
+
+[1/4] reviewer-core (npm) — the scorer: micro-average, 0/0 → unknown, AC-3 differential
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/reviewer-core
+
+ ✓ test/eval-score.test.ts (39 tests) 3ms
+
+ Test Files  1 passed (1)
+      Tests  39 passed (39)
+   Start at  15:32:10
+   Duration  277ms (transform 92ms, setup 0ms, collect 110ms, tests 3ms, environment 0ms, prepare 55ms)
+
+
+[2/4] server (pnpm) — batch aggregates + wire DTO, hermetic
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/server
+
+ ✓ test/evals-aggregate.test.ts (17 tests) 2ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  15:32:11
+   Duration  197ms (transform 27ms, setup 0ms, collect 22ms, tests 2ms, environment 0ms, prepare 57ms)
+
+
+[3/4] client (pnpm) — the metric strip: unknown renders as an em dash, never 0%
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:22139) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/components/evals/EvalMetricStrip/EvalMetricStrip.test.tsx (9 tests) 27ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  15:32:11
+   Duration  612ms (transform 95ms, setup 19ms, collect 257ms, tests 27ms, environment 109ms, prepare 54ms)
+
+
+[4/4] client (pnpm) — run comparison: deltas, prompt diff, comparability
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/tply/Projects/dev-digest/client
+
+(node:22186) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/components/evals/RunCompare/RunCompare.test.tsx (14 tests) 80ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  15:32:12
+   Duration  678ms (transform 104ms, setup 20ms, collect 269ms, tests 80ms, environment 119ms, prepare 45ms)
+
+
+── result ──────────────────────────────────────────────────────────
+  PASS  reviewer-core  scorer arithmetic
+  PASS  server        batch aggregates + DTO
+  PASS  client        metric strip / unknown
+  PASS  client        run comparison
+
+verify:l06 PASSED
