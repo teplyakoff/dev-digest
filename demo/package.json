@@ -15,7 +15,8 @@
     "record:mcp": "tsx record-mcp.ts",
     "record:blast": "tsx record-blast.ts",
     "record:brief": "tsx record-brief.ts",
-    "record:context": "tsx record-context.ts"
+    "record:context": "tsx record-context.ts",
+    "record:evals": "tsx record-evals.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
