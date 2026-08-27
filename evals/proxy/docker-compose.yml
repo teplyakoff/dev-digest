@@ -14,7 +14,13 @@ services:
     image: ghcr.io/berriai/litellm:main-stable
     container_name: devdigest-eval-litellm
     ports:
-      - "4000:4000"
+      # 127.0.0.1, NOT the bare "4000:4000" short form — that binds 0.0.0.0 and
+      # publishes this gateway to the whole LAN. It runs in no-auth mode by
+      # design (see litellm.config.yaml) and holds a live OpenRouter key, so on
+      # any shared network the short form hands a stranger the ability to spend
+      # that key with no credential of their own. Loopback is what the header
+      # above already claims this exposes.
+      - "127.0.0.1:4000:4000"
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY in the environment}
     volumes:
