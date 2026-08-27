@@ -5,6 +5,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { FindingRecord, ReviewRecord } from "@devdigest/shared";
 import prReview from "../../../../../../../../messages/en/prReview.json";
 import common from "../../../../../../../../messages/en/common.json";
@@ -89,18 +90,37 @@ const REVIEW = {
   ],
 } as unknown as ReviewRecord;
 
+/**
+ * ONE query client for the whole file, created once at module scope.
+ *
+ * `FindingsPanel` below this accordion calls `useCreateEvalCaseFromFinding`
+ * (SPEC-08 AC-65), and `useMutation` needs a provider above it or the render
+ * throws "No QueryClient set" — a failure that names TanStack and looks nothing
+ * like the scroll behaviour this file is about. It is a REAL client rather than
+ * a mocked hooks module for the same reason the panel's own mutation is not
+ * stubbed here: nothing in these two tests clicks anything, so no request is
+ * ever made, and stubbing would leave the file green if the panel later grew a
+ * query that actually fetched.
+ *
+ * Shared across tests deliberately: `rerender` in each test keeps its own tree,
+ * and no cache entry is ever written, so there is nothing to leak between them.
+ */
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
 function accordion(props: { targetRunId: string | null; focusFindingId: string | null }) {
   return (
-    <NextIntlClientProvider locale="en" messages={{ prReview, common }}>
-      <ReviewRunAccordion
-        review={REVIEW}
-        prId="pr1"
-        defaultOpen
-        targetRunId={props.targetRunId}
-        targetNonce={props.targetRunId ? 1 : 0}
-        focusFindingId={props.focusFindingId}
-      />
-    </NextIntlClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <NextIntlClientProvider locale="en" messages={{ prReview, common }}>
+        <ReviewRunAccordion
+          review={REVIEW}
+          prId="pr1"
+          defaultOpen
+          targetRunId={props.targetRunId}
+          targetNonce={props.targetRunId ? 1 : 0}
+          focusFindingId={props.focusFindingId}
+        />
+      </NextIntlClientProvider>
+    </QueryClientProvider>
   );
 }
 

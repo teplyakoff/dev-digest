@@ -107,3 +107,105 @@ describe("FindingCard (smoke, both themes)", () => {
     }
   });
 });
+
+/* ==========================================================================
+   SPEC-08 — the one-click "turn into eval case" action (AC-62…AC-64, AC-68).
+
+   Everything here arrives as a prop: the card stays presentational and
+   `FindingsPanel` owns the mutation. The tooltip is the interesting part —
+   there are THREE of them and each names the case the click would actually
+   create, so a card that offered "must find" on a dismissal would be promising
+   the opposite of what the server derives from the same two timestamps.
+   ========================================================================== */
+
+const ACCEPTED: FindingRecord = { ...FINDING, accepted_at: "2026-08-20T10:00:00.000Z" };
+const DISMISSED: FindingRecord = { ...FINDING, dismissed_at: "2026-08-20T10:00:00.000Z" };
+
+/** The action, found by its visible label. */
+const evalAction = () =>
+  screen.getByRole("button", { name: messages.finding.createEvalCase });
+
+describe("FindingCard — the eval-case action", () => {
+  it("AC-62 — offers the action on an ACCEPTED finding, tooltipped 'must find'", () => {
+    const onCreateEvalCase = vi.fn();
+    renderWithIntl(
+      <FindingCard f={ACCEPTED} defaultExpanded onCreateEvalCase={onCreateEvalCase} />,
+    );
+
+    expect(evalAction()).toBeEnabled();
+    expect(evalAction()).toHaveAttribute("title", messages.finding.createEvalCaseMustFind);
+
+    fireEvent.click(evalAction());
+    expect(onCreateEvalCase).toHaveBeenCalledTimes(1);
+  });
+
+  it("AC-62 — offers the action on a DISMISSED finding, tooltipped 'must NOT comment'", () => {
+    // The direction is read off the decision, never defaulted: a case seeded
+    // from a dismissal asserts the opposite of one seeded from an acceptance,
+    // and the tooltip is where the reader finds out which they are about to
+    // create.
+    renderWithIntl(<FindingCard f={DISMISSED} defaultExpanded onCreateEvalCase={vi.fn()} />);
+
+    expect(evalAction()).toBeEnabled();
+    expect(evalAction()).toHaveAttribute("title", messages.finding.createEvalCaseMustNotFlag);
+  });
+
+  it("AC-63 / AC-64 — an undecided finding gets the action DISABLED, and told why", () => {
+    // There is no status column: "decided" is derived from two timestamps, and
+    // a finding with neither is open. Seeding from it would pin an expectation
+    // nobody agreed to, so it is disabled rather than defaulted to `must_find`.
+    const onCreateEvalCase = vi.fn();
+    renderWithIntl(
+      <FindingCard f={FINDING} defaultExpanded onCreateEvalCase={onCreateEvalCase} />,
+    );
+
+    expect(evalAction()).toBeDisabled();
+    // AC-64 — a disabled control with no explanation reads as a broken one.
+    expect(evalAction()).toHaveAttribute("title", messages.finding.createEvalCaseDisabled);
+
+    fireEvent.click(evalAction());
+    expect(onCreateEvalCase).not.toHaveBeenCalled();
+  });
+
+  it("disables the action while THIS finding's case is in flight", () => {
+    // The disabled state is what prevents a second click; there is no
+    // deduplication on the request side.
+    renderWithIntl(
+      <FindingCard f={ACCEPTED} defaultExpanded creatingEvalCase onCreateEvalCase={vi.fn()} />,
+    );
+    expect(evalAction()).toBeDisabled();
+  });
+
+  it("AC-68 — links to the case just created and to one that already existed", () => {
+    renderWithIntl(
+      <FindingCard
+        f={ACCEPTED}
+        defaultExpanded
+        evalCaseHref="/agents/agent-7?tab=evals&case=case-new"
+        existingEvalCaseHref="/agents/agent-7?tab=evals&case=case-old"
+      />,
+    );
+
+    // The card keeps its own copy of both links, because the toast that first
+    // carried them dismisses itself after four seconds and the reader who
+    // looked away loses them.
+    expect(screen.getByRole("link", { name: messages.finding.editEvalCase })).toHaveAttribute(
+      "href",
+      "/agents/agent-7?tab=evals&case=case-new",
+    );
+    expect(screen.getByRole("link", { name: messages.finding.viewEvalCase })).toHaveAttribute(
+      "href",
+      "/agents/agent-7?tab=evals&case=case-old",
+    );
+  });
+
+  it("shows no case links before anything has been created", () => {
+    renderWithIntl(<FindingCard f={ACCEPTED} defaultExpanded />);
+    expect(
+      screen.queryByRole("link", { name: messages.finding.editEvalCase }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: messages.finding.viewEvalCase }),
+    ).not.toBeInTheDocument();
+  });
+});

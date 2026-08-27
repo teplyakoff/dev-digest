@@ -1,8 +1,13 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+// NOTE — `fireEvent`, not `userEvent`: `@testing-library/user-event` is not a
+// dependency of this package and every existing test here uses `fireEvent`
+// (client/INSIGHTS.md, "Codebase Patterns").
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { FindingRecord } from "@devdigest/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { CreateEvalCaseFromFinding, EvalCaseRecord, FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
+import { ToastProvider } from "../../../../../../../lib/toast";
 
 vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useFindingAction: () => ({ mutate: vi.fn(), isPending: false }),
@@ -10,7 +15,35 @@ vi.mock("../../../../../../../lib/hooks/reviews", () => ({
 
 import { FindingsPanel } from "./FindingsPanel";
 
+/**
+ * The eval-case mutation is NOT stubbed — it runs for real over a mocked
+ * `fetch`, the shape `BlastRadiusCard.test.tsx` already uses.
+ *
+ * Stubbing `@/lib/hooks/evals` would have made the provider error below go away
+ * with less code and pinned nothing: AC-66's claim is that a click reaches the
+ * API and the response's ids come back as a working link. A stub returns
+ * whatever the test hands it, so the URL the card builds would be asserted
+ * against a fixture the test also wrote.
+ */
+const fetchMock = vi.fn();
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+});
+
 afterEach(cleanup);
+
+function reply(body: unknown, ok = true, status = 200) {
+  fetchMock.mockResolvedValue({
+    ok,
+    status,
+    statusText: ok ? "OK" : "Unprocessable Entity",
+    headers: { get: () => "application/json" },
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  });
+}
 
 function finding(o: Partial<FindingRecord>): FindingRecord {
   return {
@@ -42,22 +75,44 @@ const MIXED: FindingRecord[] = [
   finding({ id: "f3", severity: "SUGGESTION", category: "style", title: "Extract for readability" }),
 ];
 
-function renderWithIntl(ui: React.ReactElement) {
-  return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      {ui}
-    </NextIntlClientProvider>,
+/**
+ * Everything the panel needs above it.
+ *
+ * `QueryClientProvider` is not optional decoration: the panel calls
+ * `useCreateEvalCaseFromFinding`, and without a client the very first render
+ * throws "No QueryClient set" — which took out all ten of this file's tests at
+ * once when the mutation landed.
+ *
+ * ONE client for the file, cleared between tests. It has to be stable across
+ * `rerender`, because three tests below re-render the panel with a fresh
+ * element and a new client identity there would remount the subtree — which is
+ * precisely what the deep-link tests are watching for.
+ */
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+});
+
+beforeEach(() => queryClient.clear());
+
+function providers(ui: React.ReactNode) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+        <ToastProvider>{ui}</ToastProvider>
+      </NextIntlClientProvider>
+    </QueryClientProvider>
   );
+}
+
+function renderWithIntl(ui: React.ReactElement) {
+  return render(providers(ui));
 }
 
 /** A fresh element every time: React bails out of `rerender` when handed the
  *  same reference, and the bail-out reads exactly like a component bug
  *  (client/INSIGHTS.md, 2026-08-03). */
-const mixedPanel = (focusFindingId?: string) => (
-  <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-    <FindingsPanel findings={MIXED} prId="pr1" focusFindingId={focusFindingId} />
-  </NextIntlClientProvider>
-);
+const mixedPanel = (focusFindingId?: string) =>
+  providers(<FindingsPanel findings={MIXED} prId="pr1" focusFindingId={focusFindingId} />);
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -137,11 +192,8 @@ describe("FindingsPanel — severity filter chips", () => {
     // A fresh element every time: React bails out of `rerender` when handed the
     // same reference, and the bail-out reads exactly like a component bug
     // (client/INSIGHTS.md, 2026-08-03).
-    const panel = (focusFindingId?: string) => (
-      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-        <FindingsPanel findings={findings} prId="pr1" focusFindingId={focusFindingId} />
-      </NextIntlClientProvider>
-    );
+    const panel = (focusFindingId?: string) =>
+      providers(<FindingsPanel findings={findings} prId="pr1" focusFindingId={focusFindingId} />);
 
     const view = render(panel());
     fireEvent.click(screen.getByRole("button", { name: /Suggestion/ }));
@@ -231,5 +283,93 @@ describe("FindingsPanel — severity filter chips", () => {
     fireEvent.click(screen.getByRole("button", { name: /Critical/ }));
     expect(screen.queryByText("Hardcoded secret")).not.toBeInTheDocument();
     expect(screen.getByText("429 without Retry-After")).toBeInTheDocument();
+  });
+});
+
+/* ==========================================================================
+   SPEC-08 — one click turns a decided finding into an eval case.
+
+   The whole point of the feature is what is NOT here: no confirmation dialog
+   between the click and the row (AC-65). The design draws a 920 px modal on
+   this path and the criterion overrules it, so "no dialog in the DOM" is an
+   assertion rather than a description.
+   ========================================================================== */
+
+const DECIDED: FindingRecord[] = [
+  finding({ id: "f1", title: "Hardcoded secret", accepted_at: "2026-08-20T10:00:00.000Z" }),
+];
+
+function evalCase(o: Partial<EvalCaseRecord> = {}): EvalCaseRecord {
+  return {
+    id: "case-new",
+    owner_kind: "agent",
+    owner_id: "agent-7",
+    name: "hardcoded-secret",
+    input_diff: "@@ -11 +11 @@\n+const k = 'sk_live'",
+    input_files: null,
+    input_meta: null,
+    expected_output: [{ file: "src/config.ts", start_line: 11, end_line: 11 }],
+    notes: null,
+    expectation: "must_find",
+    source_finding_id: "f1",
+    ...o,
+  };
+}
+
+describe("FindingsPanel — one-click eval case (AC-65…AC-68)", () => {
+  it("creates the case and shows a success toast linking to it — with no dialog", async () => {
+    const created: CreateEvalCaseFromFinding = { case: evalCase(), existing_cases: [] };
+    reply(created);
+    renderWithIntl(<FindingsPanel findings={DECIDED} prId="pr1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.finding.createEvalCase }));
+
+    // AC-66 — the toast carries a real anchor, not a sentence about one. Scoped
+    // to the toast region so the card's own copy of the link (rendered below the
+    // actions once the response lands) cannot satisfy this instead.
+    const toast = await screen.findByRole("status");
+    const link = await within(toast).findByRole("link", { name: messages.finding.editEvalCase });
+    // The href is built from the RESPONSE — owner and case id — which is why the
+    // mutation is not stubbed: a stub would let the test assert its own fixture.
+    expect(link).toHaveAttribute("href", "/agents/agent-7?tab=evals&case=case-new");
+    expect(toast).toHaveTextContent(messages.finding.evalCaseCreated);
+
+    // AC-65 — the request went out and nothing opened. `EvalCaseEditor` renders
+    // a `role="dialog"`, so its absence is checkable rather than assumed.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain("/findings/f1/eval-case");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("AC-68 — reports a case that already existed for the same finding", async () => {
+    const prior = evalCase({ id: "case-old", name: "hardcoded-secret-v1" });
+    reply({ case: evalCase(), existing_cases: [prior] } satisfies CreateEvalCaseFromFinding);
+    renderWithIntl(<FindingsPanel findings={DECIDED} prId="pr1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.finding.createEvalCase }));
+
+    const toast = await screen.findByRole("status");
+    // A different sentence AND a second link: telling the reader that a case
+    // already exists while offering no way to look at it is the failure mode
+    // AC-68 names.
+    expect(toast).toHaveTextContent(messages.finding.existingEvalCase);
+    expect(
+      within(toast).getByRole("link", { name: messages.finding.viewEvalCase }),
+    ).toHaveAttribute("href", "/agents/agent-7?tab=evals&case=case-old");
+  });
+
+  it("AC-67 — surfaces the SERVER's reason on failure, not a generic message", async () => {
+    const reason = "This finding's file has no stored patch text.";
+    reply({ error: { code: "unprocessable", message: reason } }, false, 422);
+    renderWithIntl(<FindingsPanel findings={DECIDED} prId="pr1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.finding.createEvalCase }));
+
+    const toast = await screen.findByRole("status");
+    await waitFor(() => expect(toast).toHaveTextContent(reason));
+    expect(toast).toHaveTextContent(messages.finding.evalCaseFailed);
+    // The bundled fallback copy is for a failure that carried NO message; a
+    // panel that showed it here would have thrown the server's reason away.
+    expect(toast).not.toHaveTextContent(messages.finding.evalCaseNoDiff);
   });
 });
