@@ -947,8 +947,18 @@ async function main() {
     }
     if (compare.deltas.recall !== null && compare.a.recall !== null && compare.b.recall !== null) {
       const expected = compare.b.recall - compare.a.recall;
-      if (Math.abs(compare.deltas.recall - expected) > 1e-9) {
-        throw new Error(`deltas.recall is ${compare.deltas.recall}, but b − a is ${expected}.`);
+      // The server ROUNDS every delta to 6 decimal places on purpose, so that the
+      // regression threshold is decided by the rule and not by IEEE-754 noise
+      // (server/src/modules/evals/constants.ts). The tolerance here therefore has
+      // to match that rounding — half a unit in the last retained place — not a
+      // float epsilon. A 1e-9 tolerance asserts a precision the server never
+      // promised and fails on an entirely correct payload: 0.232143 against
+      // 0.23214285714285715 is off by 1.4e-7, three orders above 1e-9.
+      const to6 = (n: number) => Math.round(n * 1e6) / 1e6;
+      if (Math.abs(to6(compare.deltas.recall) - to6(expected)) > 5e-7) {
+        throw new Error(
+          `deltas.recall is ${compare.deltas.recall}, but b − a rounds to ${to6(expected)}.`,
+        );
       }
     }
     log(
