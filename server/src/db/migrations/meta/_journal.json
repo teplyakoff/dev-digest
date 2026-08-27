@@ -127,6 +127,13 @@
       "when": 1787637241945,
       "tag": "0017_cynical_doctor_doom",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787826905080,
+      "tag": "0018_kind_vanisher",
+      "breakpoints": true
     }
   ]
 }
