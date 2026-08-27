@@ -30,6 +30,14 @@ ${fx("benign-refactor.diff")}`;
 // Shared across the strict (architecture-reviewer) and relaxed (architecture-reviewer-lite)
 // variants so the two agents are graded on the exact same task — the only thing that should
 // move between the two runs is whether "cites the specific documented rule" keeps passing.
+//
+// Every case sits at 0.6, the harness default (DEFAULT_THRESHOLD in src/config.ts). These were
+// 1.0 — every listed practice had to pass — which is the sharpest possible A/B razor but is not
+// a bar the cheap model CI runs on (deepseek/deepseek-chat) clears, so the suite reported the
+// model rather than the artifact. Note the cost of the lower bar: a 6-practice case now tolerates
+// two misses, so the citation practice can drop out without turning the case red. When comparing
+// the strict/lite pair, read the per-practice PASS/FAIL lines that `pnpm eval:delta` prints —
+// the case-level verdict alone no longer discriminates.
 export const cases: AgentCase[] = [
   {
     name: "flags both violations in the checkout diff with severity and a citable rule",
@@ -43,7 +51,7 @@ export const cases: AgentCase[] = [
       "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
       "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
     ],
-    threshold: 1.0,
+    threshold: 0.6,
     maxTurns: 25,
   },
   {
@@ -54,7 +62,7 @@ export const cases: AgentCase[] = [
       "does not invent an architecture-contract violation for the optional `reply?: FastifyReply` parameter beyond the inward-only-dependencies import issue itself (no runtime bug/security finding fabricated as an architecture rule)",
       "stays scoped to structural/layering/DI findings and does not comment on naming, style, or test coverage",
     ],
-    threshold: 1.0,
+    threshold: 0.6,
     maxTurns: 25,
   },
   {
@@ -69,7 +77,7 @@ export const cases: AgentCase[] = [
       "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
       "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
     ],
-    threshold: 1.0,
+    threshold: 0.6,
     maxTurns: 25,
   },
   {
@@ -81,7 +89,7 @@ export const cases: AgentCase[] = [
       "does not fabricate a documented-rule violation where the diff violates none of the checked rules",
       "the final gate verdict is PASS",
     ],
-    threshold: 1.0,
+    threshold: 0.6,
     maxTurns: 25,
   },
 ];
