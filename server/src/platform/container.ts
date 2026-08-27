@@ -25,7 +25,7 @@ import { FsSourceReader } from '../adapters/source/fs-reader.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
 import { AnthropicProvider } from '../adapters/llm/anthropic.js';
 import { OpenAIEmbedder } from '../adapters/embedder/openai.js';
-import { OpenRouterProvider } from '@devdigest/reviewer-core';
+import { OpenRouterProvider, renderSkillBlock } from '@devdigest/reviewer-core';
 import { estimateCost } from '../adapters/llm/pricing.js';
 import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
@@ -246,6 +246,32 @@ export class Container {
     repo: RepoRef,
   ): Promise<UnifiedDiff> {
     return loadDiff(this, this.reviewRepo, workspaceId, pull, repo);
+  }
+
+  /**
+   * An agent's knowledge layer as RENDERED prompt blocks, in `agent_skills`
+   * order, filtered to the skills that are globally enabled.
+   *
+   * Promoted to the composition root because a SECOND feature needs it: an eval
+   * run must hand the engine the same three agent inputs a PR review does
+   * (SPEC-08 AC-44), and the review path's own resolver lives in
+   * `modules/reviews/run-executor.ts` — a sibling of `modules/evals`, which
+   * onion §11 makes private. Same route as `loadPrDiff` and `skills`.
+   *
+   * Rendering goes through the ENGINE's `renderSkillBlock` rather than a local
+   * template, which is the property that matters: the studio, the CI runner and
+   * now the eval harness produce the same bytes for the same skill, so a metric
+   * measured here describes the prompt the agent actually runs with.
+   *
+   * Deliberately narrower than `run-executor`'s private `resolveSkills`: that
+   * one also prices each block for the run trace, and an eval run has no trace
+   * to price into (it writes no `agent_runs` row at all — AC-29).
+   */
+  async resolveAgentSkills(agentId: string): Promise<string[]> {
+    const links = await this.agentsRepo.linkedSkills(agentId);
+    return links
+      .filter((l) => l.skill.enabled)
+      .map((l) => renderSkillBlock(l.skill.name, l.skill.body));
   }
 
   /**
