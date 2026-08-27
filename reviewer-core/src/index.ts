@@ -34,6 +34,27 @@ export { renderSkillBlock, SKILLS_PREAMBLE } from './skills.js';
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 
+// The range-intersection primitive grounding decides with (L06). It answers "does
+// this range touch any of these SPARSE lines?" — the eval scorer asks a different
+// question (do two CONTIGUOUS ranges overlap) and answers it arithmetically, so
+// this export exists for the differential test AC-3 actually asks for: the same
+// range table through both paths, asserting equal verdicts. `groundFindings` is
+// unchanged by the export.
+export { rangeIntersects } from './grounding.js';
+
+// The mechanical eval scorer (L06). Pure: no provider argument, so it cannot
+// make a model call; micro-averaged batch metrics; `null` means UNKNOWN and is a
+// third value beside 0 and 1.
+export {
+  scoreEvalCase,
+  scoreEvalBatch,
+  type EvalExpectation,
+  type EvalExpectedFinding,
+  type EvalCaseResult,
+  type EvalCaseScore,
+  type EvalBatchScore,
+} from './eval/score.js';
+
 // Structured-output helpers (Zod → JSON Schema + parse-with-repair).
 export {
   toJsonSchema,

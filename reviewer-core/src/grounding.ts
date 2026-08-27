@@ -38,7 +38,7 @@ export function buildLineIndex(diff: UnifiedDiff): Map<string, Set<number>> {
   return idx;
 }
 
-function rangeIntersects(lines: Set<number>, start: number, end: number): boolean {
+export function rangeIntersects(lines: Set<number>, start: number, end: number): boolean {
   const lo = Math.min(start, end);
   const hi = Math.max(start, end);
   for (let n = lo; n <= hi; n++) if (lines.has(n)) return true;
