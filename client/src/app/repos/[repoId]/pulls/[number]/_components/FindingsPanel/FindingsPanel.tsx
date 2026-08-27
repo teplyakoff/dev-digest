@@ -1,5 +1,9 @@
 /* FindingsPanel — severity filter chips + hide-low-confidence + j/k navigation
-   + FindingCard list, wiring the accept/dismiss action hook (A2). */
+   + FindingCard list, wiring the accept/dismiss action hook (A2) and the
+   one-click "turn into eval case" mutation (SPEC-08 AC-65…AC-68).
+
+   The panel owns both mutations and hands the cards callbacks, exactly as it
+   already does for `useFindingAction`; the card stays presentational. */
 "use client";
 
 import React from "react";
@@ -9,6 +13,8 @@ import type { FindingRecord } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { countBySeverity } from "@/components/severity-counters";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
+import { useCreateEvalCaseFromFinding } from "@/lib/hooks/evals";
+import { notify, ToastLink } from "@/lib/toast";
 import {
   ALL_SEVERITIES_ON,
   FILTERABLE_SEVERITIES,
@@ -18,6 +24,23 @@ import {
 } from "./constants";
 import { visibleFindings } from "./helpers";
 import { s } from "./styles";
+
+/**
+ * Where a case is read and edited: the owning agent's Evals tab, with the case
+ * named so the tab can bring it forward. The owner comes off the created row,
+ * so a finding card never has to know an agent id.
+ */
+function evalCaseHref(ownerId: string, caseId: string): string {
+  return `/agents/${ownerId}?tab=evals&case=${caseId}`;
+}
+
+/** What one finding's create call left behind, per finding id. */
+interface EvalCaseLinks {
+  /** The case this click created. */
+  created: string;
+  /** A case that already existed for the same finding, if any (AC-68). */
+  existing: string | null;
+}
 
 export function FindingsPanel({
   findings,
@@ -36,6 +59,13 @@ export function FindingsPanel({
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
+  const createEvalCase = useCreateEvalCaseFromFinding();
+  // The ONLY place "this finding now has a case" is served from is the create
+  // response — there is no route for it, and the hook deliberately does not
+  // invalidate `reviews` (the payload would come back byte-identical). So the
+  // responses are kept here, keyed by finding, rather than re-derived from
+  // anything. Not a stored derivation: nothing else on this page knows it.
+  const [evalCases, setEvalCases] = React.useState<Record<string, EvalCaseLinks>>({});
   const [hideLow, setHideLow] = React.useState(false);
   const [sevFilter, setSevFilter] = React.useState<SevFilter>(ALL_SEVERITIES_ON);
   const [focusIdx, setFocusIdx] = React.useState(0);
@@ -51,6 +81,53 @@ export function FindingsPanel({
   const shown = React.useMemo(
     () => visibleFindings(findings, { hideLow, severities: sevFilter }),
     [findings, hideLow, sevFilter],
+  );
+
+  /**
+   * AC-65 — one click creates and persists. No dialog opens on this path: the
+   * design showed a modal here, the course criterion is a single click, and the
+   * criterion wins. `EvalCaseEditor` stays on "New eval case" and Edit.
+   */
+  const handleCreateEvalCase = React.useCallback(
+    (findingId: string) => {
+      createEvalCase.mutate(findingId, {
+        onSuccess: (data) => {
+          // `existing_cases` is read BEFORE the insert on the server, so it
+          // holds only the cases that predate this click.
+          const prior = data.existing_cases[0];
+          const created = evalCaseHref(data.case.owner_id, data.case.id);
+          const existing = prior ? evalCaseHref(prior.owner_id, prior.id) : null;
+          setEvalCases((m) => ({ ...m, [findingId]: { created, existing } }));
+          // AC-66 — the success notification carries the link itself, not a
+          // sentence about one. The card keeps its own copy of the link below,
+          // because this toast dismisses itself after four seconds and the
+          // reader who looks away loses it.
+          notify.success(
+            <>
+              {prior ? t("finding.existingEvalCase") : t("finding.evalCaseCreated")}{" "}
+              <ToastLink href={created}>{t("finding.editEvalCase")}</ToastLink>
+              {existing ? (
+                <>
+                  {" · "}
+                  <ToastLink href={existing}>{t("finding.viewEvalCase")}</ToastLink>
+                </>
+              ) : null}
+            </>,
+          );
+        },
+        // AC-67 — the reason the SERVER returned, not a generic message. The
+        // common one is a finding whose PR file carries no patch text, which the
+        // server refuses rather than storing a case that asserts nothing;
+        // `evalCaseNoDiff` is the fallback for a failure that carried no message
+        // at all, not a replacement for the server's.
+        onError: (err: unknown) => {
+          const reason =
+            err instanceof Error && err.message ? err.message : t("finding.evalCaseNoDiff");
+          notify.error(`${t("finding.evalCaseFailed")} — ${reason}`);
+        },
+      });
+    },
+    [createEvalCase, t],
   );
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
@@ -215,6 +292,13 @@ export function FindingsPanel({
               repoFullName={repoFullName}
               headSha={headSha}
               onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
+              onCreateEvalCase={() => handleCreateEvalCase(f.id)}
+              // Scoped to the finding actually in flight — `variables` is the
+              // finding id the mutation was called with, so one card's pending
+              // state never disables the whole list.
+              creatingEvalCase={createEvalCase.isPending && createEvalCase.variables === f.id}
+              evalCaseHref={evalCases[f.id]?.created}
+              existingEvalCaseHref={evalCases[f.id]?.existing}
             />
           ))
         )}

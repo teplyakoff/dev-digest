@@ -6,17 +6,34 @@
 import React from "react";
 
 type ToastKind = "success" | "error" | "info";
+
+/**
+ * A toast body is a `ReactNode`, not a string.
+ *
+ * WIDENING, NOT A MIGRATION: `string` is a valid `ReactNode`, so every existing
+ * call site keeps working untouched. What it buys is a toast that can carry a
+ * real control — SPEC-08 AC-66 asks the success notification for a link to the
+ * case that was just created, and a link has to be an element. Spelling one as
+ * link-shaped TEXT was the alternative and is worse than shipping nothing:
+ * `client/INSIGHTS.md` records that offering a clickable affordance which does
+ * not click is the bug, not the fix.
+ *
+ * Keep bodies to a line and a control. This is a notification, not a surface to
+ * build UI on — anything larger belongs inline on the page.
+ */
+type ToastMessage = React.ReactNode;
+
 interface Toast {
   id: number;
   kind: ToastKind;
-  message: string;
+  message: ToastMessage;
 }
 
 interface ToastApi {
-  toast: (message: string, kind?: ToastKind) => void;
-  success: (m: string) => void;
-  error: (m: string) => void;
-  info: (m: string) => void;
+  toast: (message: ToastMessage, kind?: ToastKind) => void;
+  success: (m: ToastMessage) => void;
+  error: (m: ToastMessage) => void;
+  info: (m: ToastMessage) => void;
 }
 
 const ToastCtx = React.createContext<ToastApi | null>(null);
@@ -29,14 +46,40 @@ export function useToast(): ToastApi {
 
 /* Module-level bridge so non-React code (e.g. the React Query cache) can raise
    toasts without the hook. The mounted <ToastProvider> registers its pusher. */
-type Pusher = (message: string, kind?: ToastKind) => void;
+type Pusher = (message: ToastMessage, kind?: ToastKind) => void;
 let activePusher: Pusher | null = null;
 export const notify = {
-  toast: (m: string, k?: ToastKind) => activePusher?.(m, k),
-  success: (m: string) => activePusher?.(m, "success"),
-  error: (m: string) => activePusher?.(m, "error"),
-  info: (m: string) => activePusher?.(m, "info"),
+  toast: (m: ToastMessage, k?: ToastKind) => activePusher?.(m, k),
+  success: (m: ToastMessage) => activePusher?.(m, "success"),
+  error: (m: ToastMessage) => activePusher?.(m, "error"),
+  info: (m: ToastMessage) => activePusher?.(m, "info"),
 };
+
+/* The style is a module-level constant rather than an inline object because
+   `style={{…}}` is a `no-restricted-syntax` error in this package, and this file
+   already carries its five baselined ones. */
+const TOAST_LINK_STYLE: React.CSSProperties = {
+  color: "var(--text-primary)",
+  fontWeight: 600,
+  textDecoration: "underline",
+  textUnderlineOffset: 2,
+  whiteSpace: "nowrap",
+};
+
+/**
+ * A link inside a toast body, styled for the toast surface.
+ *
+ * It lives here, beside the surface that owns it, so that every feature raising
+ * a toast with a control gets the same one. A bare `<a>` would inherit the
+ * browser's default blue, which is unreadable on both toast backgrounds.
+ */
+export function ToastLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} style={TOAST_LINK_STYLE}>
+      {children}
+    </a>
+  );
+}
 
 const COLORS: Record<ToastKind, { bg: string; border: string; icon: string }> = {
   success: { bg: "var(--ok-bg, #052e1c)", border: "var(--ok)", icon: "✓" },
@@ -48,7 +91,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<Toast[]>([]);
   const seq = React.useRef(1);
 
-  const push = React.useCallback((message: string, kind: ToastKind = "info") => {
+  const push = React.useCallback((message: ToastMessage, kind: ToastKind = "info") => {
     const id = seq.current++;
     setItems((prev) => [...prev, { id, kind, message }]);
     // auto-dismiss after 4s
