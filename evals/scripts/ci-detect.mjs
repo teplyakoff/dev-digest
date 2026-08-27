@@ -8,8 +8,9 @@
  *   .claude/agents/<name>.md   OR  evals/agents/<name>/**   → run evals/agents/<name>  (tool tier)
  *   CLAUDE.md / .claude/CLAUDE.md / any agent / engine change → run the workflow tier
  *
- * A changed artifact with NO written evals is NOT a failure: it is reported on the `skipped_*`
- * outputs so the job can print a visible "SKIP <name> (no evals)" line instead of going red.
+ * A changed artifact with NO written evals is NOT a failure, and neither is an eval suite whose
+ * agent artifact was never written: both are reported on the `skipped_*` outputs so the job can
+ * print a visible "SKIP <name>" line instead of going red.
  *
  * Emits GitHub Actions step outputs (skills, agents, run_workflow, skipped_skills, skipped_agents)
  * to $GITHUB_OUTPUT. Pure filesystem + string work — no deps.
@@ -34,6 +35,17 @@ function hasEvals(tier, name) {
   return readdirSync(dir).some((f) => f.endsWith(".eval.ts"));
 }
 
+/**
+ * Does the agent this eval suite tests actually exist? The mapping below runs a suite when
+ * `evals/agents/<name>/**` changes, which schedules a job even for a suite whose agent artifact
+ * was never written (architecture-reviewer-lite is the known case) — a job that cannot pass,
+ * because agentContent() throws `agent not found`. Mirror of the rule above: a suite with no
+ * artifact is a visible SKIP, not a red check.
+ */
+function hasAgentArtifact(name) {
+  return existsSync(join(REPO_ROOT, ".claude", "agents", `${name}.md`));
+}
+
 /** Collect distinct artifact names touched under a `.claude` and/or `evals` prefix. */
 function touched(reClaude, reEvals) {
   const names = new Set();
@@ -55,8 +67,8 @@ const agentNames = touched(
 
 const skills = skillNames.filter((n) => hasEvals("skills", n));
 const skippedSkills = skillNames.filter((n) => !hasEvals("skills", n));
-const agents = agentNames.filter((n) => hasEvals("agents", n));
-const skippedAgents = agentNames.filter((n) => !hasEvals("agents", n));
+const agents = agentNames.filter((n) => hasEvals("agents", n) && hasAgentArtifact(n));
+const skippedAgents = agentNames.filter((n) => !hasEvals("agents", n) || !hasAgentArtifact(n));
 
 // The workflow tier measures the LIVE harness, so anything that changes it re-triggers it:
 // the root or .claude CLAUDE.md, any agent definition, the workflow cases, or the engine itself.
@@ -85,4 +97,7 @@ console.error(`skills → run  : ${skills.join(", ") || "(none)"}`);
 console.error(`agents → run  : ${agents.join(", ") || "(none)"}`);
 console.error(`workflow tier : ${runWorkflow ? "run" : "skip"}`);
 if (skippedSkills.length) console.error(`SKIP skills (no evals): ${skippedSkills.join(", ")}`);
-if (skippedAgents.length) console.error(`SKIP agents (no evals): ${skippedAgents.join(", ")}`);
+for (const n of skippedAgents) {
+  const why = hasEvals("agents", n) ? `no .claude/agents/${n}.md` : "no evals";
+  console.error(`SKIP agent ${n} (${why})`);
+}
