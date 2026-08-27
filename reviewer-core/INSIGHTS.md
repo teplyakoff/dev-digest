@@ -60,6 +60,23 @@ _(no entries yet)_
   dependency you add here must be installed in `reviewer-core/node_modules` or
   the *server* fails to boot. (2026-07-27)
 
+- **`rangeIntersects` iterates the RANGE, not the set — so reusing it to compare
+  two contiguous ranges is a category error that costs unbounded memory and time.**
+  `grounding.ts:41` answers a *sparse* question — does this range touch any of
+  these hunk lines — and a `Set` is genuinely necessary there. The L06 eval scorer
+  asks a *contiguous* one: do these two ranges overlap. The first implementation
+  reused the primitive by materialising the expected range into a `Set`, which
+  allocates one entry per line and then loops once per line of the other range;
+  both bounds come from model output, and `Finding.start_line`/`end_line` carry no
+  maximum in the contract (`vendor/shared/contracts/findings.ts:53-54`). Measured:
+  a fixture with `end_line: 10_000_000` took **34 060 ms against a 500 ms budget**,
+  while every correctness assertion still passed — only the timing test caught it.
+  The arithmetic form `max(aLo,bLo) <= min(aHi,bHi)` is O(1) and gives byte-identical
+  verdicts. Note the criterion (AC-3) asks for *the same verdict as grounding*, not
+  the same code, so the honest way to keep the guarantee is a **differential test**
+  driving a table of range pairs through both paths — which is also the only thing
+  keeping the now-unused `rangeIntersects` export alive. (2026-08-27)
+
 ## Tool & Library Notes
 
 - This package uses **npm** (`package-lock.json`), while `server/` and `client/`
@@ -82,6 +99,17 @@ _(no entries yet)_
   the reason the two do not contradict are written into `scope.ts`'s docstring
   rather than left for a reader to reconstruct. Neither `INJECTION_GUARD` nor
   `groundFindings` was edited.
+
+- **2026-08-27** — L06 added `src/eval/score.ts`: a pure scorer over expected vs
+  actual findings, micro-averaged per batch, with a zero denominator yielding
+  `null` (unknown) rather than 0 or 1. Its only import is type-only, so the
+  runtime import graph is genuinely **empty** — the purity test asserts
+  `toEqual([])` rather than checking an allowlist of forbidden names. `grounding.ts`
+  gained exactly one word (`export` on `rangeIntersects`) and nothing else, and
+  `test/grounding.test.ts` was written to pin `kept`/`dropped` by whole-array value
+  equality so that claim is checkable; note the existing `test/run.test.ts` stayed
+  green under a deliberate mutation of grounding's output, which is why NFR-3
+  needed a file of its own rather than leaning on the suite.
 
 ## Open Questions
 

@@ -459,6 +459,31 @@ _(no entries yet)_
   `FindingCard.test.tsx` now asserts `s.card(...)` has no `borderColor` key.
   (2026-08-10)
 
+- **Supersedes the 2026-07-28 entry claiming the Zod contracts under
+  `src/vendor/shared/**` are "hand-copied … and there is no re-vendor script".**
+  That is now false and actively harmful: `scripts/vendor-shared.sh` exists, it is
+  the only sanctioned way to update the client copy, and `--check` runs as the
+  `vendor-sync` gate in `gates.sh` (and in the `lint` workflow), so **hand-copying
+  is precisely what fails CI**. The flow is: edit `server/src/vendor/shared` (the
+  source), run `./scripts/vendor-shared.sh`, and commit **both** copies in the same
+  change — a change set where only one side moved is a gate failure, which is why
+  the edit and the re-vendor must be one step rather than two. The old entry's
+  underlying warning still holds in spirit (a drifted copy fails silently at
+  runtime, not at typecheck), but its prescription — "diff the two folders by
+  hand" — has been replaced by `bash scripts/vendor-shared.sh --check`.
+  (2026-08-27)
+
+- **The vendored `LineChart` fills a missing series entry with `?? 0`
+  (`src/vendor/ui/charts/LineChart.tsx:33`), so it cannot render an "unknown"
+  data point.** Anything whose metric is legitimately unknown — an eval batch whose
+  denominator was zero, a run that errored — is drawn as a catastrophic-looking
+  zero instead of a gap. `src/vendor/ui/**` is frozen, so the fix is not to edit
+  it: the L06 dashboard hand-draws a small inline SVG that breaks the polyline at
+  an unknown point and centres a lone point rather than dividing by zero. That also
+  avoids pulling `recharts` (imported by nothing but the showcase) onto a new
+  route. Before reusing a vendored chart for a nullable metric, read how it
+  coerces a missing value. (2026-08-27)
+
 ## Recurring Errors & Fixes
 
 - `Attempted import error: 'X' is not exported from './Y'` in the browser while
@@ -560,6 +585,19 @@ _(no entries yet)_
   whole point is that `degraded` and "no callers found" produce identical empty
   arrays and mean opposite things, so `BlastTab.test.tsx` asserts that the
   degraded state does NOT show the empty-result copy.
+
+- **2026-08-27** — L06 homework, client lane. An Evals tab on the agent editor, a
+  new `/evals` dashboard with run history and a two-run compare, and a one-click
+  "turn this finding into an eval case" action on `FindingCard`. Three placement
+  decisions worth remembering: the action took its own `onCreateEvalCase` prop
+  rather than widening `FindingActionKind` (that union is server verbs that mutate
+  the *finding*, and widening it would make `POST /findings/:id/create_eval_case`
+  type-legal); `toast.tsx`'s message type was widened to `ReactNode` so the success
+  toast could carry a real anchor, rather than faking one with link-looking text;
+  and the vendored `Modal` has neither a focus trap nor an Escape handler, so both
+  live in `EvalCaseEditor` and `RunCompare` instead of in the frozen primitive.
+  First Load JS held at the 102 kB baseline throughout — every contract import is
+  type-only.
 
 ## Open Questions
 

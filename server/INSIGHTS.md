@@ -279,7 +279,42 @@ would be obvious to anyone reading the code, don't write it.
   the display is.** A server bound needs its own reason (cost, payload size) and
   then has to ship the count it dropped. (2026-08-25)
 
+- **`pnpm db:seed` is guarded on `if (!pr)`, so changing the seed fixture and
+  re-running it is a silent no-op.** `db/seed.ts` skips the whole demo block —
+  `pr_files`, the review and every finding — when `acme/payments-api` #482 already
+  exists. After the L06 seed rewrite (patch text added, findings grown from 2 to
+  12 with accept/dismiss decisions), `pnpm db:seed` printed `✓ seeded` and changed
+  nothing; the dev DB still held four `pr_files` with `patch = NULL`. Fixing it
+  means deleting the guarded row first —
+  `DELETE FROM pull_requests p USING repos r WHERE p.repo_id = r.id
+  AND r.full_name = 'acme/payments-api' AND p.number = 482;` — which cascades to
+  `pr_files`, `pr_commits`, `reviews` and `findings`, all seed-origin, and then
+  re-seeding. Verify with a real query afterwards, not with the script's own
+  success line: `select count(*) filter (where patch is not null) from pr_files`.
+  (2026-08-27)
 
+- **`GET /settings/secrets-status` reports that a key is PRESENT, not that it
+  WORKS.** It answered `{"openrouter":true,…}` for a key that was expired, and the
+  first eval batch over a real twelve-case set failed every case with
+  `401 API key expired.` — visible only inside each run's `actual_output.error`,
+  because a provider failure is recorded per case rather than raised to the batch.
+  Anything that preflights on that endpoint (a recorder, a CI gate, a "can we run
+  this" check) is testing the wrong proposition. The cheap real check is one
+  billed call, or reading the per-case `actual_output` of a batch that has already
+  run. (2026-08-27)
+
+- **`@fastify/rate-limit` is not merely inert under `NODE_ENV=test` — it is never
+  registered** (`src/app.ts:93-97`), so no route's `config: { rateLimit }` has a
+  hook to run in and a 429 is unobservable. Every suite in `server/test/` builds
+  with that config, so a green server suite says nothing about any rate limit.
+  `evals-limits.it.test.ts` is the only file that builds with
+  `NODE_ENV=development` + `LOG_LEVEL=silent` for exactly this reason — that is
+  the shipped configuration of the limit, not a special one. Watch for the
+  companion trap: an accepted `POST …/eval-batches` **detaches** a run that then
+  races teardown, so drive the limiter through a request that is refused *before*
+  the detach (an agent with zero cases 422s in `prepare`), and assert the fourth
+  response carries the limiter's own body rather than a fourth 422 — otherwise the
+  test passes whether or not the limit exists. (2026-08-27)
 
 ## Codebase Patterns
 
@@ -559,6 +594,18 @@ would be obvious to anyone reading the code, don't write it.
   `tokens_in`, `tokens_out` and `cost_usd` come back zero or null — but a lock-file
   in the diff is enough to push a PR over on its own. (2026-08-08)
 
+- `✗ migration failed: PostgresError: column "…" of relation "eval_cases" already
+  exists` → a migration from an **abandoned earlier attempt** was applied to the
+  dev DB, then its `.sql` file was replaced (stashed, regenerated) so drizzle sees
+  a new hash and re-runs it. Diagnose by comparing the applied hash to the file:
+  `select id, hash, to_timestamp(created_at/1000) from drizzle.__drizzle_migrations
+  order by id desc limit 3;` against `shasum -a 256 src/db/migrations/00NN_*.sql`.
+  A mismatch with no matching file on disk is the signature. Repair, when the
+  affected tables are empty, is to drop the columns the stale migration added,
+  `DELETE` its ledger row by hash, then `pnpm db:migrate`. Check the tables are
+  empty first, and never reach for `docker compose down -v` — that deletes every
+  imported repo and review in the volume. (2026-08-27)
+
 ## Session Notes
 
 - **2026-08-03** — Architecture pass driven by the `onion-architecture` skill.
@@ -645,6 +692,20 @@ would be obvious to anyone reading the code, don't write it.
   and the endpoint extractor cannot tell `app.get('/x')` from `api.get('/x')`,
   which turned out to be signal rather than noise on a contract-break PR.
   `INDEXER_VERSION` 2 → 3, because a v2 index is not wrong, it is short.
+
+- **2026-08-27** — L06 homework, server lane. New `modules/evals/` in the
+  `modules/repos` shape, migration `0018` adding `eval_run_batches` plus
+  `eval_cases.{source_finding_id,expectation}` and `eval_runs.{batch_id,status}`,
+  and a seed rewritten so it is not vacuous — 12 findings carrying accept/dismiss
+  decisions, each anchored inside a real hunk of its own file's patch, proved by
+  re-deriving the hunks from the database rather than from the fixture. Two
+  deviations from the plan were deliberate and both are load-bearing: batch
+  aggregates include cases that ran and **failed**, excluding only `errored` ones
+  (under the plan's wording `recall` would be identically 1.0 on every batch,
+  making the prompt experiment unachievable by construction), and `partial` means
+  "at least one case errored", not "at least one did not pass". `eval_runs` has no
+  `workspace_id`, so tenancy rests entirely on joins through
+  `eval_run_batches.workspace_id` — six reads, each with its own test.
 
 ## Open Questions
 
