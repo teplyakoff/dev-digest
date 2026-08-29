@@ -11,7 +11,7 @@ import common from "../../../../../messages/en/common.json";
 /**
  * THE GAP THIS FILE COVERS. `EvalDashboard.test.tsx` hands the dashboard and
  * the batch list in as props, and would stay green forever even if nothing on
- * the `/evals` route ever passed them — the exact shape of the bug that shipped
+ * the `/eval` route ever passed them — the exact shape of the bug that shipped
  * `AgentCard`'s skill-count badge green and invisible (client/INSIGHTS.md,
  * 2026-08-05). This is the only place the three queries are seen reaching the
  * component that renders them.
@@ -21,6 +21,18 @@ import common from "../../../../../messages/en/common.json";
  */
 vi.mock("@/components/app-shell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+// The agent on screen comes from the `:agentId` segment, so the router IS part
+// of this view's contract rather than shell furniture: `params` is the input,
+// `push` and `replace` are the two outputs.
+const push = vi.fn();
+const replace = vi.fn();
+const params = vi.hoisted(() => ({ current: {} as Record<string, string | string[]> }));
+
+vi.mock("next/navigation", () => ({
+  useParams: () => params.current,
+  useRouter: () => ({ push, replace }),
 }));
 
 const runMutate = vi.fn();
@@ -88,6 +100,10 @@ function dash(o: Partial<Data> = {}): Data {
 
 beforeEach(() => {
   runMutate.mockReset();
+  push.mockReset();
+  replace.mockReset();
+  // The default case is the canonical one: the URL already names the agent.
+  params.current = { agentId: AGENT.id };
   agents.current = { data: [AGENT], isLoading: false, isError: false };
   dashboard.current = { data: dash(), isLoading: false, isError: false };
   batches.current = { data: [batch()], isLoading: false, isError: false };
@@ -198,5 +214,62 @@ describe("EvalDashboardView — failures are not disguised as emptiness", () => 
     renderView();
     expect(screen.getByText(common.states.empty)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Run eval/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("EvalDashboardView — the URL names the agent on screen", () => {
+  // The L06 shipping bug, pinned: the agent lived in `useState`, so `/evals`
+  // rendered whichever agent came back first and the address bar never said
+  // which. A reload, a copied link and the Back button were all wrong, and a
+  // reviewer looking for the route the criterion asks for found none.
+  const OTHER = { id: "agent-2", name: "Architecture Reviewer", model: "gpt-5" } as Agent;
+
+  it("renders the agent the `:agentId` segment names, not the first one", () => {
+    agents.current = { data: [OTHER, AGENT], isLoading: false, isError: false };
+    params.current = { agentId: AGENT.id };
+    renderView();
+
+    expect(screen.getByRole("heading", { name: /Security Reviewer/ })).toBeInTheDocument();
+    // The URL is already right, so nothing may rewrite it.
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("on `/eval`, with no segment, replaces the URL with the agent it fell back to", () => {
+    params.current = {};
+    renderView();
+
+    expect(replace).toHaveBeenCalledWith(`/eval/${AGENT.id}`);
+  });
+
+  it("replaces the URL when the segment names an agent that no longer exists", () => {
+    // A deleted agent's bookmark must not silently render a different agent
+    // under its id.
+    params.current = { agentId: "agent-gone" };
+    renderView();
+
+    expect(screen.getByRole("heading", { name: /Security Reviewer/ })).toBeInTheDocument();
+    expect(replace).toHaveBeenCalledWith(`/eval/${AGENT.id}`);
+  });
+
+  it("picking another agent navigates instead of setting state", () => {
+    agents.current = { data: [AGENT, OTHER], isLoading: false, isError: false };
+    renderView();
+
+    // The picker only exists with more than one agent; its trigger carries the
+    // current agent's name.
+    fireEvent.click(screen.getByRole("button", { name: "Security Reviewer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Architecture Reviewer" }));
+
+    expect(push).toHaveBeenCalledWith(`/eval/${OTHER.id}`);
+  });
+
+  it("does not navigate at all while the agent list is still loading", () => {
+    // An empty list is not "agent unknown" — replacing the URL here would
+    // rewrite a valid deep link before its target had a chance to arrive.
+    agents.current = { data: undefined, isLoading: true, isError: false };
+    renderView();
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 });

@@ -20,8 +20,9 @@
  *     the "old prompt vs new" experiment, and the only way the compare screen
  *     has a prompt diff to show. Skipped when a prior batch on the same
  *     provider+model already carries a different snapshot; see `DEMO_EVAL_BATCHES`.
- *  6. The Eval Dashboard at `/evals`, reached from the sidebar (SKILLS LAB →
- *     Eval Dashboard), with the agent picked and the run history under it.
+ *  6. The Eval Dashboard at `/eval/:agentId`, reached from the sidebar (SKILLS
+ *     LAB → Eval Dashboard, which points at `/eval`), with the agent picked and
+ *     the run history under it.
  *  7. Exactly two runs selected, Compare — the four deltas and the word-level
  *     system-prompt diff. This frame is the payoff and the graded artefact.
  *
@@ -864,7 +865,9 @@ async function main() {
 
     await beat(page, 13, "SKILLS LAB → Eval Dashboard: every agent's eval history in one place", 2800);
     await page.getByRole("link", { name: "Eval Dashboard" }).click();
-    await page.waitForURL(/\/evals$/, { timeout: 30_000 });
+    // The sidebar points at `/eval`; the dashboard then replaces the URL with
+    // the agent it resolved, so the settled address is always `/eval/:agentId`.
+    await page.waitForURL(/\/eval\/[^/]+$/, { timeout: 30_000 });
     await page.waitForLoadState("networkidle");
 
     // The picker defaults to the FIRST agent in the list, which need not be the
@@ -883,6 +886,8 @@ async function main() {
       // names differ in this branch, a name match cannot resolve to the trigger.
       await page.getByRole("button", { name: new RegExp(`^${escapeRe(onScreenAgent.name)}`) }).first().click();
       await page.getByRole("button", { name: new RegExp(`^${escapeRe(agent.name)}`) }).first().click();
+      // Picking is a navigation now, so the URL is the thing to wait on.
+      await page.waitForURL(`**/eval/${agent.id}`, { timeout: 30_000 });
       await page.waitForLoadState("networkidle");
     }
     await page

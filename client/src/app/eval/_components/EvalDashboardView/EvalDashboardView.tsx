@@ -1,8 +1,10 @@
-/* /evals — the standalone Eval Dashboard: pick an agent, see its eval metrics,
-   run the set, compare two runs. Design: `screen_skillslab_evaldashboard.jsx:393-477`. */
+/* /eval/:agentId — the standalone Eval Dashboard: pick an agent, see its eval
+   metrics, run the set, compare two runs. Design:
+   `screen_skillslab_evaldashboard.jsx:393-477`. */
 "use client";
 
 import React from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, EmptyState, ErrorState } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
@@ -17,7 +19,14 @@ import { s } from "./styles";
  * history — and hands them to the shared `EvalDashboard`.
  *
  * The route carries NO `:repoId` — an agent's eval set belongs to the agent, not
- * to a repository — so `/evals` resolves with no repo selected.
+ * to a repository — so `/eval/:agentId` resolves with no repo selected.
+ *
+ * The agent is the `:agentId` SEGMENT, never component state. State made the
+ * dashboard un-linkable: every reload landed on whichever agent happened to be
+ * first, and the URL never said which one was on screen. Both entry points come
+ * through here — `/eval` has no segment and `/eval/:agentId` may name an agent
+ * that no longer exists, and each falls back to the first agent and then
+ * `replace`s the URL, so the address bar always names what is rendered.
  *
  * AC-80 is read from `latest_batch`, the LIFECYCLE channel, and not from the
  * mutation's own pending flag: a tab that never received the 202 (a reload, or a
@@ -29,17 +38,33 @@ export function EvalDashboardView() {
   const t = useTranslations("eval");
   const tCommon = useTranslations("common");
 
+  const router = useRouter();
+  // `/eval` has no dynamic segment, so `agentId` is undefined there — the same
+  // view serves both routes and treats "no segment" like "unknown agent".
+  // Typed as `string | string[]` by `useParams` because a catch-all segment
+  // could produce an array; `:agentId` never does, and the narrowing is what
+  // makes "no segment" and "some segment" one expression.
+  const rawId = useParams().agentId;
+  const routeId = typeof rawId === "string" ? rawId : null;
+
   const agents = useAgents();
-  const [pickedId, setPickedId] = React.useState<string | null>(null);
 
   // Derived during render, never mirrored into state with an Effect
-  // (`react-best-practices` — Derive, Don't Store): the picked agent is a
-  // lookup in the live list, and the default is simply "the first one" until
-  // somebody picks. Reading it back out of the list also means a renamed agent
+  // (`react-best-practices` — Derive, Don't Store): the agent on screen is a
+  // lookup of the URL's id in the live list, and the fallback is simply "the
+  // first one". Reading it back out of the list also means a renamed agent
   // re-renders with its new name.
   const list = agents.data ?? [];
-  const agent = list.find((a) => a.id === pickedId) ?? list[0];
+  const agent = list.find((a) => a.id === routeId) ?? list[0];
   const agentId = agent?.id ?? null;
+
+  // Caused by data arriving rather than by an interaction, so an Effect and not
+  // a handler (`react-best-practices` — useEffect Rules), and the same shape as
+  // `HomeRedirectView`. `replace`, not `push`: landing on `/eval` and being sent
+  // to the first agent must not put a step in the history that Back returns to.
+  React.useEffect(() => {
+    if (agentId && agentId !== routeId) router.replace(`/eval/${agentId}`);
+  }, [agentId, routeId, router]);
 
   const dashboard = useEvalDashboard(agentId);
   // The batch history the runs table selects from — newest first, handed
@@ -111,10 +136,12 @@ export function EvalDashboardView() {
                     {agent?.name ?? ""}
                   </Button>
                 }
+                // Picking an agent is a navigation: the dashboard it opens is
+                // a place, and must survive a reload and a copied link.
                 items={list.map((a) => ({
                   label: a.name,
                   icon: "Cpu" as const,
-                  onClick: () => setPickedId(a.id),
+                  onClick: () => router.push(`/eval/${a.id}`),
                 }))}
               />
             )}
