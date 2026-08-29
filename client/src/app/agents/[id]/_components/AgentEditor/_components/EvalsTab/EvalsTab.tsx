@@ -85,10 +85,13 @@ export function EvalsTab({ agent }: EvalsTabProps) {
       <SectionLabel
         icon="Gauge"
         right={
-          // The standalone dashboard (T-K). `href` is `/evals`; the sidebar's
-          // registry key for it is `eval`, because `activeKeyFor` folds every
-          // `/eval*` pathname onto that one key — the key is not the URL.
-          <Link href="/evals" className="mono" style={s.viewDashboard}>
+          // The standalone dashboard (T-K), deep-linked to THIS agent. `/eval`
+          // on its own resolves to whichever agent is first in the list, so
+          // leaving the id off would send you from one agent's tab to another
+          // agent's dashboard. The sidebar's registry key for the route is
+          // `eval`, because `activeKeyFor` folds every `/eval*` pathname onto
+          // that one key — the key is not the URL.
+          <Link href={`/eval/${agent.id}`} className="mono" style={s.viewDashboard}>
             {t("evalsTab.viewDashboard")}
           </Link>
         }
