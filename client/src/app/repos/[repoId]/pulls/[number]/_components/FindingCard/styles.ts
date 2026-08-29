@@ -96,6 +96,22 @@ export const s = {
     marginTop: 14,
     flexWrap: "wrap",
   } satisfies CSSProperties,
+  /** AC-66/AC-68 — the links the created / already-existing case is reachable
+   *  through. A row, so a card that has both does not stack them. */
+  evalCaseLinks: {
+    display: "flex",
+    gap: 12,
+    marginTop: 10,
+    flexWrap: "wrap",
+    alignItems: "center",
+  } satisfies CSSProperties,
+  evalCaseLink: {
+    fontSize: 12.5,
+    fontWeight: 500,
+    color: "var(--accent-text)",
+    textDecoration: "underline",
+    textUnderlineOffset: 2,
+  } satisfies CSSProperties,
   composer: {
     marginTop: 12,
     display: "flex",

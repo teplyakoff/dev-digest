@@ -50,6 +50,18 @@ export const NAV: NavGroup[] = [
     items: [
       { key: "skills", label: "Skills", icon: "Sparkles", href: "/skills", gKey: "s" },
       { key: "agents", label: "Agents", icon: "Cpu", href: "/agents", gKey: "a" },
+      // L06 — the Eval Dashboard sits directly after Agents: evals measure
+      // agents, and this section's order is meaning-carried.
+      //
+      // NO `gKey`, and therefore no SHORTCUTS row, exactly as `context` above:
+      // a letter chosen here would be inventing a requirement nobody stated,
+      // and `nav-registry.test.ts` pins the absence so it reads as a decision.
+      //
+      // The key is `eval`, not `evals`, because `activeKeyFor`
+      // (`src/components/app-shell/helpers.ts`) maps every `/eval*` pathname to
+      // `"eval"` — a key that does not match leaves the sidebar item unlit on
+      // its own page. The design's `chrome.jsx` uses `eval` too.
+      { key: "eval", label: "Eval Dashboard", icon: "FlaskConical", href: "/evals" },
       { key: "conventions", label: "Conventions", icon: "ListChecks", href: "/repos/:repoId/conventions", gKey: "c" },
     ],
   },

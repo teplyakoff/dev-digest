@@ -1,7 +1,12 @@
 /* FindingCard — ported from findings.jsx (createElement → TSX).
    Severity icon+label, category, file:line, confidence, markdown rationale +
    suggestion, accept/dismiss actions. Accept/dismiss reflect persisted
-   timestamps. */
+   timestamps.
+
+   Also carries the one-click "turn into eval case" action (SPEC-08 AC-62…AC-68).
+   The click creates immediately — this card never opens a dialog, which is the
+   criterion AC-65 is graded on. Everything about it arrives as props: the card
+   stays presentational and FindingsPanel owns the mutation. */
 "use client";
 
 import React from "react";
@@ -30,6 +35,10 @@ export function FindingCard({
   expandNonce,
   onAction,
   pending,
+  onCreateEvalCase,
+  creatingEvalCase,
+  evalCaseHref,
+  existingEvalCaseHref,
   repoFullName,
   headSha,
 }: {
@@ -42,6 +51,23 @@ export function FindingCard({
   expandNonce?: number;
   onAction?: (action: FindingActionKind, reply?: string) => void;
   pending?: boolean;
+  /** Seed an eval case from this finding — a SEPARATE prop, deliberately not a
+   *  `FindingActionKind`. That union is the set of server verbs that mutate the
+   *  finding; creating a case writes a different table on a different route and
+   *  invalidates a different query, so widening it would make
+   *  `POST /findings/:id/accept`-shaped code type-legal for something that is
+   *  not a finding mutation at all. */
+  onCreateEvalCase?: () => void;
+  /** True while THIS finding's case is in flight. The disabled state it produces
+   *  is what prevents a second click — not a second request. */
+  creatingEvalCase?: boolean;
+  /** Where the case just created from this finding can be edited. Known only
+   *  from the create response; no route serves "cases for finding X". */
+  evalCaseHref?: string | null;
+  /** A case that already existed for this finding, if the create response
+   *  reported one (AC-68). Creating a duplicate is allowed — the reader is told,
+   *  not blocked. */
+  existingEvalCaseHref?: string | null;
   repoFullName?: string | null;
   headSha?: string | null;
 }) {
@@ -58,7 +84,20 @@ export function FindingCard({
       : undefined;
   const accepted = !!f.accepted_at;
   const dismissed = !!f.dismissed_at;
-  const muted = accepted || dismissed;
+  // There is no status column: "decided" is derived from the two timestamps,
+  // and a finding with neither is open. Seeding a case from an open finding
+  // would pin an expectation nobody agreed to, so the action is disabled for it
+  // (AC-63) rather than defaulting to `must_find`.
+  const decided = accepted || dismissed;
+  const muted = decided;
+  // The tooltip names the case the click will actually create — the direction is
+  // the SERVER's derivation from the same two timestamps (accepted → must_find,
+  // dismissed → must_not_flag), so this reads the decision, never a default.
+  const createEvalCaseTitle = !decided
+    ? t("finding.createEvalCaseDisabled")
+    : accepted
+      ? t("finding.createEvalCaseMustFind")
+      : t("finding.createEvalCaseMustNotFlag");
 
   return (
     <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
@@ -118,7 +157,33 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            <Button
+              kind="ghost"
+              size="sm"
+              icon="FlaskConical"
+              disabled={!decided}
+              loading={!!creatingEvalCase}
+              title={createEvalCaseTitle}
+              onClick={() => onCreateEvalCase?.()}
+            >
+              {t("finding.createEvalCase")}
+            </Button>
           </div>
+
+          {(evalCaseHref || existingEvalCaseHref) && (
+            <div style={s.evalCaseLinks}>
+              {evalCaseHref && (
+                <a href={evalCaseHref} style={s.evalCaseLink}>
+                  {t("finding.editEvalCase")}
+                </a>
+              )}
+              {existingEvalCaseHref && (
+                <a href={existingEvalCaseHref} style={s.evalCaseLink}>
+                  {t("finding.viewEvalCase")}
+                </a>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

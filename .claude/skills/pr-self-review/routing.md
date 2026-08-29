@@ -23,6 +23,10 @@ is a decision, not an oversight.
 | `server-tests` | `server/test/**` | [onion-architecture](../onion-architecture/SKILL.md) §12 | no — HIGH ceiling |
 | `mcp` | `mcp/src/**` | [onion-architecture](../onion-architecture/SKILL.md) §9/§10, [typescript-expert](../typescript-expert/SKILL.md) | yes |
 | `mcp-tests` | `mcp/test/**` | [onion-architecture](../onion-architecture/SKILL.md) §12 | no — HIGH ceiling |
+| `engine-tests` | `reviewer-core/test/**` | [onion-architecture](../onion-architecture/SKILL.md) §12 | no — HIGH ceiling |
+| `evals` | `evals/src/**`, `evals/scripts/**` | [typescript-expert](../typescript-expert/SKILL.md), [security](../security/SKILL.md) | yes |
+| `evals-suites` | `evals/agents/**`, `evals/skills/**`, `evals/workflow/**` | — read the diff; a graded case's expected value must be checked against the artefact it claims to test | no — HIGH ceiling |
+| `evals-infra` | `evals/proxy/**`, `evals/*.json`, `evals/*.ts` | [security](../security/SKILL.md) | yes |
 | `package-config` | `*/eslint.config.*`, `*/next.config.*`, `*/vitest.config.*`, `*/tsconfig*.json`, `*/package.json` | the package's own skill ([next-best-practices](../next-best-practices/SKILL.md) or [fastify-best-practices](../fastify-best-practices/SKILL.md)), [security](../security/SKILL.md) | yes |
 | `security-sweep` | every changed source file matching a trigger in §3 | [security](../security/SKILL.md) | yes |
 | `infra` | `.github/**`, `scripts/*.sh`, `*/bin/**`, `docker-compose.yml`, `.claude/**`, `.mcp.json`, `**/*.mcp.json` | [security](../security/SKILL.md) | yes |

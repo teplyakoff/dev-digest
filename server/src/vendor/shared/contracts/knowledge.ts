@@ -55,10 +55,21 @@ export const EvalPerTrace = z.object({
 });
 export type EvalPerTrace = z.infer<typeof EvalPerTrace>;
 
+/**
+ * The metrics of one eval execution.
+ *
+ * `recall`, `precision` and `citation_accuracy` are `.nullable()` — NOT
+ * `.optional()`. The distinction is load-bearing: a metric whose denominator is
+ * zero (no expected findings, or no findings at all) is *present and explicitly
+ * unknown*, and `null` is the only value that says so. `0` would claim "found
+ * nothing it should have", `1` would claim "perfect"; both are wrong answers to
+ * `0/0`, and `undefined` would make the key droppable in JSON, which loses the
+ * distinction on the wire. Consumers must branch on `null` and render "—".
+ */
 export const EvalRun = z.object({
-  recall: z.number().min(0).max(1),
-  precision: z.number().min(0).max(1),
-  citation_accuracy: z.number().min(0).max(1),
+  recall: z.number().min(0).max(1).nullable(),
+  precision: z.number().min(0).max(1).nullable(),
+  citation_accuracy: z.number().min(0).max(1).nullable(),
   traces_passed: z.number().int(),
   traces_total: z.number().int(),
   duration_ms: z.number().int(),

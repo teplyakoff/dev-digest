@@ -371,6 +371,15 @@ would be obvious to anyone reading the code, don't write it.
   the helper, or pass the code as a string. Affects every recorder here, since
   all of them run under `tsx`. (2026-08-12)
 
+- **`tsconfig.json`'s `include` array does not list every recorder, so
+  `npm run typecheck` — and `gates.sh`'s `typecheck:demo` lane — silently skips
+  them.** As of 2026-08-27 the omitted files are `record-mcp.ts`, `record-blast.ts`,
+  `record-brief.ts`, `record-context.ts` and `record-evals.ts`: five of the ten
+  recorders, checked by nothing. A new recorder therefore passes the package gate
+  whether or not it compiles. Until the array is fixed, verify a new recorder with
+  an explicit project — `npx tsc --noEmit -p <a tsconfig listing just that file>`
+  — and do not read a green `typecheck:demo` as covering it. (2026-08-27)
+
 ## Recurring Errors & Fixes
 
 - `OpenRouter returned no choices for Review: Input too long: N input tokens,
@@ -463,6 +472,18 @@ would be obvious to anyone reading the code, don't write it.
   precondition is absent: the degraded state needs an unindexed repo, and the
   "no model was called" proof is a line on the API's stdout that no UI pane
   renders, so it is drawn from a log file and labelled as such on screen.
+
+- **2026-08-27** — L06 added `record-evals.ts`, the tenth recorder: decided finding
+  → one-click eval case → the Evals tab → a batch run → the dashboard → two runs
+  compared with their system-prompt diff. It follows `record-smart-diff.ts`'s
+  posture of refusing in preflight rather than filming an error page, and checks
+  three things that are free to test and expensive to discover: the API answers,
+  the repo is imported, and the agent's case set is non-empty. It also prices the
+  take before opening the browser — one batch is one billed model call per case —
+  and snapshots the agent's system prompt so the `finally` block restores what it
+  only borrowed. The take has not been run: the configured OpenRouter key is
+  expired, which `GET /settings/secrets-status` reports as `true` because it checks
+  presence rather than validity.
 
 ## Open Questions
 

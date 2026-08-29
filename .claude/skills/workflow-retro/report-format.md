@@ -71,3 +71,25 @@ recommendation, and belongs in the prose above or nowhere.
 
 One line per destination: what went to `engineering-insights`, what became a
 brief edit, what stays as a note.
+
+## 9. Ledger row
+
+Only when the report is written to a file (Phase 3). Append one row to
+`docs/results/ledger.md`, built from the same numbers as section 2 and 6 above
+— never re-typed from memory:
+
+| Date | Lab/run | Session | Topology | Agents | Output tokens | Subagent share | Active time | Failures/gaps | Report |
+|---|---|---|---|---|---|---|---|---|---|
+
+- **Date** — the date the retro was run, `YYYY-MM-DD`.
+- **Lab/run** — the `<lab>` segment of the report path.
+- **Session** — the `<session-short>` segment of the report path.
+- **Topology** — from section 1.
+- **Agents / Output tokens / Subagent share / Active time** — straight from the
+  section 2 table.
+- **Failures/gaps** — the count of items listed in section 6.
+- **Report** — a relative link to the file just written, e.g.
+  `[l06/workflow-retro-a1b2c3.md](l06/workflow-retro-a1b2c3.md)`.
+
+If `docs/results/ledger.md` does not exist yet, create it with the header row
+above before appending.

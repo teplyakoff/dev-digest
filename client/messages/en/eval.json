@@ -12,7 +12,8 @@
     "metrics": {
       "recall": "RECALL",
       "precision": "PRECISION",
-      "citationAccuracy": "CITATION ACCURACY"
+      "citationAccuracy": "CITATION ACCURACY",
+      "tracesPassed": "CASES PASSED"
     },
     "legend": {
       "recall": "Recall",
@@ -28,7 +29,29 @@
       "cost": "Cost"
     },
     "pass": "pass",
-    "fail": "fail"
+    "fail": "fail",
+    "unknownValue": "—",
+    "unknownTooltip": "Unknown — this metric had no denominator to compute against. It is not zero.",
+    "batchRunning": "An eval batch is running…",
+    "batchComplete": "The eval batch has finished.",
+    "regressionAlert": "Regression detected",
+    "selectRun": "Select this run for comparison",
+    "selectedRuns": "{count, plural, one {# run selected} other {# runs selected}}",
+    "compare": "Compare",
+    "compareDisabled": "Select exactly two runs to compare.",
+    "compareDifferentAgents": "These runs belong to different agents, so they cannot be compared.",
+    "compareTitle": "Compare runs",
+    "legendOld": "Before",
+    "legendNew": "After",
+    "deltaRecall": "Recall delta",
+    "deltaPrecision": "Precision delta",
+    "deltaCitation": "Citation delta",
+    "deltaCost": "Cost delta",
+    "incomparable": "Not comparable",
+    "incomparableHint": "These runs used a different provider or model, so a change in the metrics says nothing about the prompt.",
+    "promptDiff": "System prompt diff",
+    "promptsIdentical": "Both runs used the same system prompt snapshot — there is nothing to diff.",
+    "noPromptSnapshot": "One of these runs has no stored system prompt snapshot, so there is nothing to diff against."
   },
   "caseEditor": {
     "newCase": "New eval case",
@@ -60,6 +83,8 @@
   "evalsTab": {
     "metricsTitle": "Eval metrics",
     "metricsSubtitle": "Recall / Precision / Citation for this agent's eval cases",
+    "viewDashboard": "View full dashboard →",
+    "scoringNote": "Scoring is mechanical — a finding counts when file matches and line ranges overlap. No model call in the scorer.",
     "casesHeading": "Eval cases",
     "newCase": "New case",
     "loadingCases": "Loading cases…",
@@ -67,9 +92,20 @@
     "neverRun": "never run",
     "passed": "passed",
     "failed": "failed",
+    "errored": "errored",
+    "erroredTooltip": "This case never produced a comparable answer — the run itself failed, so there is nothing to compare against.",
+    "partial": "partial",
+    "partialTooltip": "At least one case in this batch errored, so these aggregates cover fewer cases than the set.",
     "recallSuffix": " · recall {recall}%",
     "run": "Run",
     "running": "Running…",
+    "runAll": "Run all evals",
+    "runAllDisabled": "A batch is already running for this agent.",
+    "mustFind": "MUST FIND",
+    "mustNotFlag": "MUST NOT FLAG",
+    "seededFrom": "Seeded from a decided finding",
+    "seededFromAccepted": "Seeded from an accepted finding",
+    "seededFromDismissed": "Seeded from a dismissed finding",
     "edit": "Edit",
     "delete": "Delete"
   },

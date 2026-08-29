@@ -50,6 +50,51 @@ describe("nav registry — every shipped route is registered", () => {
     expect(item!.gKey).toBeUndefined();
   });
 
+  /**
+   * SPEC-08 AC-84 — the Eval Dashboard entry, pinned here rather than where it
+   * is written, because `nav.ts` is a frozen vendored file whose one sanctioned
+   * edit has to be alarmed from app code (root CLAUDE.md).
+   *
+   * THE KEY IS `eval`, NOT `evals`, AND THE HREF IS `/evals`. They differ on
+   * purpose: `activeKeyFor` folds every `/eval*` pathname onto the single key
+   * `eval`, so a key spelled to match the URL would leave the sidebar item
+   * unlit on the very page it points at — a defect that is invisible in a diff
+   * and easy to "fix" the wrong way round. Both halves are asserted so neither
+   * can be tidied into the other.
+   */
+  it("eval → /evals under the key `eval`, deliberately without a g-key", () => {
+    const item = byKey("eval");
+    expect(item, 'nav entry "eval" is missing from NAV').toBeDefined();
+    expect(item!.href).toBe("/evals");
+    expect(item!.label).toBe("Eval Dashboard");
+    // Following the `context` precedent above: no letter was specified, so
+    // none is invented. Pinning the ABSENCE is what stops someone adding a
+    // colliding one without noticing this decision was made.
+    expect(item!.gKey).toBeUndefined();
+    // …and there is no orphan SHORTCUTS row advertising a key that does not
+    // exist. `byKey("evals")` returning undefined is the other half of the same
+    // claim: the misspelling must not be what got registered.
+    expect(byKey("evals")).toBeUndefined();
+  });
+
+  // The `?` overlay is generated from SHORTCUTS, so a row added for an entry
+  // with no gKey would document a shortcut that does nothing. The list is
+  // pinned whole rather than by absence of one string: an added row anywhere
+  // fails this, which is the point.
+  it("leaves SHORTCUTS unchanged — the eval entry adds no g-key row", () => {
+    expect(SHORTCUTS.map((s) => s.keys)).toEqual([
+      "⌘K",
+      "?",
+      "g p",
+      "g s",
+      "g c",
+      "g a",
+      "j / k",
+      "a",
+      "d",
+    ]);
+  });
+
   // Position, not just membership. The design puts Project Context directly
   // after Pull Requests, and "it is somewhere in WORKSPACE" is a weaker claim
   // that a reshuffle would satisfy.
@@ -67,9 +112,18 @@ describe("nav registry — every shipped route is registered", () => {
     ["context", "WORKSPACE"],
     ["skills", "SKILLS LAB"],
     ["agents", "SKILLS LAB"],
+    ["eval", "SKILLS LAB"],
     ["conventions", "SKILLS LAB"],
   ])("%s lives under %s", (key, section) => {
     expect(sectionOf(key), `nav entry "${key}" is in the wrong section`).toBe(section);
+  });
+
+  // AC-84's position half. Membership alone would be satisfied by an entry
+  // appended after Conventions; the design puts evals directly after the thing
+  // they measure.
+  it("places eval third in SKILLS LAB, right after Agents", () => {
+    const lab = NAV.find((g) => g.section === "SKILLS LAB")!;
+    expect(lab.items.map((i) => i.key)).toEqual(["skills", "agents", "eval", "conventions"]);
   });
 
   it("keeps the sections distinct and in design order", () => {

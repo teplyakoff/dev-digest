@@ -114,7 +114,10 @@ into context defeats the point of having delegated it.
 Follow [report-format.md](report-format.md). Default is to print it in the
 conversation. Write a file only when the user asks, and then to
 `docs/results/<lab>/workflow-retro-<session-short>.md` — `docs/results/` is
-curated PR evidence, so an unrequested file there is noise.
+curated PR evidence, so an unrequested file there is noise. Writing that file
+also means appending its ledger row to `docs/results/ledger.md`
+(report-format.md §9) — the file write and the ledger row are the same step,
+not two separate asks.
 
 ## Phase 4 — hand off
 

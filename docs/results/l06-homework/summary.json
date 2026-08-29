@@ -1,0 +1,72 @@
+{
+  "recorded_at": "2026-08-27T15:42:48.606Z",
+  "repo": "acme/payments-api",
+  "pr": 482,
+  "agent": {
+    "id": "51f1a6f3-c438-4dcd-bc7d-9df3b9412a51",
+    "name": "General Reviewer",
+    "model": "openrouter/deepseek/deepseek-v4-flash",
+    "version_at_start": 5
+  },
+  "seeded_case": {
+    "id": "1b1986c3-7a80-4dd0-95a3-69a7d053a340",
+    "name": "Deduplication set is never evicted — src/api/public/webhooks.ts:47-48",
+    "expectation": "must_find",
+    "from_finding": {
+      "id": "16fdc5fb-0bf1-48d8-8402-716f1ba361b9",
+      "file": "src/api/public/webhooks.ts",
+      "severity": "WARNING",
+      "decision": "accepted"
+    },
+    "already_had_a_case": false
+  },
+  "cases_in_set": 12,
+  "batches": [
+    {
+      "id": "2637500b-72a3-4c23-9dcf-2b3c17840cf9",
+      "agent_version": 5,
+      "status": "complete",
+      "cases": "12/12",
+      "recall": 0.14285714285714285,
+      "precision": 0.041666666666666664,
+      "citation_accuracy": 0.96,
+      "cost_usd": 0.0058741,
+      "prompt_snapshot_chars": 4317
+    },
+    {
+      "id": "be737f0b-46c6-4ded-8fb4-78157cf7bac0",
+      "agent_version": 6,
+      "status": "complete",
+      "cases": "12/12",
+      "recall": 0.42857142857142855,
+      "precision": 0.125,
+      "citation_accuracy": 1,
+      "cost_usd": 0.007887318,
+      "prompt_snapshot_chars": 4180
+    }
+  ],
+  "billed_batches_this_take": 2,
+  "billed_model_calls_this_take": 24,
+  "prompt_edit": {
+    "removed": "- Precision over volume. No style nits, no \"might be slow/wrong\" without a\n  mechanism, no issues already handled elsewhere in the code."
+  },
+  "compare": {
+    "deltas": {
+      "recall": 0.285714,
+      "precision": 0.083333,
+      "citation_accuracy": 0.04,
+      "cost_usd": 0.0020132180000000006
+    },
+    "comparable": true,
+    "prompt_diff_available": true
+  },
+  "asserted": {
+    "one_click_opened_no_dialog": true,
+    "expectation_matches_decision": "accepted → must_find",
+    "toast_carried_edit_case_link": true,
+    "scorer_note_on_screen": true,
+    "batch_completed_cases": 24,
+    "prompts_differ": true,
+    "delta_recall_equals_b_minus_a": true
+  }
+}
