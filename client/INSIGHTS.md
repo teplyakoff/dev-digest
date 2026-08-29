@@ -233,6 +233,31 @@ _(no entries yet)_
   when debugging this — it stays 0 the whole time. (2026-08-25)
 
 
+- **A `router.replace` fallback route looks broken in dev for up to 20 seconds,
+  and the app's own root route is the control experiment.** `/eval` renders,
+  resolves the first agent, calls `router.replace('/eval/<id>')` — and the URL
+  stays `/eval` with the pre-data render on screen while Next compiles the target
+  route and the `?_rsc=` fetch for it sits pending. The transition commits only
+  when that payload lands. Nothing in the browser says "compiling": the tell is
+  the dev server log printing `✓ Compiled /eval/[agentId]` followed by
+  `GET /eval/<id> 200` while `window.location.pathname` still reports the old
+  path. Before debugging your own effect, load `/` — `HomeRedirectView` does the
+  identical thing, so if the root route also fails to redirect, the delay is
+  dev-mode route compilation (or the wedged tab in the entry below), not your
+  code. (2026-08-29)
+
+- **A browser-pane tab can stop hydrating and never recover — and neither
+  restarting the dev server nor `rm -rf client/.next` fixes it, because neither
+  is the cause.** The page renders perfectly (that is the server HTML), the
+  sidebar is lit, styles are intact — and nothing is interactive, because the
+  client never boots. The one reliable tell is the network log for that document
+  load: only `_next/static/*` chunks, and **not a single request to
+  `localhost:3001`**, on a page whose whole job is fetching from it. Do not chase
+  it through the server: open a new tab (`tabs_create`) and load the same URL —
+  it works instantly. Distinct from the `pnpm build`-over-`.next` failure above,
+  which loses CSS and keeps the app working; this one keeps the CSS and loses the
+  app. (2026-08-29)
+
 ## Codebase Patterns
 
 - **A route-local test's path to `messages/` is EIGHT levels up, and getting it
@@ -374,6 +399,18 @@ _(no entries yet)_
   test was green, because each hook did exactly what its own test asserted.
   (2026-08-25)
 
+
+- **Renaming a route is not finished when the routes compile: `grep` the app for
+  the old path, because a stale in-app link still WORKS.** Moving the eval
+  dashboard from `/evals` to `/eval/:agentId` left `<Link href="/evals">` in
+  `EvalsTab.tsx` — and since `/evals` was kept as a redirect, nothing failed, no
+  test went red, and the only symptom was that "View dashboard" on one agent's
+  tab opened a *different* agent's metrics (the first in the list). A redirect
+  that keeps old bookmarks alive also keeps every stale internal link alive, so
+  the compatibility route is exactly what hides the work. The sweep is
+  `grep -rn '/old-path' client/src`, before the commit, and the deep-linkable
+  form is usually the point of the rename: `/eval/${agent.id}`, not `/eval`.
+  (2026-08-29)
 
 ## Tool & Library Notes
 
@@ -598,6 +635,19 @@ _(no entries yet)_
   live in `EvalCaseEditor` and `RunCompare` instead of in the frozen primitive.
   First Load JS held at the 102 kB baseline throughout — every contract import is
   type-only.
+
+- **2026-08-29** — L06 mentor-feedback pass, client lane. The eval dashboard moved
+  from `/evals` (agent in `useState`) to `/eval/:agentId` (agent in the segment),
+  with `/eval` falling back to the first agent and replacing the URL, `/evals`
+  kept as a `redirect()` page, and the picker calling `router.push` so Back walks
+  back. Three things worth remembering: the view stays in `app/eval/_components/`
+  even though two route files import it, because both live under `app/eval/**`
+  and a descendant importing an ancestor's component is explicitly not promotion
+  (`frontend-architecture` §14); `useParams()` types a segment as
+  `string | string[]`, so the "no segment vs some segment" narrowing is
+  `typeof rawId === "string" ? rawId : null` rather than a generic argument; and
+  the `/evals` alias is a 307 `redirect()` on purpose, not `permanentRedirect()`,
+  whose 308 the browser caches for good on a route that may move again.
 
 ## Open Questions
 
