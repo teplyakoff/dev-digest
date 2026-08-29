@@ -17,7 +17,7 @@ Node ≥22 · TypeScript 5.7 · Zod 3 · Vitest 2
 Fastify 5 · Drizzle 0.38 · Postgres 16 + pgvector — `server/`
 Next.js 15 · React 19 · Tailwind 4 · TanStack Query — `client/`
 
-## Layout — six standalone packages, NOT a workspace
+## Layout — seven standalone packages, NOT a workspace
 
 | Path | Package | Manager |
 |---|---|---|
@@ -27,6 +27,7 @@ Next.js 15 · React 19 · Tailwind 4 · TanStack Query — `client/`
 | `mcp/` | `@devdigest/mcp` (stdio MCP server over the API) | **npm** |
 | `e2e/` | `@devdigest/e2e` (browser flows) | **npm** |
 | `demo/` | `@devdigest/demo` (screencast recorder) | **npm** |
+| `evals/` | `@devdigest/evals` (evals for the harness itself) | **pnpm** |
 
 Each has its own lockfile. Cross-package code is shared through tsconfig path
 aliases, never published modules — so the server imports reviewer-core's **raw
@@ -48,6 +49,20 @@ vendored into `client/src/vendor/shared`.
   out. Needs the API on :3001. See `mcp/README.md`.
 - `cd demo && npm run record` — records a video of the real review loop. Unlike
   `e2e`, this triggers a real run and **spends money**; see `demo/README.md`.
+- `cd evals && pnpm eval` — evals for **this harness**, not for the app: the
+  skills, subagents and `CLAUDE.md` under `.claude/`. Suites are
+  `eval:skills` · `eval:agents` · `eval:workflow`, and `eval:quality` is the
+  static gate (SKILL.md structure — no model, no cost). Statistics on top of the
+  same `results/records.jsonl`: `eval:repeat` (N runs → stability) ·
+  `eval:delta` (two labeled repeat runs → version vs version) ·
+  `eval:benchmark` (with vs without the artifact → measured lift);
+  `eval:compare` says which tests flipped between two runs and `eval:scaffold`
+  writes the file trio for a skill or agent that has no evals yet.
+  Default backend is the Claude Code **subscription** (no API key, no per-token
+  bill); `EVAL_BACKEND=openrouter` runs the same tests on OpenRouter and
+  **spends money**, which is what CI does. `eval:agents` and `eval:workflow` on
+  OpenRouter need the LiteLLM proxy — `proxy:up` / `proxy:wait` / `proxy:down`.
+  Wired to CI in `.github/workflows/evals.yml`; see `evals/README.md`.
 
 ## Invariants (never break one silently)
 
@@ -82,6 +97,9 @@ vendored into `client/src/vendor/shared`.
 - you touch tests or CI → `TESTING.md`
 - you write or change an agent's system prompt → `docs/agent-prompts/README.md`
 - you write or change a Claude Code subagent → `.claude/agents/README.md`
+- you write or change a skill, a subagent or `CLAUDE.md`, or you add an eval
+  case for one → `evals/README.md` — that change is what the eval suites grade,
+  and `.github/workflows/evals.yml` routes the PR to the suite covering it
 
 ## Session loop
 
