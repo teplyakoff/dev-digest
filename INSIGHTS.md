@@ -492,6 +492,20 @@ here. Here is for what has no package at all.
   is subject to the defect. Budget the second pass, and treat "I have just written
   the rule" as the moment you are least likely to apply it. (2026-08-27)
 
+- **`/pr-self-review` structurally CANNOT report a defect in a file the diff did
+  not touch — grounding drops it — so the companion pass is the only thing that
+  can surface one, and fixing it in the same change set is the only way to keep
+  it.** Renaming the eval route left `<Link href="/evals">` in
+  `client/src/app/agents/[id]/.../EvalsTab.tsx`, a file outside the change set.
+  `severity.md` §4 requires every finding to cite an added or changed line, so
+  had the per-file passes somehow noticed it, the finding would have been dropped
+  rather than downgraded. It came out of the `routing.md` §5 sweep ("what should
+  the diff also contain"), which is the one phase that looks outside the change
+  set — and the report then has nowhere to put it except a narrative section.
+  Treat §5 as the phase that pays for itself, and when it finds something, fix it
+  into the diff instead of filing it: a finding that cannot be reported cannot be
+  tracked either. (2026-08-29)
+
 ## Codebase Patterns
 
 - **A review subagent that needs two skills in one pass takes no `Skill` tool —
@@ -773,6 +787,19 @@ here. Here is for what has no package at all.
   `/impl` also supplies the guard that entry asks for by name — a `grep` for the
   plan's `S<n>` steps, passed in and checked against the returned table.
   (2026-08-21)
+
+- **`pr-self-review/routing.md` is a more complete package inventory than the
+  root `AGENTS.md`, and they disagreed for a whole lesson without anything
+  noticing.** `evals/` shipped with three routing rows (`evals`, `evals-suites`,
+  `evals-infra`) and its own CI workflow, while `AGENTS.md` still opened with
+  "six standalone packages", listed no `evals/` row, named none of its nine
+  `eval:*` commands, and `TESTING.md`'s suite map stopped at e2e. Nothing catches
+  this: `routing.md` §1 puts `*.md` on the skipped row, so the gate never reads
+  either file, and the review rows are written by whoever adds the package while
+  the repo map is written by whoever remembers. When adding a package, diff the
+  two by hand — `grep '^| \`' AGENTS.md` against the group table in
+  `routing.md` — and treat `routing.md` as the source of truth for "what packages
+  exist", because it is the one a machine reads. (2026-08-29)
 
 ## Tool & Library Notes
 
@@ -1089,6 +1116,18 @@ _(no entries yet)_
   review (every finding 422'd on case creation), the unreachable compare flow (no
   route listed an agent's batches), and a phantom trailing line that made the
   harness grade more leniently than the reviewer it measures.
+
+- **2026-08-29** — L06 mentor-feedback pass, opened `homework-L07`. Two items:
+  the eval dashboard had no per-agent route (fixed in `client/`, see that file's
+  notes), and the root `AGENTS.md` documented neither the `evals/` package, its
+  commands, nor a Read-when rule for it. The docs half is invisible to the gate —
+  `*.md` is on `routing.md`'s skipped row — so it was checked by hand against the
+  sources it describes (`evals/package.json` for the command list,
+  `evals/README.md` for the backends, `.github/workflows/evals.yml` for the CI
+  claim), and the report says so under "Not reviewed" rather than implying
+  coverage. `/pr-self-review` came back CLEAN with four notes after one fix pass;
+  the verdict had to be rewritten once, because committing that fix moved HEAD
+  and HEAD is part of the fingerprint.
 
 ## Open Questions
 

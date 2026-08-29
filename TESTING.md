@@ -1,6 +1,6 @@
 # Testing & CI strategy
 
-DevDigest is six independent packages (no workspace), so testing is organised
+DevDigest is seven independent packages (no workspace), so testing is organised
 as **one suite per package**, each with its own CI workflow, runner, and path
 filter. A package's suite runs only when that package (or a package it depends
 on at type-check time) changes.
@@ -32,6 +32,7 @@ If a test wouldn't catch a class of regression we care about, we don't write it.
 | reviewer-core | `reviewer-core/` | unit (engine) | vitest | `reviewer-core.yml` | no |
 | mcp | `mcp/` | unit (stdio adapter) | vitest | `mcp.yml` | no |
 | e2e web | `e2e/` | browser e2e (deterministic) | agent-browser + `run.ts` | `e2e-web.yml` | yes (stack) |
+| evals | `evals/` | harness evals (model-judged) | vitest + Claude Agent SDK | `evals.yml` | no (proxy: yes) |
 
 ## What each suite covers
 
@@ -65,6 +66,16 @@ selects the integration CI lane.
 main journeys (boot → PR list → PR detail; agents) against a real seeded stack.
 No `chat`, no model key.
 
+**evals** — see `evals/README.md`. The odd one out: its subject is not the app
+but the harness that builds it — the skills, subagents and `CLAUDE.md` under
+`.claude/`. Three tiers (static gate, LLM-judged content, trace-asserted
+workflow) and therefore the only suite whose result is a score rather than a
+pass, and the only one that can cost money: locally it runs on the Claude Code
+subscription, in CI on OpenRouter. `evals.yml` does not use a `paths:` filter —
+it routes each PR to the suites covering exactly the skills and agents it
+touched, through `evals/scripts/ci-detect.mjs`; an artifact nobody wrote evals
+for is logged as SKIP, not failed.
+
 ## Running locally
 
 ```sh
@@ -82,6 +93,10 @@ cd server && pnpm test                                          # both
 ./scripts/dev.sh
 npm i -g agent-browser && agent-browser install
 cd e2e && npm install && npm test
+
+# harness evals (models in the loop — see evals/README.md before running)
+cd evals && pnpm eval:quality    # static gate, no model, free
+cd evals && pnpm eval            # every suite, on the Claude Code subscription
 ```
 
 ## Conventions

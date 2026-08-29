@@ -55,17 +55,22 @@ describe("nav registry — every shipped route is registered", () => {
    * is written, because `nav.ts` is a frozen vendored file whose one sanctioned
    * edit has to be alarmed from app code (root CLAUDE.md).
    *
-   * THE KEY IS `eval`, NOT `evals`, AND THE HREF IS `/evals`. They differ on
-   * purpose: `activeKeyFor` folds every `/eval*` pathname onto the single key
-   * `eval`, so a key spelled to match the URL would leave the sidebar item
-   * unlit on the very page it points at — a defect that is invisible in a diff
-   * and easy to "fix" the wrong way round. Both halves are asserted so neither
-   * can be tidied into the other.
+   * THE KEY AND THE HREF ARE BOTH `eval`. They agree on purpose: `activeKeyFor`
+   * folds every `/eval*` pathname onto the single key `eval`, so a key spelled
+   * to match the URL would leave the sidebar item unlit on the very page it
+   * points at — a defect that is invisible in a diff and easy to "fix" the
+   * wrong way round. Both halves are asserted so neither can be tidied into the
+   * other.
+   *
+   * The href was `/evals` in L06 and now points at the canonical `/eval`, which
+   * the dashboard replaces with `/eval/:agentId`. `/evals` still resolves as a
+   * redirect, so this assertion is about which spelling the sidebar teaches,
+   * not about which one works.
    */
-  it("eval → /evals under the key `eval`, deliberately without a g-key", () => {
+  it("eval → /eval under the key `eval`, deliberately without a g-key", () => {
     const item = byKey("eval");
     expect(item, 'nav entry "eval" is missing from NAV').toBeDefined();
-    expect(item!.href).toBe("/evals");
+    expect(item!.href).toBe("/eval");
     expect(item!.label).toBe("Eval Dashboard");
     // Following the `context` precedent above: no letter was specified, so
     // none is invented. Pinning the ABSENCE is what stops someone adding a

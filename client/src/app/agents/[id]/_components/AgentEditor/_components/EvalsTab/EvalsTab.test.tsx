@@ -117,6 +117,19 @@ function renderTab() {
 const runAllButton = () =>
   screen.getByRole("button", { name: new RegExp(`${eval_.evalsTab.runAll}|Running`) });
 
+describe("EvalsTab — the link out to the dashboard", () => {
+  it("deep-links to THIS agent, not to whichever agent the dashboard defaults to", () => {
+    // `/eval` with no id resolves to the first agent in the list, so a bare
+    // href would walk you from one agent's tab to another agent's metrics.
+    renderTab();
+
+    expect(screen.getByRole("link", { name: eval_.evalsTab.viewDashboard })).toHaveAttribute(
+      "href",
+      `/eval/${AGENT.id}`,
+    );
+  });
+});
+
 describe("EvalsTab — the metric strip is fed from the dashboard query", () => {
   it("renders the four measured tiles from the hook's payload", () => {
     dashboard.current = { data: dash() };

@@ -61,7 +61,11 @@ export const NAV: NavGroup[] = [
       // (`src/components/app-shell/helpers.ts`) maps every `/eval*` pathname to
       // `"eval"` — a key that does not match leaves the sidebar item unlit on
       // its own page. The design's `chrome.jsx` uses `eval` too.
-      { key: "eval", label: "Eval Dashboard", icon: "FlaskConical", href: "/evals" },
+      //
+      // The href matches the key: `/eval` lands on the dashboard, which then
+      // replaces the URL with `/eval/:agentId`. `/evals` still resolves — it
+      // redirects here — but the sidebar points at the canonical spelling.
+      { key: "eval", label: "Eval Dashboard", icon: "FlaskConical", href: "/eval" },
       { key: "conventions", label: "Conventions", icon: "ListChecks", href: "/repos/:repoId/conventions", gKey: "c" },
     ],
   },
